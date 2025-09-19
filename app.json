@@ -1,0 +1,133 @@
+{
+  "expo": {
+    "name": "uvc.one",
+    "slug": "uvcone",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/images/uvc-icon-square-1024.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#ffffff",
+      "resizeMode": "contain"
+    },
+    "backgroundColor": "#ffffff",
+    "androidStatusBar": {
+      "backgroundColor": "#22c55e",
+      "barStyle": "light-content"
+    },
+    "jsEngine": "hermes",
+    "assetBundlePatterns": [
+      "src/assets/images/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "one.uvc",
+      "buildNumber": "17",
+      "newArchEnabled": true,
+      "icon": "./src/assets/images/uvc-icon-square-1024.png",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "uvc.one uses local network for secure data processing and device discovery",
+        "NSBonjourServices": [
+          "_uvc-discovery._udp",
+          "_uvc-discovery._tcp"
+        ],
+        "NSMicrophoneUsageDescription": "uvc.one captures your voice to enable on-device voice interactions; audio never leaves your device nor is shared with refinio.",
+        "UIBackgroundModes": [
+          "fetch",
+          "processing"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "one.refinio.uvc.sync",
+          "one.refinio.uvc.cleanup"
+        ],
+        "NSBluetoothAlwaysUsageDescription": "uvc.one uses Bluetooth to discover nearby devices and exchange data locally; information remains on your device and is not sent to refinio.",
+        "NSBluetoothPeripheralUsageDescription": "uvc.one uses Bluetooth to discover nearby devices and exchange data locally; information remains on your device and is not sent to refinio.",
+        "NSCameraUsageDescription": "uvc.one uses the camera to scan QR codes and capture images you choose to share. Images stay on your device and aren't transmitted to refinio servers.",
+        "NSPhotoLibraryUsageDescription": "uvc.one lets you select photos from your library to include in chats. Selected images remain on-device and are not uploaded to refinio.",
+        "NSPhotoLibraryAddUsageDescription": "uvc.one saves images you create or download to your photo library at your request.",
+        "UIFileSharingEnabled": true,
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSContactsUsageDescription": "uvc.one needs access to your contacts so you can easily connect with friends. All contact data stays on your device and is never sent to refinio or its servers."
+      },
+      "appleTeamId": "26W8AC52QS"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/images/uvc-icon-square-1024.png",
+        "backgroundColor": "#F5F5F5"
+      },
+      "package": "one.uvc",
+      "newArchEnabled": true,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_ADVERTISE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./src/assets/images/uvc-icon-square-1024.png"
+    },
+    "plugins": [
+      "expo-router",
+      "./plugins/withUVCConfig",
+      "./plugins/withBLEPermissions",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "enableBitcode": false,
+            "newArchitectureEnabled": true
+          },
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0",
+            "newArchitectureEnabled": true,
+            "minSdkVersion": 21
+          }
+        }
+      ],
+      "expo-image-picker",
+      "expo-localization"
+    ],
+    "scheme": "uvc.one",
+    "experiments": {
+      "tsconfigPaths": true
+    },
+    "runtimeVersion": "1.0.0",
+    "developmentClient": {
+      "silentLaunch": false
+    },
+    "updates": {
+      "enabled": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "87d68d5b-16a5-4c68-abcb-5349f4e29ace"
+      },
+      "router": {
+        "origin": false
+      }
+    },
+    "owner": "geckothesane",
+    "_internal": {
+      "isDebug": false,
+      "projectRoot": "/Users/gecko/src/lama",
+      "dynamicConfigPath": null,
+      "staticConfigPath": "./app.json",
+      "packageJsonPath": "./package.json"
+    }
+  }
+}

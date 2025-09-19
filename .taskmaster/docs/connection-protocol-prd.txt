@@ -1,0 +1,52 @@
+# PRD: Connection Protocol V2 - Expo Compatibility
+
+## 1. Overview
+
+This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. The primary goal is to achieve a stable, reliable pairing and communication flow, replacing any legacy code that relies on browser-specific or non-standard features like `SharedArrayBuffer` with modern, compatible alternatives.
+
+## 2. Core Principles
+
+- **Fail Fast:** Errors should be explicit and immediate.
+- **Expo/Hermes First:** All code must be compatible with the target environment without patches or workarounds.
+- **Protocol Parity:** The final implementation must be compatible with the existing `one.leute` and `one.core` CHUM protocol.
+- **Structured Tasks:** The entire process will be managed via Task Master to ensure clarity and trackability.
+
+## 3. Functional Breakdown
+
+The connection protocol will be broken down into the following distinct, verifiable phases. Each phase will correspond to a top-level task.
+
+### Phase 1: Invite Generation
+
+- **1.1: User Identity Validation:** Before creating an invite, the system must validate that the current user has a valid main identity, instance, and cryptographic keys.
+- **1.2: Invite Creation Service:** Create a React hook or service (`useInviteGenerator`) that encapsulates the logic from `InviteManager`.
+- **1.3: Generate Invite URL:** The service will call the core pairing model (`ConnectionsModel.pairing.createInvitation()`) to produce the invite token, public key, and URL.
+- **1.4: UI Interaction:** The UI will display the QR code and provide "Copy" and "Share" actions. Clipboard operations must be stable.
+
+### Phase 2: Invite Acceptance & Initial Handshake
+
+- **2.1: Deep Link Handling:** The app must correctly handle the incoming invite URL from a deep link.
+- **2.2: Parse Invite Data:** Extract the token and public key from the URL.
+- **2.3: Initiate Pairing:** The receiving device (invitee) calls `ConnectionsModel.pairing.acceptInvitation(token)`.
+- **2.4: Establish Initial Connection:** The two devices establish a direct connection, and the `onConnection` event is fired.
+
+### Phase 3: CHUM Protocol V2 (Connection Handshake and Update Message)
+
+This is the most critical phase and requires replacing the problematic legacy logic.
+
+- **3.1: CHUM Protocol Entry:** Upon a new connection, the `chum-sync` protocol is initiated.
+- **3.2: Reimplement `onMsgHandler` Logic:** Create a new, Expo-compatible version of the message handler. This must NOT rely on dynamic `eval` or `new Function()` if they cause context/scope issues with polyfills.
+- **3.3: Safe Data Processing:** The handler will process incoming CHUM messages. Any data processing logic (like buffer manipulation) that currently relies on an unavailable `SharedArrayBuffer` must be rewritten to use standard `ArrayBuffer`.
+- **3.4: State Synchronization:** The protocol synchronizes the state between the two devices, exchanging necessary model information.
+- **3.5: Protocol Completion:** The CHUM sync completes successfully, and the connection is marked as fully paired and trusted.
+
+### Phase 4: Post-Pairing & Connection Management
+
+- **4.1: Contact Creation:** Once pairing is successful, the new "Someone" is added to the user's contacts.
+- **4.2: Spare Connection Scheduling:** The system schedules a "spare" connection using `scheduleSpareConnection()` to ensure a persistent communication channel.
+- **4.3: Connection Stability:** The connection remains stable, and subsequent communication (e.g., chat messages) functions correctly.
+
+## 4. Non-Functional Requirements
+
+- **No `SharedArrayBuffer`:** The final code must not contain any direct or indirect dependencies on `SharedArrayBuffer` that result in a `ReferenceError`. All necessary polyfills must be applied correctly and verifiably at the application's entry point.
+- **Error Handling:** Each phase must have robust error handling to clearly identify failures.
+- **Logging:** Add detailed logging to each step of the protocol to allow for easy debugging. 

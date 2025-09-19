@@ -1,0 +1,166 @@
+# Lama Connection Architecture Cleanup - Product Requirements Document
+
+## Project Overview
+Clean up the messy hybrid connection architecture in the lama app that currently has multiple competing connection systems, bandaid fixes, and architectural inconsistencies.
+
+## Current Problems
+
+### 1. Architectural Mess
+- **Hybrid approach with competing systems**: Custom NetworkPlugin + ConnectionsModel both trying to handle connections
+- **Bandaid pairing fix**: Override of ConnectionsModel.pairing.connectUsingInvitation with temporary disconnect logic
+- **Multiple connection managers**: NetworkPlugin, CommServerManager, TransportManager all coexisting
+- **Inconsistent initialization**: Two different initialization methods (initializeConnectionManagement vs initializeConnectionsModelForPairing)
+
+### 2. Connection Conflicts
+- **Public key conflicts**: Both NetworkPlugin and ConnectionsModel try to register same public key with CommServer
+- **"No listening connection for the specified publicKey" errors**: CommServer rejects duplicate registrations
+- **Connection spam**: Previously had 47+ rapid connection attempts before fixes
+- **Protocol mismatches**: Ping/pong handling issues, JSON parsing conflicts
+
+### 3. Code Quality Issues
+- **Bandaid solutions**: Temporary disconnect/reconnect logic instead of proper architecture
+- **Complex workarounds**: Override methods with complex state management
+- **Inconsistent naming**: Multiple aliases and compatibility methods
+- **Unclear responsibilities**: Unclear which component handles what
+
+## Requirements
+
+### 1. Clean Architecture
+- **Single connection system**: Choose one approach and remove the others
+- **Clear responsibilities**: Each component has a single, well-defined purpose
+- **No bandaid fixes**: Proper architectural solutions, not workarounds
+- **Consistent patterns**: Unified approach throughout the codebase
+
+### 2. Connection Management
+- **Reliable connections**: Stable connections without conflicts or spam
+- **Proper pairing**: Pairing protocol works without temporary disconnects
+- **Error handling**: Clean error handling without protocol mismatches
+- **Performance**: Optimized connection handling with proper timeouts
+
+### 3. Code Quality
+- **Clean interfaces**: Well-defined interfaces with no redundant methods
+- **Proper separation**: Clear separation of concerns between components
+- **Maintainable code**: Easy to understand and modify
+- **Comprehensive logging**: Proper logging for debugging and monitoring
+
+## Technical Approach
+
+### 1. Architecture Decision
+Evaluate the current approaches and choose the best one:
+- **Option A**: Pure TransportManager approach (clean, designed for this purpose)
+- **Option B**: Pure ConnectionsModel approach (standard one.models way)
+- **Option C**: Custom NetworkPlugin approach (works around Expo limitations)
+
+### 2. Implementation Strategy
+- **Remove competing systems**: Delete unused connection managers
+- **Consolidate initialization**: Single initialization method
+- **Clean up interfaces**: Remove redundant methods and aliases
+- **Proper error handling**: Replace bandaid fixes with proper solutions
+
+### 3. Testing Requirements
+- **Connection stability**: Test connection establishment and maintenance
+- **Pairing functionality**: Test pairing without conflicts
+- **Error scenarios**: Test error handling and recovery
+- **Performance**: Test connection performance and resource usage
+
+## Success Criteria
+
+### 1. Functional Requirements
+- ✅ Invitations generate successfully
+- ✅ Pairing works without errors
+- ✅ Connections are stable and maintained
+- ✅ No connection conflicts or spam
+
+### 2. Code Quality Requirements
+- ✅ Single, clean connection architecture
+- ✅ No bandaid fixes or workarounds
+- ✅ Clear, well-documented interfaces
+- ✅ Consistent naming and patterns
+
+### 3. Performance Requirements
+- ✅ Fast connection establishment (< 5 seconds)
+- ✅ Stable connections (> 95% uptime)
+- ✅ Low resource usage
+- ✅ Proper timeout handling
+
+## Implementation Plan
+
+### Phase 1: Analysis and Decision
+- Analyze current connection systems
+- Evaluate pros/cons of each approach
+- Make architectural decision
+- Document chosen approach
+
+### Phase 2: Cleanup
+- Remove competing connection systems
+- Consolidate initialization methods
+- Remove bandaid fixes
+- Clean up interfaces
+
+### Phase 3: Implementation
+- Implement chosen architecture
+- Add proper error handling
+- Optimize performance
+- Add comprehensive logging
+
+### Phase 4: Testing and Validation
+- Test connection stability
+- Test pairing functionality
+- Performance testing
+- Code quality review
+
+## Technical Constraints
+
+### 1. Platform Limitations
+- **Expo limitations**: Must work within Expo's constraints
+- **one.models compatibility**: Must maintain compatibility with one.models protocols
+- **CommServer protocol**: Must follow CommServer communication requirements
+
+### 2. Existing Dependencies
+- **one.core integration**: Must work with existing one.core infrastructure
+- **LeuteModel compatibility**: Must maintain compatibility with LeuteModel
+- **UI integration**: Must not break existing UI components
+
+### 3. Performance Requirements
+- **Memory usage**: Must not increase memory footprint
+- **Connection speed**: Must maintain or improve connection speed
+- **Battery usage**: Must not increase battery drain
+
+## Deliverables
+
+1. **Clean Architecture**: Single, well-designed connection system
+2. **Documentation**: Clear documentation of the chosen approach
+3. **Test Suite**: Comprehensive tests for connection functionality
+4. **Performance Metrics**: Baseline and improved performance measurements
+5. **Migration Guide**: Documentation for future developers
+
+## Timeline
+
+- **Phase 1 (Analysis)**: 1-2 tasks
+- **Phase 2 (Cleanup)**: 3-4 tasks  
+- **Phase 3 (Implementation)**: 4-6 tasks
+- **Phase 4 (Testing)**: 2-3 tasks
+
+**Total Estimated Tasks**: 10-15 tasks
+
+## Risk Mitigation
+
+### 1. Breaking Changes
+- **Risk**: Cleanup might break existing functionality
+- **Mitigation**: Incremental changes with testing at each step
+
+### 2. Platform Compatibility
+- **Risk**: Chosen approach might not work on all platforms
+- **Mitigation**: Test on multiple platforms during implementation
+
+### 3. Performance Regression
+- **Risk**: New architecture might be slower
+- **Mitigation**: Performance testing and optimization throughout
+
+## Success Metrics
+
+- **Connection Success Rate**: > 95%
+- **Pairing Success Rate**: > 95%
+- **Code Complexity**: Reduced by > 50%
+- **Error Rate**: < 1%
+- **Connection Time**: < 5 seconds 

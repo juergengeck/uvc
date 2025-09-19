@@ -1,0 +1,11 @@
+# Task ID: 29
+# Title: Fix Channel and Topic Creation Issues After Contact Pairing
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Investigation areas: Check if system topics (EveryoneTopic, GlueTopic) are being created properly during initialization Verify that pairing creates the necessary communication channels between contacts Ensure that topic rooms can be opened for newly created contacts Check ChannelManager event handling for new contact topic creation Investigate if automatic topic creation for contacts is working Verify that contact-specific topics are properly linked to profiles/someone objects Check if topic settings (profile registration, sender profile append) are correctly configured Ensure proper error handling in topic creation pipeline
+# Details:
+Key files to investigate: TopicModel and topic creation methods ChannelManager topic channel creation Contact-to-topic linking in LeuteModel Topic room opening and management The comprehensive contact creation logging should now show us where the process succeeds/fails and help identify if the issue is in subsequent topic creation steps.
+
+# Test Strategy:
+Implement a comprehensive set of tests to verify that all system topics are created properly, pairing creates necessary communication channels, topic rooms can be opened for new contacts, ChannelManager event handling is correct, automatic topic creation works, contact-specific topics are linked correctly, and error handling is proper. Additionally, test the logging mechanism to ensure it accurately reports successes and failures.

@@ -1,0 +1,16 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`StyledText renders MonoText with SpaceMono font family 1`] = `
+<Text
+  style={
+    [
+      undefined,
+      {
+        "fontFamily": "SpaceMono",
+      },
+    ]
+  }
+>
+  Test text
+</Text>
+`;

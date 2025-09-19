@@ -1,0 +1,64 @@
+{
+  "title": "Chat",
+  "newTopic": "New Chat",
+  "topicName": "Chat Name",
+  "noTopics": "No chats yet",
+  "participantCount": "{{count}} participants",
+  "participantCount_one": "{{count}} participant",
+  "participants": "Participants",
+  "loading": "Loading chats...",
+  "groupInfo": "Group Info",
+  "contactInfo": "Contact Info",
+  "conversationDetails": "Conversation Details",
+  "addParticipant": "Add Participant",
+  "mediaDocsLinks": "Media, Docs & Links",
+  "notifications": "Notifications",
+  "notificationsOn": "On",
+  "encryption": "Encryption",
+  "messagesEncrypted": "Messages are end-to-end encrypted",
+  "leaveGroup": "Leave Group",
+  "selectContact": "Select Contact",
+  "createGroupChat": "Create Group Chat",
+  "selectedParticipants": "Selected Participants",
+  "selectContacts": "Select Contacts",
+  "create": "Create",
+  "you": "You",
+  "currentUser": "Current User",
+  "topics": {
+    "loading": "Loading topic...",
+    "error": "Error loading topic",
+    "loadingPhases": {
+      "entering": "Entering topic room...",
+      "loadingInfo": "Loading topic information...",
+      "initializingAI": "Initializing AI assistant...",
+      "loadingModel": "Loading language model...",
+      "calculatingHash": "Calculating model hash...",
+      "ensuringLoaded": "Ensuring model is loaded...",
+      "connecting": "Connecting to chat service...",
+      "finalizing": "Finalizing setup..."
+    }
+  },
+  "error": {
+    "failed": "Failed to load chats",
+    "unauthorized": "Please log in to access chat",
+    "modelsNotAvailable": "Required models not available"
+  },
+  "input": {
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "chooseImage": "Choose Image",
+    "takePhoto": "Take Photo",
+    "chooseFile": "Choose File"
+  },
+  "ai": {
+    "status": {
+      "connected": "AI Connected",
+      "connecting": "Connecting AI...",
+      "disconnected": "AI Disconnected"
+    },
+    "models": {
+      "local": "Local AI",
+      "cloud": "Cloud AI"
+    }
+  }
+} 

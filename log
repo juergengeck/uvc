@@ -1,0 +1,785 @@
+r connection_handover message
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] addSpareConnection(3)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: addSpareConnection(3)
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] updateState()
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: updateState()
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] scheduleSpareConnection(wss://comm10.dev.refinio.one, false)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: scheduleSpareConnection(wss://comm10.dev.refinio.one, false)
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Storage] Appending to system map file: /Users/gecko/Library/Developer/CoreSimulator/Devices/7BC2731C-7541-4977-88C1-9DE106730062/data/Containers/Data/Application/F05092B1-EF80-4247-9540-6A4F18C37F24/Documents/lama/315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2/rmaps/92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750.IdObject.Instance
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] ❓ [ConnectionsModel] 2: *** onUnknownConnection() CALLED ***
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: ❓ [ConnectionsModel] 2: *** onUnknownConnection() CALLED ***
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Route Group: pairing
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Route Group: pairing
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Initiated Locally: false
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Initiated Locally: false
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Local Person: d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Local Person: d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Local Instance: 315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Local Instance: 315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Remote Person: 92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Remote Person: 92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Remote Instance: b23cba2d007920470b3048c26adc4e2329d561b0e8f706a4b19276059a7b5016
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Remote Instance: b23cba2d007920470b3048c26adc4e2329d561b0e8f706a4b19276059a7b5016
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Accept Unknown Persons: true
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Accept Unknown Persons: true
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] 🤝 [ConnectionsModel] 2: Starting PAIRING protocol for UNKNOWN person...
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: 🤝 [ConnectionsModel] 2: Starting PAIRING protocol for UNKNOWN person...
+ LOG  🔥 [ONE_MODELS_INTERNAL] [PairingManager] 2: acceptInvitation: startPairingProtocol
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] 🔄 [ConnectionsModel] Connections changed
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: 🔄 [ConnectionsModel] Connections changed
+ LOG  🔗 [CommServerManager] ⚡️ CONNECTIONS CHANGED
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔗 [CommServerManager] ⚡️ ACTIVE CONNECTION: localKey: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, remoteKey: c2187125a8426821ae6cde1f3db29cd0acec7a8db2f08ad3290f40d678779056, groupId: pairing
+ LOG  🔗 [CommServerManager] ⚡️ Protocol: pairing
+ LOG  🔗 [CommServerManager] ⚡️ Remote Person: 0000000000000000000000000000000000000000000000000000000000000000
+ LOG  🔍 [PEERID_DEBUG] Connection details:
+ LOG  🔍 [PEERID_DEBUG]   localKey: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c
+ LOG  🔍 [PEERID_DEBUG]   remoteKey: c2187125a8426821ae6cde1f3db29cd0acec7a8db2f08ad3290f40d678779056
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 [PEERID_DEBUG]   exactPeerId: localKey: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, remoteKey: c2187125a8426821ae6cde1f3db29cd0acec7a8db2f08ad3290f40d678779056
+ LOG  🔍 [PEERID_DEBUG]   knownPeerMap size: 0
+ LOG  �� [PEERID_DEBUG]   ❌ NO EXACT MATCH in knownPeerMap
+ LOG  🔍 [PEERID_DEBUG]   Available PeerIDs in knownPeerMap:
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  [NetworkPlugin] 🔴 Connection conn-kn4jrrqj9 closed: Close called.
+ LOG  [NetworkPlugin] 🔍 Close event details: {"connectionId": "conn-kn4jrrqj9", "origin": "remote", "reason": "Close called."}
+ LOG  🔥 [ONE_MODELS_INTERNAL] [Connection Lifecycle] 2: Closed connection remotely. Close called.
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    2 closeHandlerCalled([object Object], undefined, closed)
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    2 closeHandlerCalled
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule] removeActiveConnection(75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, c2187125a8426821ae6cde1f3db29cd0acec7a8db2f08ad3290f40d678779056, pairing)
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicatonModule: removeActiveConnection(75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, c2187125a8426821ae6cde1f3db29cd0acec7a8db2f08ad3290f40d678779056, pairing)
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    2 disconnectCloseHandlerCalled([object Object], undefined)
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Storage] Appending to system map file: /Users/gecko/Library/Developer/CoreSimulator/Devices/7BC2731C-7541-4977-88C1-9DE106730062/data/Containers/Data/Application/F05092B1-EF80-4247-9540-6A4F18C37F24/Documents/lama/315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2/rmaps/92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750.Object.Keys
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Storage] Appending to system map file: /Users/gecko/Library/Developer/CoreSimulator/Devices/7BC2731C-7541-4977-88C1-9DE106730062/data/Containers/Data/Application/F05092B1-EF80-4247-9540-6A4F18C37F24/Documents/lama/315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2/rmaps/b23cba2d007920470b3048c26adc4e2329d561b0e8f706a4b19276059a7b5016.Object.Keys
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Storage] Appending to system map file: /Users/gecko/Library/Developer/CoreSimulator/Devices/7BC2731C-7541-4977-88C1-9DE106730062/data/Containers/Data/Application/F05092B1-EF80-4247-9540-6A4F18C37F24/Documents/lama/315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2/rmaps/92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750.Object.Profile
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: pong
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  ⬅️ [RECEIVED_MESSAGE] {
+  "command": "connection_handover"
+}
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] 3: Received connection_handover message
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: 3: Received connection_handover message
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicationServerListener] 🔍 [HANDOVER_CALLBACK] 3: About to call onConnect(connection) without error
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicationServerListener: 🔍 [HANDOVER_CALLBACK] 3: About to call onConnect(connection) without error
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicationServerListener] 🎯 [HANDOVER_CALLBACK_ENTRY] 3: handoverConnection callback called with err=undefined
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicationServerListener: 🎯 [HANDOVER_CALLBACK_ENTRY] 3: handoverConnection callback called with err=undefined
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] removeSpareConnection(3)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: removeSpareConnection(3)
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] updateState()
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: updateState()
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicationServerListener] 🎯 [HANDOVER SUCCESS] Connection 3 handed over successfully!
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicationServerListener: 🎯 [HANDOVER SUCCESS] Connection 3 handed over successfully!
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] scheduleSpareConnection(wss://comm10.dev.refinio.one, false)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: scheduleSpareConnection(wss://comm10.dev.refinio.one, false)
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] establishConnection(wss://comm10.dev.refinio.one)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: establishConnection(wss://comm10.dev.refinio.one)
+ LOG  [NetworkPlugin] 🚀 NetworkPlugin constructor called - ID: conn-jwxoiarzn
+ LOG  [NetworkPlugin] 🔌 Attached to connection conn-jwxoiarzn (internal id: 4)
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicationServerListener] 🎯 [HANDOVER SUCCESS] About to emit onConnection for connection 3
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicationServerListener: 🎯 [HANDOVER SUCCESS] About to emit onConnection for connection 3
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicationServerListener] 🎯 [HANDOVER SUCCESS] onConnection event emitted successfully
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicationServerListener: 🎯 [HANDOVER SUCCESS] onConnection event emitted successfully
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicationServerListener] 🔍 [HANDOVER_CALLBACK] 3: onConnect(connection) call completed successfully
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicationServerListener: 🔍 [HANDOVER_CALLBACK] 3: onConnect(connection) call completed successfully
+ LOG  🔥 [ONE_MODELS_ROUTING] [IncomingConnectionManager] 🔄 [ACCEPT CONNECTION] 3: Starting acceptConnection process
+ LOG  🔥 [ONE_MODELS_BUS_LOG] IncomingConnectionManager: 🔄 [ACCEPT CONNECTION] 3: Starting acceptConnection process
+ LOG  🔥 [ONE_MODELS_ROUTING] [IncomingConnectionManager] 🔄 [ACCEPT CONNECTION] 3: listenerId: IncomingWebsocketRouteCommServer:wss://comm10.dev.refinio.one:75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c
+ LOG  🔥 [ONE_MODELS_BUS_LOG] IncomingConnectionManager: 🔄 [ACCEPT CONNECTION] 3: listenerId: IncomingWebsocketRouteCommServer:wss://comm10.dev.refinio.one:75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c
+ LOG  🔥 [ONE_MODELS_ROUTING] [IncomingConnectionManager] 🔄 [ACCEPT CONNECTION] 3: Calling acceptWithEncryption...
+ LOG  🔥 [ONE_MODELS_BUS_LOG] IncomingConnectionManager: 🔄 [ACCEPT CONNECTION] 3: Calling acceptWithEncryption...
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionSetup] acceptWithEncryption(3)
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 1: accept connection
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 1.1: wait for communication_request
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] ConnectionSetup: 3: Phase 1.1: wait for communication_request
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 1.1x: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01 [75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c]
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 1.2: send communication_ready
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] ConnectionSetup: 3: Phase 1.2: send communication_ready
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 1.3: check our desire to communicate
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 1.3: accepted
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 2: exchange keys
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 2.1: wait for and decrypt public key
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [PairingManager] 2: acceptInvitation: startPairingProtocol - success
+ LOG  🔥 [PAIRING_CALLBACK] trustPairingKeys CALLED with args: 6
+ LOG  🔥 [PAIRING_CALLBACK] Args: [false, "d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df", "315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2", "92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750", "b23cba2d007920470b3048c26adc4e2329d561b0e8f706a4b19276059a7b5016", "5mTtOuMHpa4e2PdCezimH3vdiUcrwOxIQXV7dGRn1j7m4dt-jEZBVwAbN37ktF_Z"]
+ LOG  🔐 [LeuteAccessRightsManager] Trusting pairing keys for person: 92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] ✅ [ConnectionsModel] 2: PAIRING protocol for unknown person completed successfully
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: ✅ [ConnectionsModel] 2: PAIRING protocol for unknown person completed successfully
+iOS Bundled 23ms ../one.core/lib/reverse-map-query.js (1 module)
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Storage] Appending to system map file: /Users/gecko/Library/Developer/CoreSimulator/Devices/7BC2731C-7541-4977-88C1-9DE106730062/data/Containers/Data/Application/F05092B1-EF80-4247-9540-6A4F18C37F24/Documents/lama/315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2/rmaps/92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750.Object.Profile
+ LOG  [Storage] Appending to system map file: /Users/gecko/Library/Developer/CoreSimulator/Devices/7BC2731C-7541-4977-88C1-9DE106730062/data/Containers/Data/Application/F05092B1-EF80-4247-9540-6A4F18C37F24/Documents/lama/315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2/rmaps/d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df.Object.Profile
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 2.2: generate encrypt and send public key
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 2.3: derive shared key
+ LOG  🐛 [ONE_MODELS_DEBUG] [ConnectionSetup] 3: Phase 2.3: derive shared key - END
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionSetup] acceptWithEncryption(3, 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01) - success
+ LOG  🔥 [ONE_MODELS_ROUTING] [IncomingConnectionManager] 🔄 [ACCEPT CONNECTION] 3: Encryption successful, emitting onConnection
+ LOG  🔥 [ONE_MODELS_BUS_LOG] IncomingConnectionManager: 🔄 [ACCEPT CONNECTION] 3: Encryption successful, emitting onConnection
+ LOG  🔥 [ONE_MODELS_ROUTING] [IncomingConnectionManager] 🔄 [ACCEPT CONNECTION] 3: onConnection event emitted successfully
+ LOG  🔥 [ONE_MODELS_BUS_LOG] IncomingConnectionManager: 🔄 [ACCEPT CONNECTION] 3: onConnection event emitted successfully
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    3 acceptConnection(75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01, undefined, IncomingWebsocketRouteCommServer:wss://comm10.dev.refinio.one:75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c)
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicatonModule:    3 acceptConnection(75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01, undefined, IncomingWebsocketRouteCommServer:wss://comm10.dev.refinio.one:75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c)
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule] 3: acceptConnection: exchangeConnectionGroupName
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicatonModule: 3: acceptConnection: exchangeConnectionGroupName
+ LOG  🐛 [ONE_MODELS_DEBUG] [protocols/ExchangeConnectionGroupName]    3 Wait for connection group.
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔐 [LeuteAccessRightsManager] ✅ Key signing succeeded for 92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  [NetworkPlugin] 🟢 Connection conn-jwxoiarzn opened
+ LOG  🔥 [ONE_MODELS_INTERNAL] [Connection Lifecycle] 4: Opened connection.
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] 4: Step 1: Send 'register' message
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: 4: Step 1: Send 'register' message
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  ➡️ [SENDING_MESSAGE] {
+  "command": "register",
+  "publicKey": "75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c"
+}
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] 4: Step 2: Wait for authentication_request
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: 4: Step 2: Wait for authentication_request
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🐛 [ONE_MODELS_DEBUG] [protocols/ExchangeConnectionGroupName]    3 Received connection group chum
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule] 3: acceptConnection: sync
+ LOG  🔥 [ONE_MODELS_BUS_LOG] CommunicatonModule: 3: acceptConnection: sync
+ LOG  🐛 [ONE_MODELS_DEBUG] [protocols/Sync]    3 Send sync message
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getArrayBuffer called with: object Uint8Array
+ LOG  ✅ getArrayBuffer: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  ⬅️ [RECEIVED_MESSAGE] {
+  "command": "authentication_request",
+  "publicKey": "41716f7a26f64a648007776f9c377b7363ee4bd8ec101af17ce76eb56b389a46",
+  "challenge": "d7f60e964a1d69766cae241b328e95b718d3b5a667642e3a1623af4b80f13a930f7d9fcea25e154615646496378d36bd68801c1995c1154a490de31e9b33c24e6738a74e61cbc6dc646aa54f907f5c14f44affdce2ffba4e1a8c0a10bd3e941ad4d2a6cb8e78e945"
+}
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] 4: Step 3: Send authentication_response message
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: 4: Step 3: Send authentication_response message
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  ➡️ [SENDING_MESSAGE] {
+  "command": "authentication_response",
+  "response": "b56569918bdf3c8af5d289275e56712f0bf08acbe508f76d1fef3a857623646585d2a8c3a57c17f3eb1baa8134526111ed5a5e80d8b562eb86790a2358bab4291275952e4d05ec7e0e72d928240476f4c3bd782c7f0dd4a0e7d35e85b10204582afc52344551838b"
+}
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] 4: Step 4: Wait for authentication_success message
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: 4: Step 4: Wait for authentication_success message
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  ⬅️ [RECEIVED_MESSAGE] {
+  "command": "authentication_success",
+  "pingInterval": 25000
+}
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] 4: Step 5: Wait for connection_handover message
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: 4: Step 5: Wait for connection_handover message
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] addSpareConnection(4)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: addSpareConnection(4)
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] updateState()
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: updateState()
+ LOG  🐛 [ONE_MODELS_DEBUG] [CommunicationServerListener] scheduleSpareConnection(wss://comm10.dev.refinio.one, false)
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] CommunicationServerListener: scheduleSpareConnection(wss://comm10.dev.refinio.one, false)
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] ❓ [ConnectionsModel] 3: *** onUnknownConnection() CALLED ***
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: ❓ [ConnectionsModel] 3: *** onUnknownConnection() CALLED ***
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Route Group: chum
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Route Group: chum
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Initiated Locally: false
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Initiated Locally: false
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Local Person: d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Local Person: d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Local Instance: 315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Local Instance: 315977d5e9220eb72cac3b4c95bc986bb487ad99713c0489e3971a82fa0a86b2
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Remote Person: 92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Remote Person: 92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Remote Instance: b23cba2d007920470b3048c26adc4e2329d561b0e8f706a4b19276059a7b5016
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Remote Instance: b23cba2d007920470b3048c26adc4e2329d561b0e8f706a4b19276059a7b5016
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Accept Unknown Persons: true
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Accept Unknown Persons: true
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] 🚀 [ConnectionsModel] 3: Starting CHUM protocol for UNKNOWN person...
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: 🚀 [ConnectionsModel] 3: Starting CHUM protocol for UNKNOWN person...
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] 🔄 [ConnectionsModel] Connections changed
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: 🔄 [ConnectionsModel] Connections changed
+ LOG  🚀 [CommServerManager] Protocol started: chum
+ LOG  🔗 [CommServerManager] ⚡️ CONNECTIONS CHANGED
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔗 [CommServerManager] ⚡️ ACTIVE CONNECTION: localKey: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, remoteKey: a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01, groupId: chum
+ LOG  🔗 [CommServerManager] ⚡️ Protocol: chum
+ LOG  🔗 [CommServerManager] ⚡️ Remote Person: 0000000000000000000000000000000000000000000000000000000000000000
+ LOG  🔍 [PEERID_DEBUG] Connection details:
+ LOG  🔍 [PEERID_DEBUG]   localKey: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c
+ LOG  🔍 [PEERID_DEBUG]   remoteKey: a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 [PEERID_DEBUG]   exactPeerId: localKey: 75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, remoteKey: a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01
+ LOG  🔍 [PEERID_DEBUG]   knownPeerMap size: 0
+ LOG  �� [PEERID_DEBUG]   ❌ NO EXACT MATCH in knownPeerMap
+ LOG  🔍 [PEERID_DEBUG]   Available PeerIDs in knownPeerMap:
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: promise
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-sync] CHUM OPTIONS: {"connection":{"promise":{"_h":2,"_i":0,"_j":null,"_k":[{"onFulfilled":null,"promise":{"_h":0,"_i":0,"_j":null,"_k":null}},{"onFulfilled":null,"promise":{"_h":1,"_i":0,"_j":null,"_k":{"promise":{"_h":0,"_i":0,"_j":null,"_k":null}}}}]},"connId":3,"stats":{"requestsSentTotal":0,"requestsReceivedTotal":0,"requestsReceivedInvalid":0}},"localPersonId":"d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df","remotePersonId":"92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750","chumName":"chum","localInstanceName":"lama","remoteInstanceName":"Device of b","keepRunning":true,"disableImporter":false,"disableExporter":false}
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-sync: CHUM OPTIONS: {"connection":{"promise":{"_h":2,"_i":0,"_j":null,"_k":[{"onFulfilled":null,"promise":{"_h":0,"_i":0,"_j":null,"_k":null}},{"onFulfilled":null,"promise":{"_h":1,"_i":0,"_j":null,"_k":{"promise":{"_h":0,"_i":0,"_j":null,"_k":null}}}}]},"connId":3,"stats":{"requestsSentTotal":0,"requestsReceivedTotal":0,"requestsReceivedInvalid":0}},"localPersonId":"d27f0ef1dd9e2588e283496bda4984d846ac777a86c6fa4337f357f28fa945df","remotePersonId":"92a01d9854be91fb720721eff51bf7d8d3e978c32c6f4ff38ca6a2fd2e4bc750","chumName":"chum","localInstanceName":"lama","remoteInstanceName":"Device of b","keepRunning":true,"disableImporter":false,"disableExporter":false}
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-sync] [3] Chum, local: lama, remote: Device of b, import: true, export: true
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-sync: [3] Chum, local: lama, remote: Device of b, import: true, export: true
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-exporter] [3] EXPORTER STARTED
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-exporter: [3] EXPORTER STARTED
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-importer] [3] EXPORTER STARTED
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-importer: [3] EXPORTER STARTED
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-sync] [3] AWAIT IMPORTER AND EXPORTER PROMISE
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-sync: [3] AWAIT IMPORTER AND EXPORTER PROMISE
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  🚨🚨🚨 EXECUTING PATCHED onMsgHandler v9 - SAFE CONSTRUCTOR ACCESS - CACHE BUST 2024-12-19 🚨🚨🚨
+ LOG  🔍 onMsgHandler: Processing data type: string
+ LOG  🔍 onMsgHandler: Data constructor: String
+ LOG  🔍 onMsgHandler: Data safe type checks about to start...
+ LOG  ✅ onMsgHandler: Handling string data
+ LOG  🐛 [ONE_MODELS_DEBUG] [chum-exporter-service-functions] [3] GET_PROTOCOL_VERSION
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] chum-exporter-service-functions: [3] GET_PROTOCOL_VERSION
+ LOG  🐛 [ONE_MODELS_DEBUG] [chum-exporter-service-functions] [3] GET_PROTOCOL_VERSION DONE: 8
+ LOG  🔥 [ONE_MODELS_BUS_DEBUG] chum-exporter-service-functions: [3] GET_PROTOCOL_VERSION DONE: 8
+ LOG  ✅ onMsgHandler: Successfully completed processing
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: encryption
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: keepalive
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: fragmentation
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: statistics
+ LOG  [Connection.ts] Executing transformIncomingEvent for plugin: network
+ LOG  [NetworkPlugin] 🔴 Connection conn-qcndi1tbs closed: Close called: onMsgHandler error: ReferenceError: SharedArrayBuffer is not defined
+ LOG  [NetworkPlugin] 🔍 Close event details: {"connectionId": "conn-qcndi1tbs", "origin": "remote", "reason": "Close called: onMsgHandler error: ReferenceError: SharedArrayBuffer is not defined"}
+ LOG  🔥 [ONE_MODELS_INTERNAL] [Connection Lifecycle] 3: Closed connection remotely. Close called: onMsgHandler error: ReferenceError: SharedArrayBuffer is not defined
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    3 closeHandlerCalled([object Object], undefined, closed)
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    3 closeHandlerCalled
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule] removeActiveConnection(75bbd27d2da71b2cab379a738986694476bd04a7d7633b3598517d473741631c, a520ac4db214fde50286c46b9b0d98cda96824ae499cabc0801c7ed3955bac01, chum)
+ LOG  🔥 [ONE_MODELS_INTERNAL] [CommunicatonModule]    3 disconnectCloseHandlerCalled([object Object], undefined)
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔍 getUint8Array called with: object Uint8Array
+ LOG  ✅ getUint8Array: Handling Uint8Array
+ LOG  🔥 [ONE_MODELS_BUS_ALERT] chum-sync: [3] CONECTION CLOSED ERR [Error: WSP-ONCL1: Connection closed with 1 requests still pending ([1])]
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-importer] [3] IMPORTER ENDED WITH ERROR [Error: WSP-ONCL0: Aborted: Connection closed]
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-importer: [3] IMPORTER ENDED WITH ERROR [Error: WSP-ONCL0: Aborted: Connection closed]
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-exporter] [3] EXPORTER ENDED GRACEFULLY: CLOSE
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-exporter: [3] EXPORTER ENDED GRACEFULLY: CLOSE
+ LOG  [NetworkPlugin] 📤 Closing connection conn-qcndi1tbs: Chum ended [3] with error: Error: WSP-ONCL0: Aborted: Connection closed
+ LOG  🔥 [ONE_MODELS_INTERNAL] [chum-sync] [3] AWAIT IMPORTER AND EXPORTER PROMISE - DONE WITH ERRORS [Error: WSP-ONCL0: Aborted: Connection closed]
+ LOG  🔥 [ONE_MODELS_BUS_LOG] chum-sync: [3] AWAIT IMPORTER AND EXPORTER PROMISE - DONE WITH ERRORS [Error: WSP-ONCL0: Aborted: Connection closed]
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel] 💥 [ConnectionsModel] 3: onUnknownConnection FAILED - WSP-ONCL0: Aborted: Connection closed
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel: 💥 [ConnectionsModel] 3: onUnknownConnection FAILED - WSP-ONCL0: Aborted: Connection closed
+ LOG  🔥 [ONE_MODELS_INTERNAL] [ConnectionsModel]    - Error details: Error: WSP-ONCL0: Aborted: Connection closed
+    at createError (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:5645:24)
+    at onConnectionStateChange (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:196638:74)
+    at apply (native)
+    at ?anon_0_ (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:156463:33)
+    at next (native)
+    at asyncGeneratorStep (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:156645:19)
+    at _next (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:156659:29)
+    at tryCallOne (address at InternalBytecode.js:1:1180)
+    at anonymous (address at InternalBytecode.js:1:1874)
+ LOG  🔥 [ONE_MODELS_BUS_LOG] ConnectionsModel:    - Error details: Error: WSP-ONCL0: Aborted: Connection closed
+    at createError (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:5645:24)
+    at onConnectionStateChange (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:196638:74)
+    at apply (native)
+    at ?anon_0_ (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:156463:33)
+    at next (native)
+    at asyncGeneratorStep (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:156645:19)
+    at _next (http://192.168.178.102:8081/index.bundle//&platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable:156659:29)
+    at tryCallOne (address at InternalBytecode.js:1:1180)
+    at anonymous (address at InternalBytecode.js:1:1874)
+ LOG  [NetworkPlugin] 📤 Closing connection conn-qcndi1tbs: Error: WSP-ONCL0: Aborted: Connection closed
+› Stopped server

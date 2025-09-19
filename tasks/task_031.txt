@@ -1,0 +1,70 @@
+# Task ID: 31
+# Title: Complete CommServer Protocol Implementation - Encryption and Pairing
+# Status: in-progress
+# Dependencies: 30
+# Priority: high
+# Description: Complete the remaining phases of CommServer protocol implementation after successful authentication.
+# Details:
+**AUTHENTICATION PHASE COMPLETED** ✅
+- Fixed key mismatch issue (Instance keys vs Person keys)
+- Authentication challenge/response working correctly
+- Symmetric key properly generated and stored in context
+
+**CURRENT FOCUS: ENCRYPTION & PAIRING PHASES**
+
+**ENCRYPTION PHASE** 🔧:
+- Fixed Buffer compatibility issue for React Native
+- Encryption context properly passed from AuthenticationPhase
+- NetworkPlugin.enableEncryption() method needs implementation
+- Need to verify encrypted message handling
+
+**PAIRING PHASE** 🔄:
+- Need to implement complete one.models protocol:
+  1. Person ID exchange (person_id_object ↔)
+  2. Keys exchange (keys_object ↔) 
+  3. Key challenge/response (binary messages)
+  4. Instance ID exchange (instance_id_object ↔)
+
+**PROTOCOL UNDERSTANDING**:
+Based on one.models source analysis, the complete sequence is:
+1. Registration (✅ done)
+2. Authentication (✅ done) 
+3. Encryption setup (🔧 in progress)
+4. Communication handshake (communication_request/ready)
+5. Person/Instance exchange protocol
+6. Normal encrypted messaging
+
+**NEXT STEPS**:
+1. Implement NetworkPlugin.enableEncryption() method
+2. Test encrypted message handling with binary data
+3. Implement person/instance exchange protocol
+4. Test end-to-end with edda.one
+
+# Test Strategy:
+1. Verify encryption setup completes without errors
+2. Test encrypted message exchange with CommServer
+3. Validate person/instance exchange protocol
+4. Test complete pairing flow with edda.one
+
+# Subtasks:
+## 1. Implement NetworkPlugin Encryption Support [in-progress]
+### Dependencies: None
+### Description: Implement the enableEncryption() method in NetworkPlugin to handle encrypted message exchange
+### Details:
+Need to implement actual encryption/decryption of WebSocket messages using the symmetric key from authentication.
+
+## 2. Complete Person/Instance Exchange Protocol [pending]
+### Dependencies: Encryption Support
+### Description: Implement the one.models person/instance exchange protocol
+### Details:
+Following the memory documentation, implement:
+- PHASE 1: Communication handshake (communication_request/ready)
+- PHASE 2: Person ID exchange with key challenge/response
+- PHASE 3: Instance ID exchange
+
+## 3. Test End-to-End Protocol [pending]
+### Dependencies: Person/Instance Exchange
+### Description: Test complete protocol with live edda.one instance
+### Details:
+Verify invitation acceptance, protocol completion, and bidirectional messaging.
+

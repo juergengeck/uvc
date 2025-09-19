@@ -1,0 +1,181 @@
+# Task ID: 7
+# Title: Deep Link Handling
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Implement deep link handling for incoming invite URLs.
+# Details:
+Set up deep linking in the app to capture and process incoming invite URLs. This involves configuring URL schemes and ensuring they are correctly parsed by the app.
+<info added on 2025-07-04T21:06:41.395Z>
+**ACTUAL REQUIREMENT**: Parse and handle invitation URLs in the edda.one format used by the reference implementation.
+
+**Key findings from one.leute/src/utils/pairing.ts:**
+
+1. **URL Format Detection**: 
+   - `invites/inviteDevice/?invited=true` - for device invitations (IoM mode)
+   - `invites/invitePartner/?invited=true` - for partner invitations (IoP mode)
+
+2. **URL Structure**: `https://edda.one/invites/invitePartner/?invited=true/#[encoded-json-data]`
+
+3. **Parsing Logic**:
+   - Extract the hash fragment after `#`
+   - URL decode it: `decodeURIComponent(invitationLink.split('#')[1])`
+   - Parse as JSON to get the Invitation object
+   - Validate using `isInvitation()` from one.models
+
+4. **Invitation Object**: Contains structured data including token, server info, etc.
+
+5. **Usage Flow**: 
+   - Parse URL → Extract Invitation object → Pass to `connectionsModel.pairing.connectUsingInvitation(invitation)`
+
+This is NOT about mobile deep linking schemes, but about parsing edda.one web URLs that contain invitation data.
+</info added on 2025-07-04T21:06:41.395Z>
+
+# Test Strategy:
+Test deep link handling with various URL formats to ensure correct parsing and routing.
+
+# Subtasks:
+## 1. Understand invitation management in edda/one.leute reference implementation [done]
+### Dependencies: None
+### Description: Study the one.leute codebase to understand how invitation URLs are parsed, validated, and processed
+### Details:
+Examine key files:
+- one.leute/src/utils/pairing.ts - Core URL parsing logic
+- one.leute/src/*/root/AppRouter.tsx - Route handling for invitePartner/inviteDevice
+- @refinio/one.ui CreateInvitation component usage
+- @refinio/one.models PairingManager.isInvitation() validation
+
+Document the complete flow from URL reception to invitation processing.
+<info added on 2025-07-04T21:07:23.768Z>
+**Updated Subtask Details:**
+
+The analysis of invitation management within `one.leute` has been completed, revealing key insights into the URL parsing and processing flow. The core implementation resides in `one.leute/src/utils/pairing.ts`, where URL patterns are detected to determine whether an invite is for a device or a partner. This detection sets the mode accordingly (`IoM` for devices and `IoP` for partners).
+
+The URL parsing logic involves extracting JSON from the hash part of the invitation link, which is then validated using `isInvitation()` from `@refinio/one.models`. If valid, this information is passed to `connectionsModel.pairing.connectUsingInvitation(invitation)` for further processing.
+
+Integration with routing occurs through routes like `/invitePartner` and `/inviteDevice`, utilizing the `CreateInvitation` component from `@refinio/one.ui`. This component manages both the generation and processing of invitations, indicating a centralized handling mechanism within the application.
+
+Key dependencies identified include:
+- `PairingManager` for invitation validation.
+- `@refinio/one.core/lib/recipes` for defining Person/Instance types.
+- `ConnectionsModel` for executing pairing operations.
+
+The conclusion drawn from this analysis is that our current Lama implementation should consolidate its URL parsing logic, which is currently duplicated across different modules such as InviteManager and NetworkSettingsService. This consolidation should align with the established pattern observed in `one.leute`, ensuring a more streamlined and efficient invitation management process.
+</info added on 2025-07-04T21:07:23.768Z>
+
+## 2. Consolidate duplicate URL parsing logic [pending]
+### Dependencies: ["7.1"]
+### Description: Remove duplicate invitation URL parsing code from InviteManager and NetworkSettingsService, create single unified implementation
+### Details:
+Current state: URL parsing logic is duplicated in:
+- src/models/contacts/InviteManager.ts (extractInvitationFromHash, parseInvitationUrl)
+- src/services/NetworkSettingsService.ts (parseInvitationUrl)
+
+Action needed: 
+1. Create a unified utility function following one.leute pattern
+2. Remove duplicate implementations
+3. Update both services to use the consolidated version
+<info added on 2025-07-04T21:34:52.683Z>
+Subtask 7.2 has been completed successfully, achieving consolidation of duplicate URL parsing logic into a unified utility function. The following accomplishments were made:
+
+1. A unified utility `src/utils/invitation-url-parser.ts` was created to centralize the URL parsing logic:
+   - It adheres to the one.leute reference implementation pattern.
+   - Incorporates `isInvitation()` validation from @refinio/one.models.
+   - Supports detection of both IoM and IoP modes, with legacy compatibility functions included.
+
+2. The `InviteManager.ts` file was updated by replacing its `extractInvitationFromHash()` function:
+   - It now utilizes the consolidated utility through dynamic import while maintaining backward compatibility in its API.
+
+3. In `NetworkSettingsService.ts`, the `parseInvitationUrl()` function was replaced:
+   - This update also leverages the unified utility via dynamic import.
+   - The method has been made asynchronous to accommodate ES module imports, with caller adjustments for async handling.
+
+4. Key improvements include establishing a single source of truth for URL parsing logic, ensuring adherence to the one.leute pattern, and enhancing validation using one.models. Additionally, mode detection (IoM vs IoP) was implemented for future feature support, along with improved error handling and reporting.
+
+5. Build verification confirmed that the application builds successfully without breaking existing functionality, paving the way for the next subtask (7.3).
+
+Files modified include:
+- Creation of `src/utils/invitation-url-parser.ts`.
+- Updates to `src/models/contacts/InviteManager.ts` and `src/services/NetworkSettingsService.ts`.
+</info added on 2025-07-04T21:34:52.683Z>
+
+## 3. Implement one.leute-compatible URL parsing [pending]
+### Dependencies: ["7.2"]
+### Description: Create invitation URL parser that follows the exact pattern from one.leute/src/utils/pairing.ts
+### Details:
+Implementation requirements based on one.leute analysis:
+
+1. **URL Pattern Detection:**
+   - Check for 'invites/inviteDevice/?invited=true' (IoM mode)
+   - Check for 'invites/invitePartner/?invited=true' (IoP mode)
+
+2. **Parsing Logic:**
+   - Extract hash: invitationLink.split('#')[1]
+   - URL decode: decodeURIComponent(...)
+   - Parse JSON to get Invitation object
+   - Validate with isInvitation() from @refinio/one.models
+
+3. **Return structured data:**
+   - Mode: 'IoM' | 'IoP' | undefined
+   - Invitation object (if valid)
+   - Error handling for malformed URLs
+
+4. **Integration points:**
+   - Replace current parsing in InviteManager
+   - Replace current parsing in NetworkSettingsService
+
+## 4. Add invitation mode handling (IoM vs IoP) [pending]
+### Dependencies: ["7.3"]
+### Description: Implement proper handling for the two invitation types: Instance of Machine (device) vs Instance of Person (partner)
+### Details:
+Based on one.leute implementation, add support for:
+
+1. **Mode Detection:**
+   - IoM (Instance of Machine): Device invitations
+   - IoP (Instance of Person): Partner invitations
+
+2. **Different Processing Paths:**
+   - IoM mode: May trigger IoMRequestManager for device pairing
+   - IoP mode: Standard person-to-person connection
+
+3. **Integration with existing models:**
+   - Update InviteManager to handle both modes
+   - Ensure compatibility with current leuteModel usage
+   - Maintain existing connectUsingInvitation flow
+
+4. **Future-proofing:**
+   - Prepare for potential IoMRequestManager integration
+   - Ensure mode information is preserved through the connection flow
+
+## 5. Test consolidated invitation URL parsing [pending]
+### Dependencies: ["7.4"]
+### Description: Create comprehensive tests for the new unified invitation URL parsing system
+### Details:
+Test scenarios to cover:
+
+1. **Valid URL formats:**
+   - https://edda.one/invites/invitePartner/?invited=true#[valid-json]
+   - https://edda.one/invites/inviteDevice/?invited=true#[valid-json]
+
+2. **Invalid/malformed URLs:**
+   - Missing hash fragment
+   - Invalid JSON in hash
+   - Wrong URL patterns
+   - URL encoding issues
+
+3. **Edge cases:**
+   - Empty invitation data
+   - Invitation validation failures
+   - Network timeout scenarios
+
+4. **Integration testing:**
+   - Verify InviteManager uses new parser
+   - Verify NetworkSettingsService uses new parser
+   - Test mode detection (IoM vs IoP)
+   - Test error handling and fallbacks
+
+5. **Compatibility testing:**
+   - Ensure existing invitation flows still work
+   - Test with real invitation URLs from edda.one
+   - Verify no regression in current functionality
+

@@ -1,0 +1,43 @@
+# Task ID: 4
+# Title: Test Bidirectional Pairing Protocol
+# Status: done
+# Dependencies: 1, 2
+# Priority: high
+# Description: Comprehensively test both edda→lama and lama→edda pairing scenarios based on new findings, including the impact of Expo WebSocket conflict with CommServer protocol after implementation of critical fix.
+# Details:
+With WebSocket and timing fixes in place, thoroughly test both pairing directions: 1) edda.one creates invitation, lama accepts; 2) lama creates invitation, edda.one accepts. Monitor for connection establishment, message exchange, and stability. Given the new findings, focus on investigating key generation differences, CommServer connection state during invitation creation, timing of catch-all route availability, WebSocket connection handling, and the impact of Expo WebSocket conflict with CommServer protocol after implementation of critical fix.
+
+# Test Strategy:
+Create invitations from both sides, verify successful pairing, test message exchange, monitor for connection drops or errors.
+
+# Subtasks:
+## 5. Investigate Key Generation Differences [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 6. Monitor CommServer Connection State During Invitation Creation [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 7. Test Timing of Catch-All Route Availability [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 8. Examine WebSocket Connection Handling Differences [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 9. Verify CommServer WebSocket Fix Implementation [done]
+### Dependencies: None
+### Description: Test that the custom WebSocket factory correctly detects CommServer URLs and disables conflicting ping/pong protocol
+### Details:
+Verify in logs: 1) WebSocket override intercepts imports, 2) CommServer URLs detected correctly, 3) Custom ping/pong skipped for CommServer, 4) Connections stay alive during invitation process
+

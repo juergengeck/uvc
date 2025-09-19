@@ -1,0 +1,26 @@
+{
+  "title": "Registration",
+  "subtitle": "Create your account",
+  "email": {
+    "label": "Email",
+    "placeholder": "Enter your email"
+  },
+  "password": {
+    "label": "Password",
+    "placeholder": "Enter your password"
+  },
+  "confirmPassword": {
+    "label": "Confirm Password",
+    "placeholder": "Confirm your password"
+  },
+  "submit": "Register",
+  "errors": {
+    "emailRequired": "Email is required",
+    "emailInvalid": "Invalid email address",
+    "passwordRequired": "Password is required",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordMismatch": "Passwords do not match"
+  },
+  "success": "Registration successful",
+  "alreadyRegistered": "Already have an account? Sign in"
+} 

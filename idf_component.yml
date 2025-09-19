@@ -1,0 +1,31 @@
+## IDF Component Manager Manifest File
+description: QUICVC Protocol with Verifiable Credentials for ESP32
+version: "1.0.0"
+license: Apache-2.0
+url: https://github.com/refinio/quicvc
+repository: https://github.com/refinio/quicvc.git
+documentation: https://github.com/refinio/quicvc
+issues: https://github.com/refinio/quicvc/issues
+dependencies:
+  idf:
+    version: ">=4.0.0"
+  esp_timer: ">=4.0.0"
+  mbedtls: ">=2.0.0"
+  json: ">=1.0.0"
+
+targets:
+  - esp32
+  - esp32s2
+  - esp32s3
+  - esp32c3
+  - esp32c6
+
+files:
+  include:
+    - "*.h"
+    - "*.c"
+    - "CMakeLists.txt"
+    - "README.md"
+    - "LICENSE"
+  exclude:
+    - "test/*" 

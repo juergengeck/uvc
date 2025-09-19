@@ -1,0 +1,11 @@
+{
+  "title": "Nachrichten",
+  "topics": {
+    "title": "Themen",
+    "empty": "Noch keine Themen",
+    "add": "Thema hinzufügen"
+  },
+  "empty": "Noch keine Nachrichten",
+  "loading": "Nachrichten werden geladen...",
+  "error": "Fehler beim Laden der Nachrichten"
+} 

@@ -1,0 +1,11 @@
+# Task ID: 23
+# Title: Refactor AppModel to Extract SettingsModel Class
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Move all settings management (PropertyTreeStore, dark mode, device settings) from AppModel into a dedicated SettingsModel class. This includes _propertyTree property, initSettings(), getDarkMode(), setDarkMode(), propertyTree getter, and initializeDeviceSettingsService() method.
+# Details:
+To achieve this task, we need to refactor the existing AppModel to extract its settings management functionality into a separate SettingsModel class. This involves identifying the key properties and methods that are currently handled by AppModel and moving them to the new SettingsModel class. We will also need to update the AppModel to inject the SettingsModel instance instead of managing it directly. Additionally, we need to ensure proper integration with other models and services, such as NetworkModel and IdentityExchange.
+
+# Test Strategy:
+1) Verify that the SettingsModel class correctly handles property tree management, initialization, and dark mode settings. 2) Test that the AppModel instance properly injects and uses the SettingsModel instance for device settings management. 3) Ensure that the new SettingsModel class does not introduce any regressions or bugs in the existing codebase.

@@ -1,0 +1,11 @@
+# Task ID: 8
+# Title: Implement Connection Diagnostics
+# Status: pending
+# Dependencies: 4
+# Priority: low
+# Description: Add diagnostic tools for troubleshooting connection issues
+# Details:
+Create diagnostic utilities to test connection components: WebSocket connectivity, CommServer reachability, invitation URL validation, crypto API functionality, and pairing status monitoring.
+
+# Test Strategy:
+Build diagnostic screens in app, test connectivity verification tools, ensure useful error reporting for connection failures.

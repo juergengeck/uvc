@@ -1,0 +1,254 @@
+# Integration Plan for Apple HealthKit via react-native-health
+
+## 1. Installation & Setup
+
+1. Install package:
+```bash
+yarn add react-native-health
+```
+
+2. Update iOS Podfile and install pods:
+```bash
+cd ios && pod install
+```
+
+3. Update info.plist with required permissions:
+```xml
+<key>NSHealthShareUsageDescription</key>
+<string>DigiOnko needs access to your health data to help track and monitor your health during cancer treatment and research.</string>
+<key>NSHealthUpdateUsageDescription</key>
+<string>DigiOnko can save health information to help track your progress during treatment.</string>
+<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
+<string>DigiOnko needs access to clinical records to provide comprehensive health monitoring during your cancer treatment.</string>
+```
+
+4. Enable HealthKit capability in Xcode project
+
+## 2. Implementation Phases
+
+### Phase 1: Core Integration (Week 1)
+
+1. Create HealthKit service wrapper:
+```typescript
+// app/services/health/AppleHealthService.ts
+import AppleHealthKit, { HealthKitPermissions } from 'react-native-health'
+
+export class AppleHealthService {
+  static async initialize() {
+    const permissions = {
+      permissions: {
+        read: [
+          AppleHealthKit.Constants.Permissions.HeartRate,
+          AppleHealthKit.Constants.Permissions.Steps,
+          AppleHealthKit.Constants.Permissions.Weight,
+          AppleHealthKit.Constants.Permissions.BodyTemperature,
+          AppleHealthKit.Constants.Permissions.BloodPressure,
+          AppleHealthKit.Constants.Permissions.Sleep
+        ],
+        write: [
+          AppleHealthKit.Constants.Permissions.Steps,
+          AppleHealthKit.Constants.Permissions.Weight,
+          AppleHealthKit.Constants.Permissions.BodyTemperature
+        ]
+      }
+    } as HealthKitPermissions
+
+    return new Promise((resolve, reject) => {
+      AppleHealthKit.initHealthKit(permissions, (error: string) => {
+        if (error) reject(error)
+        resolve(true)
+      })
+    })
+  }
+}
+```
+
+2. Add initialization to app startup:
+```typescript
+// app/initialization/preparation.ts
+import { AppleHealthService } from '../services/health/AppleHealthService'
+
+export async function prepareHealthKit() {
+  if (Platform.OS === 'ios') {
+    try {
+      await AppleHealthService.initialize()
+    } catch (error) {
+      console.error('HealthKit initialization failed:', error)
+    }
+  }
+}
+```
+
+### Phase 2: Data Collection (Week 2)
+
+1. Create health data models:
+```typescript
+// app/models/health/HealthDataModel.ts
+export interface HealthData {
+  steps: number
+  heartRate: number
+  weight: number
+  bodyTemperature: number
+  bloodPressure: {
+    systolic: number
+    diastolic: number
+  }
+  sleep: {
+    startDate: string
+    endDate: string
+    value: string
+  }
+}
+```
+
+2. Implement data collection methods:
+```typescript
+// app/services/health/AppleHealthService.ts
+export class AppleHealthService {
+  // ... existing code ...
+
+  static async getHealthData(startDate: string): Promise<HealthData> {
+    const options = {
+      startDate,
+      endDate: new Date().toISOString(),
+    }
+
+    const [
+      steps,
+      heartRate,
+      weight,
+      bodyTemp,
+      bloodPressure,
+      sleep
+    ] = await Promise.all([
+      this.getSteps(options),
+      this.getHeartRate(options),
+      this.getWeight(options),
+      this.getBodyTemperature(options),
+      this.getBloodPressure(options),
+      this.getSleep(options)
+    ])
+
+    return {
+      steps,
+      heartRate,
+      weight,
+      bodyTemperature: bodyTemp,
+      bloodPressure,
+      sleep
+    }
+  }
+}
+```
+
+### Phase 3: UI Integration (Week 3)
+
+1. Create health dashboard component:
+```typescript
+// app/components/health/HealthDashboard.tsx
+export function HealthDashboard() {
+  const [healthData, setHealthData] = useState<HealthData | null>(null)
+  
+  useEffect(() => {
+    loadHealthData()
+  }, [])
+
+  async function loadHealthData() {
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - 7) // Last 7 days
+    const data = await AppleHealthService.getHealthData(startDate.toISOString())
+    setHealthData(data)
+  }
+
+  return (
+    <View>
+      {/* Health metrics display */}
+    </View>
+  )
+}
+```
+
+2. Add to settings navigation:
+```typescript
+// app/(tabs)/settings.tsx
+{/* Health Settings */}
+<View style={[styles.section, styles.sectionMargin]}>
+  <TouchableOpacity 
+    style={styles.settingItem}
+    onPress={() => router.push('/(screens)/health')}
+  >
+    <View style={styles.settingContent}>
+      <MaterialCommunityIcons name="heart-pulse" size={24} color="#004397" />
+      <View style={styles.settingText}>
+        <Text variant="titleMedium">Health Data</Text>
+        <Text variant="bodySmall" style={styles.description}>
+          View and manage your health information
+        </Text>
+      </View>
+    </View>
+    <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
+  </TouchableOpacity>
+</View>
+```
+
+### Phase 4: Background Updates (Week 4)
+
+1. Configure background observers:
+```objc
+// ios/AppDelegate.m
+#import "RCTAppleHealthKit.h"
+
+@implementation AppDelegate
+
+- (BOOL)application:(UIApplication *)application
+    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+  
+  // ... existing code ...
+
+  [[RCTAppleHealthKit new] initializeBackgroundObservers:bridge];
+
+  return YES;
+}
+```
+
+2. Implement background sync service:
+```typescript
+// app/services/health/HealthSyncService.ts
+export class HealthSyncService {
+  static setupBackgroundSync() {
+    AppleHealthKit.setObserver({
+      type: AppleHealthKit.Constants.Observers.HeartRate,
+    })
+    
+    // Setup other observers
+  }
+}
+```
+
+## 3. Testing & Validation
+
+1. Unit tests for health services
+2. Integration tests with HealthKit
+3. UI testing for health dashboard
+4. Background sync testing
+
+## 4. Documentation
+
+1. Update README with HealthKit setup instructions
+2. Document available health metrics
+3. Add troubleshooting guide
+
+## 5. Future Enhancements
+
+1. Add more health metrics
+2. Implement health trends analysis
+3. Add health data export
+4. Integrate with study questionnaires
+
+## Notes
+
+- All health data collection requires explicit user consent
+- Handle offline/background sync carefully
+- Consider battery impact of background updates
+- Ensure HIPAA compliance for health data handling
+- Follow Apple's privacy guidelines 

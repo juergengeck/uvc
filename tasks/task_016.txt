@@ -1,0 +1,16 @@
+# Task ID: 16
+# Title: Fix database integrity violation in contact creation: "Cannot read property getObject of undefined"
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Fix the critical error identified from console logs that prevents contact creation, ensuring proper relationships and avoiding orphaned identities.
+# Details:
+1. Remove incorrect this.leuteModel.instance.getObject() calls (instance is a singleton in one.core)
+2. Fix SomeoneModel.constructWithNewSomeone() to use correct parameters: (personId, profileIdHash) not LeuteModel instance
+3. Add proper Profile creation step before Someone creation following ONE object relationship pattern
+4. Implement correct sequence: Person -> Profile -> Someone -> Add to contacts
+Expected result: Contact creation should work properly, showing green connection status and enabling topic creation for messaging.
+
+# Test Strategy:
+1. Verify console logs no longer display errors after implementing changes.
+2. Test contact creation functionality with sample data, ensuring proper relationships and identities are established.

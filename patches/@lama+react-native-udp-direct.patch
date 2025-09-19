@@ -1,0 +1,31 @@
+--- node_modules/@lama/react-native-udp-direct/ios/UDPSocketManager.mm
++++ node_modules/@lama/react-native-udp-direct/ios/UDPSocketManager.mm
+@@
+-                // Use GCDAsyncUdpSocket helper so the option is applied to *all* future FDs
+-                if (![udpSocket enableReusePort:YES]) {
+-                    UDP_SM_ERROR(@"Failed to enable SO_REUSEPORT via GCDAsyncUdpSocket helper");
+-                } else {
+-                    UDP_SM_LOG(@"Socket %@: enableReusePort=YES (GCDAsyncUdpSocket)", newSocketId);
+-                }
++                // Attempt to use GCDAsyncUdpSocket helper via dynamic selector to avoid compile errors when
++                // the `enableReusePort:` API is missing in older versions of CocoaAsyncSocket.
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wundeclared-selector"
++                if ([udpSocket respondsToSelector:@selector(enableReusePort:)]) {
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
++                    id result = [udpSocket performSelector:@selector(enableReusePort:) withObject:@(YES)];
++#pragma clang diagnostic pop
++                    BOOL helperSuccess = YES;
++                    if ([result isKindOfClass:[NSNumber class]]) {
++                        helperSuccess = [(NSNumber *)result boolValue];
++                    }
++                    if (!helperSuccess) {
++                        UDP_SM_ERROR(@"Failed to enable SO_REUSEPORT via GCDAsyncUdpSocket helper (dynamic)");
++                    } else {
++                        UDP_SM_LOG(@"Socket %@: enableReusePort=YES (dynamic)", newSocketId);
++                    }
++                } else {
++                    UDP_SM_LOG(@"GCDAsyncUdpSocket does not implement enableReusePort:. Falling back to setsockopt");
++                }
++#pragma clang diagnostic pop 

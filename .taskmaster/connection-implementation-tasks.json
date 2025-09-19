@@ -1,0 +1,423 @@
+{
+  "tasks": [
+    {
+      "id": "conn-001",
+      "title": "Fix ConnectionsModel Integration",
+      "description": "Ensure proper one.models ConnectionsModel initialization alongside custom CommServer implementation to resolve pairing success event handling issues",
+      "priority": "high",
+      "category": "architecture",
+      "estimatedHours": 8,
+      "complexity": "high",
+      "files": [
+        "src/models/AppModel.ts",
+        "src/models/LeuteAccessRightsManager.ts",
+        "src/models/network/CommServerManager.ts"
+      ],
+      "acceptanceCriteria": [
+        "ConnectionsModel properly initialized with correct configuration",
+        "LeuteAccessRightsManager receives pairing success events",
+        "onPairingSuccess listener connected to trustPairingKeys method",
+        "Custom CommServer implementation works alongside one.models",
+        "No conflicts between custom and one.models protocols"
+      ],
+      "implementationNotes": {
+        "reference": "connections.md lines 312-341",
+        "keyChanges": [
+          "Initialize ConnectionsModel with proper flags in AppModel constructor",
+          "Connect pairing success events to LeuteAccessRightsManager.trustPairingKeys",
+          "Ensure custom CommServerManager doesn't conflict with ConnectionsModel",
+          "Add proper error handling for initialization failures"
+        ],
+        "criticalConfiguration": {
+          "acceptIncomingConnections": true,
+          "acceptUnknownInstances": true,
+          "acceptUnknownPersons": false,
+          "allowPairing": true,
+          "pairingTokenExpirationDuration": 900000
+        }
+      },
+      "blockers": [],
+      "dependencies": [],
+      "tags": ["core", "pairing", "integration"]
+    },
+    {
+      "id": "conn-002", 
+      "title": "Complete LeuteAccessRightsManager Setup",
+      "description": "Connect pairing success events to trust establishment for proper contact creation after successful pairing",
+      "priority": "high",
+      "category": "contact-creation",
+      "estimatedHours": 6,
+      "complexity": "medium",
+      "files": [
+        "src/models/LeuteAccessRightsManager.ts",
+        "src/services/ContactCreationService.ts",
+        "src/models/AppModel.ts"
+      ],
+      "acceptanceCriteria": [
+        "onPairingSuccess event properly handled",
+        "Trust certificates created for paired contacts", 
+        "Contact creation completes automatically after pairing",
+        "Someone objects added to LeuteModel contacts",
+        "Default topics created for messaging"
+      ],
+      "implementationNotes": {
+        "reference": "connections.md lines 284-308",
+        "keyChanges": [
+          "Implement trustPairingKeys static method in LeuteAccessRightsManager",
+          "Connect to ConnectionsModel.pairing.onPairingSuccess event",
+          "Ensure proper trust certificate creation",
+          "Add contact creation service integration",
+          "Handle edge cases in contact creation"
+        ],
+        "eventFlow": [
+          "Pairing protocol completes successfully",
+          "onPairingSuccess event fired with remote Person/Instance IDs", 
+          "trustPairingKeys creates trust certificate",
+          "ContactCreationService creates Someone object",
+          "Contact added to LeuteModel and appears in UI"
+        ]
+      },
+      "blockers": ["conn-001"],
+      "dependencies": ["conn-001"],
+      "tags": ["contact-creation", "trust", "events"]
+    },
+    {
+      "id": "conn-003",
+      "title": "Implement Contact Add UI Route",
+      "description": "Add /contact/add route and UI for handling invitation acceptance and QR code scanning",
+      "priority": "high", 
+      "category": "ui",
+      "estimatedHours": 12,
+      "complexity": "medium",
+      "files": [
+        "app/(screens)/contacts/add.tsx",
+        "app/(tabs)/contacts.tsx",
+        "src/components/contacts/InvitationInput.tsx",
+        "src/components/contacts/QRScanner.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Route /contact/add exists and is navigable",
+        "QR code scanner component for invitation URLs",
+        "Text input for manual invitation URL entry", 
+        "Proper error handling for invalid invitations",
+        "Loading states during connection establishment",
+        "Success/failure feedback to user"
+      ],
+      "implementationNotes": {
+        "reference": "connections.md lines 26-35, 76-129",
+        "components": [
+          "QRScanner component using expo-camera",
+          "InvitationInput component for URL validation",
+          "ConnectionProgress component for pairing status",
+          "ErrorDisplay component for connection failures"
+        ],
+        "navigation": [
+          "Add route in app/(screens)/contacts/add.tsx",
+          "Update contacts tab navigation to include add button",
+          "Handle navigation state and back button"
+        ],
+        "integration": [
+          "Use InviteManager.connectUsingInvitation()",
+          "Monitor pairing progress events",
+          "Handle success/failure appropriately"
+        ]
+      },
+      "blockers": [],
+      "dependencies": [],
+      "tags": ["ui", "navigation", "qr-scanner"]
+    },
+    {
+      "id": "conn-004",
+      "title": "Add Deep Linking for Invitation URLs", 
+      "description": "Handle invitation URLs when app is opened via deep links from other apps or QR code scanning",
+      "priority": "high",
+      "category": "platform",
+      "estimatedHours": 10,
+      "complexity": "medium",
+      "files": [
+        "app.config.js",
+        "src/services/DeepLinkService.ts",
+        "App.tsx",
+        "src/models/contacts/InviteManager.ts"
+      ],
+      "acceptanceCriteria": [
+        "Deep link scheme configured in app.config.js",
+        "Invitation URLs properly parsed when app opens", 
+        "Navigation to appropriate screen on deep link",
+        "Proper handling when app is already running",
+        "Error handling for malformed URLs"
+      ],
+      "implementationNotes": {
+        "reference": "connections.md lines 68-72",
+        "urlScheme": "lama://invite?url=...",
+        "configuration": [
+          "Add deep link scheme to app.config.js",
+          "Configure Android intent filters",
+          "Set up iOS URL schemes"
+        ],
+        "implementation": [
+          "Create DeepLinkService to handle URL parsing",
+          "Add Linking.addEventListener in App.tsx",
+          "Navigate to /contact/add with pre-filled invitation",
+          "Handle edge cases like invalid URLs"
+        ]
+      },
+      "blockers": ["conn-003"],
+      "dependencies": ["conn-003"],
+      "tags": ["deep-linking", "platform", "url-handling"]
+    },
+    {
+      "id": "conn-005",
+      "title": "Improve Connection Error Handling",
+      "description": "Add robust error recovery throughout the connection flow with specific error messages and retry mechanisms",
+      "priority": "medium",
+      "category": "error-handling", 
+      "estimatedHours": 8,
+      "complexity": "medium",
+      "files": [
+        "src/models/network/CommServerProtocolHandler.ts",
+        "src/models/network/PeerToPeerPairingHandler.ts",
+        "src/models/contacts/InviteManager.ts",
+        "src/services/ConnectionErrorService.ts"
+      ],
+      "acceptanceCriteria": [
+        "Specific error messages for each failure type",
+        "Automatic retry logic for transient failures",
+        "Graceful degradation for network issues", 
+        "User-friendly error display in UI",
+        "Comprehensive error logging for debugging"
+      ],
+      "implementationNotes": {
+        "reference": "connections.md lines 405-456",
+        "errorTypes": [
+          "Network connectivity issues",
+          "CommServer authentication failures", 
+          "Invalid invitation format",
+          "Pairing timeout errors",
+          "Identity exchange failures"
+        ],
+        "retryStrategy": [
+          "Exponential backoff for network errors",
+          "Limited retry attempts (max 3)",
+          "User-initiated retry for some failures",
+          "Fallback to different CommServer if available"
+        ]
+      },
+      "blockers": [],
+      "dependencies": ["conn-001", "conn-002"],
+      "tags": ["error-handling", "reliability", "user-experience"]
+    },
+    {
+      "id": "conn-006",
+      "title": "Add Pairing Progress UI",
+      "description": "Provide detailed user feedback during connection establishment with progress indicators and status messages",
+      "priority": "medium",
+      "category": "ui",
+      "estimatedHours": 6,
+      "complexity": "low",
+      "files": [
+        "src/components/contacts/PairingProgress.tsx",
+        "src/hooks/usePairingProgress.ts",
+        "app/(screens)/contacts/add.tsx",
+        "app/(screens)/contacts/invite.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Step-by-step progress indicator during pairing",
+        "Real-time status messages for each protocol phase",
+        "Loading animations and visual feedback",
+        "Estimated time remaining display",
+        "Clear success/failure states"
+      ],
+      "implementationNotes": {
+        "reference": "connections.md lines 467-478", 
+        "progressSteps": [
+          "Connecting to CommServer",
+          "Authenticating with CommServer",
+          "Establishing peer connection",
+          "Exchanging identities", 
+          "Creating contact",
+          "Pairing complete"
+        ],
+        "implementation": [
+          "Create PairingProgress component with step indicator",
+          "Add usePairingProgress hook to track state",
+          "Emit progress events from protocol handlers",
+          "Update UI in real-time based on events"
+        ]
+      },
+      "blockers": ["conn-003"],
+      "dependencies": ["conn-003"],
+      "tags": ["ui", "user-experience", "progress"]
+    },
+    {
+      "id": "conn-007",
+      "title": "Implement Connection Persistence",
+      "description": "Handle network interruptions with automatic reconnection and connection state persistence",
+      "priority": "medium",
+      "category": "reliability",
+      "estimatedHours": 10,
+      "complexity": "high",
+      "files": [
+        "src/services/ConnectionPersistenceService.ts",
+        "src/models/network/NetworkPlugin.ts",
+        "src/models/network/CommServerManager.ts",
+        "src/storage/ConnectionStorage.ts"
+      ],
+      "acceptanceCriteria": [
+        "Automatic reconnection on network restore",
+        "Connection state persisted across app restarts",
+        "Graceful handling of temporary disconnections",
+        "Queue for messages during offline periods",
+        "Sync state when connection restored"
+      ],
+      "implementationNotes": {
+        "storageKeys": [
+          "activeConnections",
+          "pendingInvitations", 
+          "connectionHistory",
+          "offlineMessageQueue"
+        ],
+        "reconnectionStrategy": [
+          "Detect network state changes",
+          "Exponential backoff for reconnection",
+          "Restore connection state from storage",
+          "Resume protocol at appropriate point"
+        ]
+      },
+      "blockers": [],
+      "dependencies": ["conn-001", "conn-005"],
+      "tags": ["persistence", "offline", "reliability"]
+    },
+    {
+      "id": "conn-008",
+      "title": "Add Invitation Revocation",
+      "description": "Provide mechanism to cancel pending invitations and prevent unauthorized access",
+      "priority": "medium",
+      "category": "security",
+      "estimatedHours": 4,
+      "complexity": "low", 
+      "files": [
+        "src/models/contacts/InviteManager.ts",
+        "src/components/contacts/InviteQRCode.tsx",
+        "app/(screens)/contacts/invite.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Cancel button on invitation screen",
+        "Token invalidation in CommServerManager",
+        "UI update to show invitation cancelled",
+        "Prevent connection attempts with revoked tokens",
+        "Clear invitation from storage"
+      ],
+      "implementationNotes": {
+        "implementation": [
+          "Add revokeInvitation method to InviteManager",
+          "Remove token from activeInvitations storage",
+          "Update UI to disable QR code sharing",
+          "Handle revocation attempts gracefully"
+        ]
+      },
+      "blockers": [],
+      "dependencies": ["conn-003"],
+      "tags": ["security", "ui", "token-management"]
+    },
+    {
+      "id": "conn-009",
+      "title": "Add Comprehensive Testing",
+      "description": "Implement unit, integration, and end-to-end tests for the complete connection flow",
+      "priority": "medium",
+      "category": "testing",
+      "estimatedHours": 16,
+      "complexity": "high",
+      "files": [
+        "src/__tests__/CommServerProtocol.test.ts",
+        "src/__tests__/InviteManager.test.ts", 
+        "src/__tests__/ConnectionFlow.integration.test.ts",
+        "e2e/pairing.e2e.test.ts"
+      ],
+      "acceptanceCriteria": [
+        "Unit tests for all protocol handlers",
+        "Integration tests for complete pairing flow",
+        "Mock CommServer for testing",
+        "End-to-end tests with real connections",
+        "Edge case and error scenario coverage"
+      ],
+      "implementationNotes": {
+        "testTypes": [
+          "Unit tests for protocol message handling",
+          "Integration tests for service interactions",
+          "UI tests for pairing screens",
+          "E2E tests with mock and real CommServers"
+        ],
+        "mockingStrategy": [
+          "Mock WebSocket connections",
+          "Mock CommServer responses",
+          "Mock one.models dependencies",
+          "Simulate network failures"
+        ]
+      },
+      "blockers": [],
+      "dependencies": ["conn-001", "conn-002", "conn-003"],
+      "tags": ["testing", "quality", "automation"]
+    },
+    {
+      "id": "conn-010",
+      "title": "Optimize Multi-Connection Support",
+      "description": "Enable simultaneous connections to multiple peers and improve connection management",
+      "priority": "low",
+      "category": "optimization",
+      "estimatedHours": 12,
+      "complexity": "high",
+      "files": [
+        "src/models/network/CommServerManager.ts",
+        "src/models/network/ConnectionPool.ts",
+        "src/services/MultiConnectionService.ts"
+      ],
+      "acceptanceCriteria": [
+        "Support multiple active CommServer connections",
+        "Connection pooling for efficiency",
+        "Resource management for concurrent connections",
+        "UI to manage multiple connections",
+        "Performance optimization for many connections"
+      ],
+      "implementationNotes": {
+        "features": [
+          "Connection pool with max limits",
+          "Round-robin or priority-based connection selection",
+          "Memory management for connection objects",
+          "UI indicators for connection health"
+        ]
+      },
+      "blockers": [],
+      "dependencies": ["conn-001", "conn-002", "conn-005"],
+      "tags": ["optimization", "performance", "multi-connection"]
+    }
+  ],
+  "metadata": {
+    "createdAt": "2025-01-16T00:00:00Z",
+    "basedOn": "connections.md comprehensive analysis",
+    "totalTasks": 10,
+    "totalEstimatedHours": 92,
+    "highPriorityTasks": 4,
+    "mediumPriorityTasks": 5,
+    "lowPriorityTasks": 1,
+    "categories": {
+      "architecture": 1,
+      "contact-creation": 1, 
+      "ui": 3,
+      "platform": 1,
+      "error-handling": 1,
+      "reliability": 1,
+      "security": 1,
+      "testing": 1,
+      "optimization": 1
+    },
+    "dependencies": {
+      "critical-path": ["conn-001", "conn-002", "conn-003"],
+      "blockers": {
+        "conn-002": ["conn-001"],
+        "conn-004": ["conn-003"],
+        "conn-006": ["conn-003"]
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# Task ID: 28
+# Title: Fix ConnectionsModel Initialization Order to Match one.leute
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: The mobile app now follows the exact initialization sequence as per one.leute, resolving pairing/invitation issues.
+# Details:
+connections.init() is correctly placed after other models and followed the precise one.leute order. No further action is needed.
+
+# Test Strategy:
+Test end-to-end to ensure all functionalities work as expected with the corrected initialization order.

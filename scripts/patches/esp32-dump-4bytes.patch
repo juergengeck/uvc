@@ -1,0 +1,21 @@
+--- a/esp32-quicvc-handler.c
++++ b/esp32-quicvc-handler.c
+@@ -123,6 +123,15 @@ esp_err_t handle_quicvc_packet(const uint8_t *data, size_t len,
+     // Minimum QUICVC packet size check
+     if (len < QUICVC_MIN_PACKET_SIZE) {
+         ESP_LOGW(TAG, "⚠️ QUICVC packet too short: %d bytes", len);
++        
++        // Dump the bytes for debugging
++        if (len == 4) {
++            ESP_LOGW(TAG, "📦 4-byte packet contents:");
++            ESP_LOGW(TAG, "  Hex: %02x %02x %02x %02x", 
++                     data[0], data[1], data[2], data[3]);
++            ESP_LOGW(TAG, "  ASCII: %c%c%c%c",
++                     isprint(data[0]) ? data[0] : '.',
++                     isprint(data[1]) ? data[1] : '.',
++                     isprint(data[2]) ? data[2] : '.',
++                     isprint(data[3]) ? data[3] : '.');
++            ESP_LOGW(TAG, "  From: %s:%d", inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
++        }
+         return ESP_ERR_INVALID_ARG;
+     }

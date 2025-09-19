@@ -1,0 +1,11 @@
+# Task ID: 27
+# Title: Unify invitation URL generation to use consistent format
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Fix Invitation URL format mismatch between InviteManager.createInvitationUrl() and InviteManager.generateInvitationUrl() to ensure both formats can be accepted by NetworkSettingsService.acceptInvitationFromUrl().
+# Details:
+1. Implement a unified function for generating invitation URLs that uses the edda.one hash format consistently. 2. Update the existing functions in InviteManager to use this new function. 3. Test the actual invitation flow end-to-end to ensure both formats can be accepted by NetworkSettingsService.acceptInvitationFromUrl().
+
+# Test Strategy:
+Test the actual invitation flow using a test server with both formats enabled, and verify that both formats can be accepted by NetworkSettingsService.acceptInvitationFromUrl().

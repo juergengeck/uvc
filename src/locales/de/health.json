@@ -1,0 +1,65 @@
+{
+  "title": "Gesundheitsdaten",
+  "appleHealth": {
+    "title": "Apple Health",
+    "enable": "Apple Health aktivieren",
+    "sync": "Gesundheitsdaten von Apple Health synchronisieren",
+    "permissions": "Berechtigungen",
+    "permissionsCount": "{{count}} von {{total}} aktiviert"
+  },
+  "devices": {
+    "title": "Gesundheitsgeräte",
+    "addNew": "Neues Gerät hinzufügen",
+    "connected": "Verbunden",
+    "disconnected": "Getrennt",
+    "battery": "Batterie: {{level}}%",
+    "noDevices": "Keine Geräte verbunden"
+  },
+  "sync": {
+    "title": "Synchronisierungseinstellungen",
+    "autoSync": "Automatische Synchronisierung",
+    "autoSyncDescription": "Gesundheitsdaten automatisch synchronisieren",
+    "interval": "Synchronisierungsintervall",
+    "hourly": "stündlich",
+    "daily": "täglich",
+    "weekly": "wöchentlich",
+    "manual": "manuell",
+    "syncNow": "Jetzt synchronisieren",
+    "syncing": "Synchronisiere...",
+    "lastSync": "Letzte Synchronisierung: {{time}}"
+  },
+  "dataManagement": {
+    "title": "Datenverwaltung",
+    "export": "Gesundheitsdaten exportieren",
+    "exportDescription": "Exportieren Sie Ihre Gesundheitsdaten als FHIR",
+    "privacy": "Datenschutzeinstellungen",
+    "privacyDescription": "Kontrolle der Freigabe von Gesundheitsdaten"
+  },
+  "permissions": {
+    "title": "Gesundheitsberechtigungen",
+    "grantAll": "Alle gewähren",
+    "denyAll": "Alle verweigern",
+    "vitals": "Vitalwerte",
+    "activity": "Aktivität",
+    "body": "Körpermessungen",
+    "nutrition": "Ernährung",
+    "sleep": "Schlaf",
+    "heartRate": "Herzfrequenz",
+    "steps": "Schritte",
+    "bloodOxygen": "Blutsauerstoff",
+    "sleepAnalysis": "Schlafanalyse",
+    "bodyWeight": "Körpergewicht"
+  },
+  "success": {
+    "permissionsGranted": "Gesundheitsberechtigungen erfolgreich erteilt",
+    "syncComplete": "Synchronisierung erfolgreich abgeschlossen",
+    "deviceConnected": "Gerät erfolgreich verbunden",
+    "dataExported": "Gesundheitsdaten erfolgreich exportiert"
+  },
+  "error": {
+    "permissionsFailed": "Fehler beim Erteilen der Berechtigungen",
+    "syncFailed": "Synchronisierung fehlgeschlagen",
+    "deviceConnectionFailed": "Geräteverbindung fehlgeschlagen",
+    "exportFailed": "Export der Gesundheitsdaten fehlgeschlagen"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "devices": {
+    "title": "Geräteliste",
+    "discoveryActive": "Geräteerkennung aktiv",
+    "discoveryInactive": "Geräteerkennung inaktiv",
+    "searchPlaceholder": "Geräte suchen",
+    "allDevices": "Alle Geräte",
+    "online": "Online",
+    "offline": "Offline",
+    "neverSeen": "Nie",
+    "lastSeen": "Zuletzt gesehen",
+    "noDevicesFound": "Keine Geräte gefunden",
+    "noMatchingDevices": "Keine Geräte entsprechen Ihrer Suche",
+    "discoveringDevices": "Suche nach Geräten...",
+    "enableDiscovery": "Geräteerkennung aktivieren",
+    "error": {
+      "title": "Gerätefehler",
+      "toggleEnabled": "Gerätestatus konnte nicht geändert werden",
+      "remove": "Gerät konnte nicht entfernt werden",
+      "toggleDiscovery": "Geräteerkennung konnte nicht umgeschaltet werden",
+      "ledToggleFailed": "LED konnte nicht umgeschaltet werden"
+    },
+    "remove": {
+      "title": "Gerät entfernen",
+      "confirm": "Sind Sie sicher, dass Sie {{name}} entfernen möchten?"
+    },
+    "connect": {
+      "title": "Mit Gerät verbinden",
+      "inProgress": "Verbinde mit {{name}}..."
+    },
+    "details": {
+      "title": "Gerätedetails"
+    },
+    "warning": {
+      "title": "Warnung",
+      "deviceNoResponse": "{{name}} hat nicht auf den Befehl zum Entfernen der Eigentümerschaft reagiert. Das Gerät zeigt möglicherweise weiterhin als im Besitz an, bis es den Befehl verarbeitet."
+    }
+  }
+} 

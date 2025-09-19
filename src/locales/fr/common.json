@@ -1,0 +1,92 @@
+{
+  "app": {
+    "name": "Lama",
+    "tagline": "Your personal assistant"
+  },
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "retry": "Retry",
+    "search": "Search",
+    "settings": "Settings",
+    "submit": "Submit",
+    "next": "Next",
+    "previous": "Previous",
+    "success": "Success",
+    "error": "Error",
+    "ok": "OK"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "network": "Network error",
+    "unauthorized": "You are not authorized",
+    "notFound": "Not found"
+  },
+  "status": {
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "redirecting": "Redirecting..."
+  },
+  "actions": {
+    "backToHome": "Back to Home",
+    "backToChat": "Back to Chat",
+    "seeAll": "See All"
+  },
+  "buttons": {
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "import": "Import"
+  },
+  "messages": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Operation successful",
+    "confirmDelete": "Are you sure you want to delete this?",
+    "required": "This field is required",
+    "invalidInput": "Invalid input"
+  },
+  "dates": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow"
+  },
+  "screens": {
+    "journal": {
+      "title": "Journal",
+      "tab": "Journal",
+      "noEntries": "No entries yet",
+      "loading": "Loading journal...",
+      "notAuthenticated": "Please sign in to view your journal"
+    },
+    "settings": {
+      "title": "Settings",
+      "tab": "Settings"
+    }
+  },
+  "validation": {
+    "required": "This field is required",
+    "minLength": "Must be at least {{length}} characters",
+    "maxLength": "Must be no more than {{length}} characters",
+    "email": "Must be a valid email address",
+    "match": "Fields must match"
+  },
+  "success": {
+    "title": "Success",
+    "saved": "Saved successfully",
+    "deleted": "Deleted successfully",
+    "created": "Created successfully",
+    "updated": "Updated successfully"
+  }
+} 

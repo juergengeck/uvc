@@ -1,0 +1,65 @@
+{
+  "title": "Données de santé",
+  "appleHealth": {
+    "title": "Apple Santé",
+    "enable": "Activer Apple Santé",
+    "sync": "Synchroniser les données de santé depuis Apple Santé",
+    "permissions": "Autorisations",
+    "permissionsCount": "{{count}} sur {{total}} activées"
+  },
+  "devices": {
+    "title": "Appareils de santé",
+    "addNew": "Ajouter un nouvel appareil",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "battery": "Batterie : {{level}}%",
+    "noDevices": "Aucun appareil connecté"
+  },
+  "sync": {
+    "title": "Paramètres de synchronisation",
+    "autoSync": "Synchronisation automatique",
+    "autoSyncDescription": "Synchroniser automatiquement les données de santé",
+    "interval": "Intervalle de synchronisation",
+    "hourly": "toutes les heures",
+    "daily": "quotidien",
+    "weekly": "hebdomadaire",
+    "manual": "manuel",
+    "syncNow": "Synchroniser maintenant",
+    "syncing": "Synchronisation...",
+    "lastSync": "Dernière synchronisation : {{time}}"
+  },
+  "dataManagement": {
+    "title": "Gestion des données",
+    "export": "Exporter les données de santé",
+    "exportDescription": "Exporter vos données de santé au format FHIR",
+    "privacy": "Paramètres de confidentialité",
+    "privacyDescription": "Contrôler le partage des données de santé"
+  },
+  "permissions": {
+    "title": "Autorisations de santé",
+    "grantAll": "Tout autoriser",
+    "denyAll": "Tout refuser",
+    "vitals": "Signes vitaux",
+    "activity": "Activité",
+    "body": "Mesures corporelles",
+    "nutrition": "Nutrition",
+    "sleep": "Sommeil",
+    "heartRate": "Fréquence cardiaque",
+    "steps": "Pas",
+    "bloodOxygen": "Oxygène sanguin",
+    "sleepAnalysis": "Analyse du sommeil",
+    "bodyWeight": "Poids corporel"
+  },
+  "success": {
+    "permissionsGranted": "Autorisations de santé accordées avec succès",
+    "syncComplete": "Synchronisation terminée avec succès",
+    "deviceConnected": "Appareil connecté avec succès",
+    "dataExported": "Données de santé exportées avec succès"
+  },
+  "error": {
+    "permissionsFailed": "Échec de l'attribution des autorisations",
+    "syncFailed": "Échec de la synchronisation",
+    "deviceConnectionFailed": "Échec de la connexion de l'appareil",
+    "exportFailed": "Échec de l'exportation des données de santé"
+  }
+}

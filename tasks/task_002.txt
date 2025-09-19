@@ -1,0 +1,11 @@
+# Task ID: 2
+# Title: Validate CommServer Listener Setup
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Ensure CommServer listeners are properly configured after TrustModel initialization
+# Details:
+Fixed timing issue where listenForIncomingConnections() was called before TrustModel initialization. Moved the call to _initializeModels() after TrustModel.init() completes successfully.
+
+# Test Strategy:
+Verify no 'TrustModel not initialized' errors in logs. Check that CommServer listeners are established after login.

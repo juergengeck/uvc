@@ -1,0 +1,11 @@
+
+read 
+
+one.core/src/recipes.ts, 
+one.core/src/instance.ts,
+one.core/src/util/object.ts,
+one.core/src/object-recipes.ts,
+
+especially the comments, and the README.md in one.core.
+
+now we are back with sad performance in discovery. i see the packages in the log, yet our app is too fucked to see them

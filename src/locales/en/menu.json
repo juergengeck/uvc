@@ -1,0 +1,19 @@
+{
+  "home": "Home",
+  "tasks": "Tasks",
+  "settings": "Settings",
+  "profile": "Profile",
+  "notifications": "Notifications",
+  "logout": "Logout",
+  "navigation": {
+    "back": "Back",
+    "close": "Close"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "reports": "Reports",
+    "analytics": "Analytics",
+    "help": "Help",
+    "support": "Support"
+  }
+} 

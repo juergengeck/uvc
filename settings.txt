@@ -1,0 +1,101 @@
+# Settings Implementation in refinio ONE
+
+## Overview
+DigiOnko uses the PropertyTreeStore from one.core for settings management. This is accessed through `instance.propertyTree` and provides a type-safe key-value store for application settings.
+
+## PropertyTreeStore Implementation
+
+### Purpose
+- Stores application settings and preferences like:
+  - UI preferences (dark mode)
+  - Language selection
+  - Health data permissions
+  - User preferences
+
+### Characteristics
+- Part of one.core
+- Type-safe storage
+- Hierarchical storage structure
+- Accessed through instance.propertyTree interface
+- Persisted between app launches
+
+### Usage Pattern
+```typescript
+// Reading settings
+const darkMode = await instance.propertyTree.getItem('darkMode');
+const language = await instance.propertyTree.getItem('language') || 'de';
+
+// Writing settings
+await instance.propertyTree.setItem('darkMode', String(newDarkMode));
+await instance.propertyTree.setItem('language', language);
+```
+
+## Integration Points
+
+### Settings Screen
+1. Loads settings on mount:
+```typescript
+useEffect(() => {
+  if (!instance?.propertyTree) return;
+  const loadSettings = async () => {
+    const darkMode = await instance.propertyTree.getItem('darkMode');
+    const language = await instance.propertyTree.getItem('language') || 'de';
+    setIsDarkMode(darkMode === 'true');
+    setSelectedLanguage(language);
+  };
+  loadSettings();
+}, [instance?.propertyTree]);
+```
+
+### Theme Management
+1. Updates and persists dark mode setting:
+```typescript
+const handleDarkModeToggle = async () => {
+  if (!instance?.propertyTree) return;
+  const newDarkMode = !isDarkMode;
+  updateTheme(newDarkMode);
+  await instance.propertyTree.setItem('darkMode', String(newDarkMode));
+};
+```
+
+### Language Selection
+1. Updates and persists language setting:
+```typescript
+const handleLanguageChange = async (language: string) => {
+  if (!instance?.propertyTree) return;
+  setSelectedLanguage(language);
+  await instance.propertyTree.setItem('language', language);
+  await i18next.changeLanguage(language);
+};
+```
+
+## Best Practices
+
+1. Always check for instance.propertyTree availability before use
+2. Provide default values for settings that may not exist
+3. Handle async operations appropriately
+4. Follow one.baypass patterns for consistency
+5. Use type-safe keys for settings
+6. Keep settings values as strings for consistency
+7. Use await with all propertyTree operations as they are asynchronous
+8. Handle errors appropriately with try/catch blocks
+9. Update UI state immediately before saving for better UX
+10. Revert UI state on save errors
+
+## API Reference
+
+### SettingStoreApi Interface
+```typescript
+interface SettingStoreApi {
+    getItem: (key: string) => Promise<string | AnyObject | undefined>;
+    setItem: (key: string, value: string | AnyObject) => Promise<void>;
+    removeItem: (key: string) => Promise<void>;
+    clear: () => Promise<void>;
+}
+```
+
+### Common Settings Keys
+- `darkMode`: boolean as string ('true'/'false')
+- `language`: string ('en'/'de'/'fr')
+- `healthDataPermissions`: string ('granted'/'denied')
+- `userPreferences`: JSON string of user preferences object 

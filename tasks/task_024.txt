@@ -1,0 +1,37 @@
+# Task ID: 24
+# Title: Fix missing CommServer connection event handlers for invite acceptance
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Add onUnknownConnection and onKnownConnection event listeners in AppModel to properly route incoming pairing connections from commserver to PairingManager, enabling self-created invitations to work like edda.one invitations
+# Details:
+To fix the missing CommServer connection event handlers, we have added the necessary event listeners to the AppModel. This includes handling both unknown and known connections, ensuring that incoming pairing connections are properly routed to the PairingManager. Self-created invitations now function identically to those from edda.one.
+
+# Test Strategy:
+Verify that self-created invitations work as expected by sending them via CommServer and checking their proper handling in AppModel and PairingManager.
+
+# Subtasks:
+## 24-001. Self-created invitations now have proper event routing to PairingManager [done]
+### Dependencies: None
+### Description: Problem solved: Self-created invitations are properly routed and handled by the PairingManager, ensuring they function identically to edda.one invitations.
+### Details:
+
+
+## 24-002. Incoming connections from commserver are properly handled [done]
+### Dependencies: None
+### Description: Implementation complete: Incoming known and unknown connections from CommServer are now correctly routed through the PairingManager, enabling proper handling of self-created invitations.
+### Details:
+
+
+## 24-003. Connection state synchronization fixed at architectural level [done]
+### Dependencies: None
+### Description: Problem addressed: Connection state synchronization between devices using CommServer has been fixed, ensuring seamless communication and proper handling of self-created invitations.
+### Details:
+
+
+## 24-004. Both edda.one and self-created invitations work identically [done]
+### Dependencies: None
+### Description: Achieved: Both edda.one and self-created invitations are now fully functional, with identical behavior across all platforms due to the restored connection bridge.
+### Details:
+
+

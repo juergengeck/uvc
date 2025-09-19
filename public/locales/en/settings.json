@@ -1,0 +1,30 @@
+{
+  "title": "Settings",
+  "darkMode": {
+    "label": "Dark Mode",
+    "description": "Enable dark appearance"
+  },
+  "language": {
+    "title": "Language",
+    "current": "Current Language"
+  },
+  "ai": {
+    "providers": {
+      "local": {
+        "title": "Local AI",
+        "noModel": "No model available"
+      },
+      "cloud": {
+        "title": "Cloud AI",
+        "description": "Cloud-based AI model"
+      }
+    }
+  },
+  "summary": {
+    "title": "Summary Settings",
+    "description": "Configure how AI generates summaries"
+  },
+  "data": {
+    "title": "Data Management"
+  }
+} 

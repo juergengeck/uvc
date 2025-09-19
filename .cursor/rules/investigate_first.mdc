@@ -1,0 +1,117 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Investigate First - Prevent Code Bloat
+
+## Core Principle
+**NEVER create new functionality without first thoroughly investigating what already exists.**
+
+## Investigation Process
+
+### 1. Search Before Creating
+- **Search for existing functions/methods** that might already solve the problem
+- **Check imports and dependencies** for relevant utilities
+- **Look for similar patterns** in the existing codebase
+- **Examine related files** in the same directory or module
+
+### 2. Use Search Tools Systematically
+```bash
+# Search for function names
+grep -r "functionName" src/
+
+# Search for patterns
+grep -r "createContact\|addContact\|Someone" src/
+
+# Search for imports
+grep -r "import.*Something" src/
+
+# Find files by name
+find src/ -name "*contact*" -o -name "*someone*"
+```
+
+### 3. Check Model Classes First
+- **Look at existing model methods** before adding new ones
+- **Check if the functionality exists** in one.models or one.core
+- **Examine the model's public interface** for relevant methods
+- **Review constructor and init methods** for setup patterns
+
+### 4. Examine Reference Implementations
+- **Check one.leute** for how similar functionality is implemented
+- **Look at existing working code** in the same project
+- **Study patterns** used elsewhere in the codebase
+
+## Anti-Patterns to Avoid
+
+### ❌ DON'T: Create Without Investigation
+```typescript
+// BAD: Creating new method without checking if it exists
+async createContactAndGrantAccess(personId, profileId) {
+    // New implementation...
+}
+```
+
+### ✅ DO: Investigate First
+```typescript
+// GOOD: First check existing methods
+// 1. Search for: addSomeoneElse, createContact, grantAccess
+// 2. Check LeuteModel methods
+// 3. Look for existing access patterns
+// 4. Only create if truly missing
+```
+
+## Investigation Checklist
+
+Before creating new functionality, verify:
+
+- [ ] **Function doesn't already exist** in the class
+- [ ] **Similar functionality isn't available** in imported modules
+- [ ] **Pattern isn't already implemented** elsewhere in codebase
+- [ ] **one.models/one.core don't provide** the needed functionality
+- [ ] **Reference implementation (one.leute) doesn't show** a different approach
+
+## Examples of Proper Investigation
+
+### Contact Creation
+```typescript
+// 1. First search for existing contact methods
+// grep -r "addSomeone\|createContact" src/
+// 2. Check LeuteModel interface for contact methods
+// 3. Look at one.leute reference implementation
+// 4. Only then decide if new method is needed
+```
+
+### Access Management
+```typescript
+// 1. Check existing access patterns in LeuteAccessRightsManager
+// 2. Look for createAccess usage patterns
+// 3. See how other parts of code grant access
+// 4. Reuse existing patterns instead of creating new ones
+```
+
+## When New Code IS Justified
+
+Create new functionality only when:
+- **Truly unique requirement** not covered by existing code
+- **Composition of existing functions** into a new workflow
+- **Platform-specific adaptation** of existing patterns
+- **Bug fix or improvement** to existing functionality
+
+## Investigation Commands
+
+```bash
+# Find existing contact-related code
+grep -r -i "contact\|someone" src/ --include="*.ts"
+
+# Find access-related code  
+grep -r -i "access\|grant" src/ --include="*.ts"
+
+# Find model methods
+grep -r "async.*(" src/models/ --include="*.ts"
+
+# Find imports from one.models
+grep -r "from.*one\.models" src/ --include="*.ts"
+```
+
+Remember: **Code that already exists and works is infinitely better than new code that might have bugs.**

@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 7.3.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "base": {
+      "node": "20.18.1",
+      "ios": {
+        "resourceClass": "m-medium",
+        "cocoapods": "1.15.2"
+      },
+      "env": {
+        "EXPO_NO_DOTENV": "1"
+      }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_ENV": "development"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "store",
+      "env": {
+        "APP_ENV": "preview"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "env": {
+        "APP_ENV": "production"
+      }
+    }
+  },
+  "submit": {
+    "production": {},
+    "preview": {
+      "ios": {
+        "appleTeamId": "26W8AC52QS"
+      }
+    }
+  }
+} 

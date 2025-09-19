@@ -1,0 +1,34 @@
+# Task ID: 33
+# Title: Clean up initialization architecture
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Simplify initialization flow based on one.leute pattern: single Model class with onLogin/onLogout handlers, no competing event-driven vs deterministic logic
+# Details:
+Current initialization in src/initialization/index.ts is a mess with competing onLogin callbacks vs deterministic flows causing 'no model exists' errors. Need to follow one.leute pattern:
+
+**one.leute approach:**
+1. Simple startLeute() function does platform setup
+2. Single Model class with all models as properties
+3. this.one.onLogin(this.init.bind(this)) - clean event handling
+4. init() method sequentially initializes all models in correct order
+5. ConnectionsModel.init() called naturally in the sequence
+
+**Current lama problems:**
+- onLogin handler expects no model but model already exists for already-logged-in users
+- Multiple competing initialization paths
+- ConnectionsModel.init() never called in deterministic flow
+- setupRoutes() never executed -> 0 catch-all routes
+
+**Required changes:**
+1. Create simple AppModel class like one.leute Model
+2. Move all model initialization to AppModel.init() 
+3. Remove complex initModel() function and onLogin handler logic
+4. ConnectionsModel.init() gets called naturally in sequence
+5. setupRoutes() happens automatically after ConnectionsModel.init()
+
+# Test Strategy:
+1. App starts without 'no model exists' errors
+2. ConnectionsModel.init() called exactly once in deterministic flow
+3. setupRoutes() creates catch-all routes > 0
+4. Invitation generation succeeds with CHUM compliance

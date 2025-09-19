@@ -1,0 +1,146 @@
+# Task ID: 25
+# Title: Fix CommServer Registration Issue: App Not Discoverable for Invitations
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: The mobile app can connect as a client to CommServer but cannot receive incoming invitations because it\u2019s not properly registering with CommServer as a listener.
+# Details:
+To fix the CommServer registration sequence in the mobile app, we need to trace and fix the 5-step authentication process. We will use one.leute at edda.one as reference peer to test against. The key issues identified are: 
+1. INITIALIZATION SEQUENCE ISSUE: Mobile app defers ConnectionsModel creation until after login (line 484) vs one.leute immediate creation in c...
+
+# Test Strategy:
+
+1. Verify that the mobile app can connect to CommServer as a client and receive incoming invitations.
+2. Test the authentication sequence with one.leute at edda.one as reference peer.
+3. Ensure that the ConnectionsModel initialization creates the routes correctly.
+4. Validate that the CommunicationServerListener establishes listening connections properly.
+5. Verify that the ping/pong process is successful for connection handover.
+
+# Subtasks:
+## 1. Add Detailed Logging to Trace Registration Failure [done]
+### Dependencies: None
+### Description: Implement logging at key points in the registration process to identify where the failure occurs.
+### Details:
+Log critical events such as connection establishment, route creation, and listener registration. Use debug statements or monitoring tools to capture timestamps and error messages.
+<info added on 2025-06-03T09:24:17.392Z>
+<think>
+Okay, I need to figure out how to update the subtask details based on the user's request and the context provided. Let me start by understanding each part.
+
+The parent task is about fixing a registration issue where an app isn't discovering invitations for CommServer. The next subtask focuses on verifying CryptoApi functionality during the registration handshake, which is pending.
+
+Looking at the current subtask details, it mentions logging critical events like connection establishment, route creation, and listener registration using debug statements or monitoring tools.
+
+The user's request provides a detailed analysis from one.leute about why their app works. They mention that the mobile app incorrectly calls enableAllConnections() after init(), which might interfere with the natural process of CommServer registration. The success formula for one.leute doesn't require this extra step because it handles initialization internally, leading to automatic route creation and listener establishment.
+
+The task is to update the subtask details by adding new information based on this analysis. Since the current subtask logs specific events, I should include the key points from the user's request about why enableAllConnections() shouldn't be called manually. This will help ensure that any future app integrations follow the correct initialization steps without unnecessary calls.
+
+I need to make sure the added text is concise and only includes relevant information without rephrasing existing details unless necessary. So, I'll structure it to highlight the success formula and why the extra step might cause issues.
+</think>
+
+The mobile app should avoid manually calling `enableAllConnections()` after initializing connections because this could interfere with the natural initialization process of CommServer registration. Instead, following one.leute's approach allows for automatic route creation and listener establishment during the initial setup without any additional steps.
+
+`Log critical events such as connection establishment, route creation, and listener registration. Use debug statements or monitoring tools to capture timestamps and error messages.`
+</info added on 2025-06-03T09:24:17.392Z>
+
+## 2. Verify CryptoApi Functionality for Registration Handshake [done]
+### Dependencies: 25.1
+### Description: Test the cryptographic operations involved in the registration handshake to ensure they are functioning correctly.
+### Details:
+Perform unit tests on each step of the crypto process, including key generation and authentication verification. Compare results with one.leute's implementation.
+<info added on 2025-06-03T09:26:17.399Z>
+<think>
+Okay, so I need to figure out how to update the subtask details based on the user's request and the context provided. Let me start by understanding everything.
+
+The parent task is about fixing an issue where the app isn't discoverable for invitations because of a registration problem with CommServer. The previous subtask was adding detailed logging to trace when the registration fails, which has already been done. Now there's this next subtask at 25.3 that needs updating based on the user's request.
+
+Looking at the current subtask details: it says they're performing unit tests on each step of the crypto process, including key generation and authentication verification, comparing with one.leute's implementation.
+
+The user's request mentions fixing a problem where `enableAllConnections()` was manually called after `init()`, which interfered with the registration. They removed that call and associated code because it wasn't part of the natural initialization process used by one.leute. The expected result is that now the app follows the same steps as one.leute, making it discoverable.
+
+So I need to add a new text section under the current subtask details. It should explain this fix in detail: removing the manual call and keeping only the natural initialization steps. Also, it should mention how this aligns with one.leute's process and the expected outcome of app discoverability.
+
+I have to make sure not to include any original details unless explicitly asked, which I'm not here. So focus on adding the new information about the fix without repeating existing content.
+</think>
+
+The mobile app now follows a natural initialization sequence similar to one.leute:
+1. `ConnectionsModel.init()` followed by `LeuteConnectionsModule.init()`
+2. `ConnectionRouteManager.enableCatchAllRoutes()` is automatically called
+3. CommServer routes and listeners are created automatically
+4. The 5-step registration protocol is completed naturally
+This ensures the app becomes discoverable for invitations from one.leute as intended.
+
+The fix involved removing the manual call to `enableAllConnections()` along with its debugging code, keeping only the natural initialization steps that align with one.leute's successful process at edda.one.
+</info added on 2025-06-03T09:26:17.399Z>
+<info added on 2025-06-03T09:30:28.305Z>
+<think>
+Okay, so I need to figure out how to update the subtask details based on the user's request and the context provided.
+
+The parent task is about fixing an issue where the app isn't discoverable for invitations because of a registration problem with CommServer. The previous subtask was adding detailed logging to trace when the registration fails, which has already been done. Now there's this next subtask at 25.3 that needs updating based on the user's request.
+
+Looking at the current subtask details: it says they're performing unit tests on each step of the crypto process, including key generation and authentication verification, comparing results with one.leute's implementation.
+
+The user's request mentions fixing a problem where `enableAllConnections()` was manually called after `init()`, which interfered with the registration. They removed that call and associated code because it wasn't part of the natural initialization process used by one.leute. The expected result is that now the app follows the same steps as one.leute, making it discoverable.
+
+So I need to add a new section under the current subtask details explaining this fix in detail: removing the manual call and keeping only the natural initialization steps. Also, mention how this aligns with one.leute's process and the expected outcome of app discoverability.
+</think>
+
+The mobile app now follows a natural initialization sequence similar to one.leute:
+1. `ConnectionsModel.init()` followed by `LeuteConnectionsModule.init()`
+2. `ConnectionRouteManager.enableCatchAllRoutes()` is automatically called
+3. CommServer routes and listeners are created automatically
+4. The 5-step registration protocol is completed naturally
+
+This ensures the app becomes discoverable for invitations from one.leute as intended.
+
+The fix involved removing the manual call to `enableAllConnections()` along with its debugging code, keeping only the natural initialization steps that align with one.leute's successful process at edda.one.
+</info added on 2025-06-03T09:30:28.305Z>
+<info added on 2025-06-03T09:35:27.912Z>
+<think>
+Okay, so I need to figure out how to update the subtask details based on the user's request and the context provided.
+
+The parent task is about fixing an issue where the app isn't discoverable for invitations because of a registration problem with CommServer. The previous subtask was adding detailed logging to trace when the registration fails, which has already been done. Now there's this next subtask at 25.3 that needs updating based on the user's request.
+
+Looking at the current subtask details: it says they're performing unit tests on each step of the crypto process, including key generation and authentication verification, comparing results with one.leute's implementation.
+
+The user's request mentions a critical root cause identified: wrong key type used for CommServer authentication. It explains that the mobile app is using personId instead of instanceId for key operations, which leads to failures in the registration process. They provided code snippets showing how one.leute handles keys correctly and how the mobile app was incorrectly handling it.
+
+The fix involves changing the mobile app's key generation process to use instanceId instead of personId, aligning with one.leute's correct implementation.
+
+So I need to add a new section under the current subtask details explaining this issue, its root cause, the impact on the registration process, and the proposed fix. This will help clarify why the fix is necessary and how it addresses the problem.
+</think>
+
+The mobile app currently uses personId instead of instanceId for key operations, which causes authentication failures during CommServer registration.
+
+**Root Cause:**
+- The mobile app incorrectly uses `getDefaultKeys(personId)` while one.leute correctly uses `getDefaultKeys(instanceId)`.
+- This mismatch leads to "Communication server route has no listener!" errors because the wrong public key type is used.
+- The 5-step authentication process expects instance-level keys for the registration message.
+
+**Fix Steps:**
+1. Modify mobile app code to obtain instanceId from personId using `getLocalInstanceOfPerson()`
+2. Replace all instances of `getDefaultKeys(personId)` with `getDefaultKeys(instanceId)`
+3. Update `createCryptoApiFromDefaultKeys()` calls to use `instanceId` instead of `personId`
+
+This change ensures the mobile app's key operations align with one.leute's implementation, allowing successful registration and enabling app discoverability for invitations.
+</info added on 2025-06-03T14:28:49.700Z>
+</info added on 2025-06-03T09:35:27.912Z>
+</info added on 2025-06-03T09:40:55.759Z>
+
+## 3. Align CommServer URL with One.leute [done]
+### Dependencies: 25.2
+### Description: Ensure the app uses the correct CommServer URL as per one.leute for successful registration and invitation handling.
+### Details:
+Manually verify and update any configuration parameters in the app to match exactly what is used by one.leute.
+
+## 4. Implement Error Handling and Retries for Registration [done]
+### Dependencies: 25.3
+### Description: Add error handling mechanisms and retry logic to manage transient failures during the registration process.
+### Details:
+Wrap critical sections in try-catch blocks, log exceptions, and implement delays before retries. Ensure retries are configured with appropriate backoff strategies.
+
+## 5. Test Registration Process Thoroughly [done]
+### Dependencies: 25.4
+### Description: Conduct comprehensive testing to ensure all aspects of the registration process work as expected.
+### Details:
+Run end-to-end tests, including edge cases and failure scenarios. Validate logging data, error handling, and retry mechanisms through automated test scripts.
+

@@ -1,0 +1,13 @@
+{
+  "common": {
+    "start": "Start",
+    "login": "Login",
+    "register": "Register",
+    "next": "Next",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "confirm": "Confirm"
+  }
+} 

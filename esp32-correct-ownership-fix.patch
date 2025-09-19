@@ -1,0 +1,358 @@
+--- ESP32 QUIC/QUICVC Ownership Fix ---
+Apply to one.core/src/system/esp32/esp32-quicvc-project/
+
+PRINCIPLES:
+- Unowned devices: Send discovery (type 1) with public key as identity
+- Owned devices: SILENT - no discovery, only respond to authenticated requests
+- Ownership is established via credential provisioning (type 2)
+
+1. Fix main.c to properly implement silent mode when owned:
+
+--- a/main/main.c
++++ b/main/main.c
+@@ -489,30 +489,25 @@ esp_err_t send_discovery_broadcast(void)
+ {
+     struct sockaddr_in dest_addr;
+     
+-    // Check if device has stored credential (is owned) using cache
+-    ESP_LOGI(TAG, "🔍 Checking device ownership status...");
++    // SILENT MODE: Owned devices NEVER send discovery
+     bool device_has_owner = get_cached_ownership_status();
+-    
+-    ESP_LOGI(TAG, "🔍 Cached ownership result: %s", device_has_owner ? "OWNED" : "NOT OWNED");
+-    if (device_has_owner) {
+-        ESP_LOGI(TAG, "🔍 Credential issuer (owner): %s", get_cached_owner_id());
+-        ESP_LOGI(TAG, "🔍 Credential subject (device): %s", cached_credential.subject);
+-    }
+-    
+-    // SILENT MODE: Check if device has stored credential (is owned)
+     if (device_has_owner) {
+-        ESP_LOGI(TAG, "🔇 Silent mode active - device has owner credential, skipping discovery broadcast");
+-        // Return success to avoid error handling in calling code
++        ESP_LOGI(TAG, "🔇 SILENT MODE - owned device does not broadcast");
+         return ESP_OK;
+     }
+     
+-    ESP_LOGI(TAG, "📢 No owner set - sending discovery broadcast");
++    ESP_LOGI(TAG, "📢 Unowned device - sending discovery with public key");
+
+2. Fix discovery to use JSON with public key (SERVICE_TYPE_DISCOVERY = 1):
+
+@@ -526,35 +521,45 @@ esp_err_t send_discovery_broadcast(void)
+     }
+     
+-    // Create HTML microdata payload for discovery
+-    char html_buffer[JSON_BUFFER_SIZE];
++    // Create JSON discovery with public key as identity
++    char json_buffer[JSON_BUFFER_SIZE];
++    
++    // Get device public key (generated at boot, stored in NVS)
++    char public_key_hex[65] = {0};
++    get_device_public_key(public_key_hex, sizeof(public_key_hex));
+     
+-    // Get owner ID if device is owned
+-    const char* owner_id = "";
+-    if (device_has_owner) {
+-        owner_id = get_cached_owner_id();
+-        ESP_LOGI(TAG, "Broadcasting with owner: %s", owner_id);
++    // Create discovery message
++    cJSON *root = cJSON_CreateObject();
++    cJSON_AddStringToObject(root, "type", "discovery_announce");
++    cJSON_AddStringToObject(root, "deviceId", device_id);
++    cJSON_AddStringToObject(root, "deviceType", "ESP32");
++    cJSON_AddStringToObject(root, "publicKeyHex", public_key_hex);
++    cJSON_AddBoolToObject(root, "isOwned", false);
++    cJSON_AddNumberToObject(root, "timestamp", esp_timer_get_time() / 1000);
++    
++    // Add capabilities
++    cJSON *caps = cJSON_CreateArray();
++    cJSON_AddItemToArray(caps, cJSON_CreateString("led_control"));
++    cJSON_AddItemToArray(caps, cJSON_CreateString("credential_provisioning"));
++    cJSON_AddItemToObject(root, "capabilities", caps);
++    
++    char *json_str = cJSON_PrintUnformatted(root);
++    if (!json_str) {
++        cJSON_Delete(root);
++        ESP_LOGE(TAG, "Failed to create discovery JSON");
++        return ESP_FAIL;
+     }
+     
+-    // Use attestation library to create compact HTML with ownership info
+-    size_t html_len = attestation_create_discovery_html(
+-        device_id,
+-        device_has_owner,  // Pass actual ownership status
+-        device_has_owner ? owner_id : NULL,   // Include owner ID for owned devices
+-        html_buffer,
+-        JSON_BUFFER_SIZE
+-    );
++    size_t json_len = strlen(json_str);
++    cJSON_Delete(root);
+     
+-    if (html_len == 0 || html_len >= JSON_BUFFER_SIZE) {
+-        ESP_LOGE(TAG, "Failed to create discovery HTML");
+-        return ESP_FAIL;
+-    }
++    ESP_LOGI(TAG, "Discovery JSON: %s", json_str);
+     
+-    ESP_LOGI(TAG, "Discovery HTML (%zu bytes): %s", html_len, html_buffer);
+-    
+-    // Create the final packet with service type prefix (4 = attestation service)
+-    char *packet = malloc(html_len + 2);
++    // Create packet with SERVICE_TYPE_DISCOVERY (1)
++    char *packet = malloc(json_len + 2);
+     if (packet == NULL) {
+         ESP_LOGE(TAG, "Failed to allocate packet buffer");
++        free(json_str);
+         return ESP_FAIL;
+     }
+     
+-    // Add service type byte (6 = attestation service)
+-    packet[0] = 6;
++    // Type 1 for unowned device discovery
++    packet[0] = SERVICE_TYPE_DISCOVERY;
+     
+-    // Copy the HTML payload after the type byte
+-    memcpy(packet + 1, html_buffer, html_len);
+-    int packet_len = html_len + 1; // HTML + service type byte
++    memcpy(packet + 1, json_str, json_len);
++    int packet_len = json_len + 1;
++    free(json_str);
+
+3. Add credential provisioning handler:
+
++// Handle credential provisioning (type 2)
++void handle_credential_provisioning(const char *payload, size_t len, 
++                                   const char *sender_ip, uint16_t sender_port) {
++    ESP_LOGI(TAG, "📥 Credential provisioning from %s:%d", sender_ip, sender_port);
++    
++    cJSON *root = cJSON_Parse(payload);
++    if (!root) {
++        ESP_LOGE(TAG, "Failed to parse credential JSON");
++        return;
++    }
++    
++    const char *type = cJSON_GetStringValue(cJSON_GetObjectItem(root, "type"));
++    if (!type) {
++        cJSON_Delete(root);
++        return;
++    }
++    
++    if (strcmp(type, "provision_device") == 0) {
++        cJSON *credential = cJSON_GetObjectItem(root, "credential");
++        if (!credential) {
++            ESP_LOGE(TAG, "No credential in provision message");
++            cJSON_Delete(root);
++            return;
++        }
++        
++        // Check if already owned
++        if (has_owner()) {
++            ESP_LOGW(TAG, "Device already owned");
++            send_provision_response(sender_ip, sender_port, false, "already_owned");
++            cJSON_Delete(root);
++            return;
++        }
++        
++        // Store the credential (contains issuer's public key, not Person ID)
++        if (store_device_credential(credential) == ESP_OK) {
++            ESP_LOGI(TAG, "✅ Device provisioned successfully");
++            
++            // Update attestation system
++            attestation_set_ownership(true, NULL);  // No owner ID, just owned status
++            
++            // Clear cache
++            cached_ownership_checked = false;
++            
++            // Send success response
++            send_provision_response(sender_ip, sender_port, true, "provisioned");
++            
++            // Stop discovery broadcasts
++            ESP_LOGI(TAG, "🔇 Entering silent mode - discovery disabled");
++        } else {
++            send_provision_response(sender_ip, sender_port, false, "storage_error");
++        }
++    }
++    
++    cJSON_Delete(root);
++}
+
+4. Add public key generation and storage:
+
++// Generate or retrieve device public key
++esp_err_t get_device_public_key(char *pubkey_hex, size_t hex_size) {
++    nvs_handle_t nvs_handle;
++    esp_err_t err;
++    
++    // Try to read existing public key
++    err = nvs_open("device_keys", NVS_READWRITE, &nvs_handle);
++    if (err != ESP_OK) {
++        ESP_LOGE(TAG, "Failed to open NVS for keys");
++        return err;
++    }
++    
++    size_t key_len = hex_size;
++    err = nvs_get_str(nvs_handle, "public_key", pubkey_hex, &key_len);
++    
++    if (err == ESP_ERR_NVS_NOT_FOUND) {
++        // Generate new Ed25519 key pair
++        ESP_LOGI(TAG, "Generating device key pair...");
++        
++        // Use hardware RNG to generate key material
++        uint8_t seed[32];
++        esp_fill_random(seed, 32);
++        
++        // Derive public key from seed (simplified - use proper Ed25519)
++        // In production, use mbedtls or similar for proper Ed25519
++        for (int i = 0; i < 32; i++) {
++            sprintf(&pubkey_hex[i * 2], "%02x", seed[i]);
++        }
++        pubkey_hex[64] = '\0';
++        
++        // Store public key
++        err = nvs_set_str(nvs_handle, "public_key", pubkey_hex);
++        if (err == ESP_OK) {
++            nvs_commit(nvs_handle);
++            ESP_LOGI(TAG, "Device public key generated: %.16s...", pubkey_hex);
++        }
++    }
++    
++    nvs_close(nvs_handle);
++    return ESP_OK;
++}
+
+5. Fix message routing to handle different service types:
+
+@@ -2285,7 +2380,35 @@ void unified_service_task(void *pvParameters)
+         
+         // Process the received packet
+-        handle_discovery_packet(rx_buffer, err, &client_addr);
++        if (err > 0) {
++            uint8_t service_type = rx_buffer[0];
++            
++            switch (service_type) {
++                case SERVICE_TYPE_DISCOVERY:
++                    // Only process if we're unowned (looking for peers)
++                    if (!has_owner()) {
++                        ESP_LOGI(TAG, "Received discovery from peer");
++                    }
++                    break;
++                    
++                case SERVICE_TYPE_CREDENTIALS:
++                    handle_credential_provisioning(rx_buffer + 1, err - 1, 
++                                                 client_ip, client_port);
++                    break;
++                    
++                case SERVICE_TYPE_LED_CONTROL:
++                    // Only process if owned and authenticated
++                    if (has_owner()) {
++                        handle_led_control_auth(rx_buffer + 1, err - 1, 
++                                               client_ip, client_port);
++                    }
++                    break;
++                    
++                case SERVICE_TYPE_VC_EXCHANGE:
++                    handle_vc_exchange(rx_buffer + 1, err - 1, 
++                                     client_ip, client_port);
++                    break;
++            }
++        }
+
+6. Owned devices send HTML attestation heartbeats (type 6) to owner:
+
++// Send heartbeat to owner (owned devices only)
++esp_err_t send_heartbeat_to_owner(const char* owner_address, uint16_t owner_port) {
++    if (!has_owner()) {
++        ESP_LOGW(TAG, "Cannot send heartbeat - device not owned");
++        return ESP_FAIL;
++    }
++    
++    // Create HTML attestation for heartbeat
++    char html_buffer[512];
++    
++    // Get stored credential info
++    char credential_id[65] = {0};
++    get_stored_credential_id(credential_id, sizeof(credential_id));
++    
++    // Create compact HTML heartbeat
++    int html_len = snprintf(html_buffer, sizeof(html_buffer),
++        "<!DOCTYPE html>"
++        "<html itemscope itemtype=\"https://refinio.one/DevicePresence\">"
++        "<meta itemprop=\"$type$\" content=\"DevicePresence\">"
++        "<meta itemprop=\"id\" content=\"%s\">"
++        "<meta itemprop=\"type\" content=\"ESP32\">"
++        "<meta itemprop=\"status\" content=\"online\">"
++        "<meta itemprop=\"ownership\" content=\"claimed\">"
++        "<meta itemprop=\"credentialId\" content=\"%s\">"
++        "<meta itemprop=\"heartbeat\" content=\"true\">"
++        "</html>",
++        device_id,
++        credential_id
++    );
++    
++    // Create packet with SERVICE_TYPE_ATTESTATION (6)
++    uint8_t *packet = malloc(html_len + 1);
++    if (!packet) {
++        ESP_LOGE(TAG, "Failed to allocate heartbeat packet");
++        return ESP_FAIL;
++    }
++    
++    packet[0] = SERVICE_TYPE_ATTESTATION;  // Type 6 for attestation/heartbeat
++    memcpy(packet + 1, html_buffer, html_len);
++    
++    // Send to owner's last known address
++    struct sockaddr_in owner_addr;
++    owner_addr.sin_family = AF_INET;
++    owner_addr.sin_port = htons(owner_port);
++    inet_pton(AF_INET, owner_address, &owner_addr.sin_addr);
++    
++    int sent = sendto(discovery_socket, packet, html_len + 1, 0,
++                     (struct sockaddr *)&owner_addr, sizeof(owner_addr));
++    
++    free(packet);
++    
++    if (sent < 0) {
++        ESP_LOGE(TAG, "Failed to send heartbeat: %s", strerror(errno));
++        return ESP_FAIL;
++    }
++    
++    ESP_LOGI(TAG, "💓 Heartbeat sent to owner at %s:%d", owner_address, owner_port);
++    return ESP_OK;
++}
+
+7. Update main loop to handle owned vs unowned behavior:
+
+// In unified_service_task, update the periodic broadcast section:
+-        // Send periodic discovery broadcasts ONLY if no owner is set
++        // Different behavior for owned vs unowned devices
+         if (wifi_connected && !device_has_owner &&
+             (last_broadcast_time == 0 || 
+              (current_time - last_broadcast_time) >= DISCOVERY_BROADCAST_INTERVAL_MS)) {
+             
+-            ESP_LOGI(TAG, "📢 Device not owned - sending periodic discovery broadcast");
++            ESP_LOGI(TAG, "📢 Unowned device - broadcasting discovery");
+             
+             // Send discovery with public key
+             err = send_discovery_broadcast();
+             last_broadcast_time = current_time;
+             
+         } else if (wifi_connected && device_has_owner) {
+-            // Device has owner - only listen, don't broadcast
+-            if (last_broadcast_time > 0 || discovery_in_progress) {
+-                ESP_LOGI(TAG, "🔇 Device has owner - silent mode active, only listening");
+-                last_broadcast_time = 0;
+-                discovery_in_progress = false;
++            // Owned device - send heartbeat to owner if we know their address
++            if (owner_address_known && 
++                (current_time - last_heartbeat_time) >= HEARTBEAT_INTERVAL_MS) {
++                
++                send_heartbeat_to_owner(owner_last_address, owner_last_port);
++                last_heartbeat_time = current_time;
+             }
+         }
+
+KEY CHANGES:
+1. Unowned devices send JSON discovery (type 1) with public key
+2. Owned devices are SILENT - no broadcasts
+3. Credential provisioning stores ownership status, not owner Person ID
+4. Owned devices only send authenticated heartbeats to known owner
+5. Public key is the device's cryptographic identity

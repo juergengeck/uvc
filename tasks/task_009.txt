@@ -1,0 +1,11 @@
+# Task ID: 9
+# Title: Enhance Error Handling and Recovery
+# Status: pending
+# Dependencies: 4, 5
+# Priority: medium
+# Description: Improve error handling and automatic recovery for connection failures
+# Details:
+Implement robust error handling for connection failures, automatic retry logic, graceful degradation when CommServer is unavailable, and clear user feedback for connection issues.
+
+# Test Strategy:
+Test error scenarios: network loss, CommServer downtime, invalid invitations, crypto failures. Verify appropriate error messages and recovery behavior.

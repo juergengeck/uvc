@@ -1,0 +1,254 @@
+{
+  "settings": {
+    "title": "Einstellungen",
+    "welcome": "Willkommen",
+    "user": {
+      "title": "Benutzer",
+      "profile": {
+        "title": "Profil",
+        "edit": "Profil bearbeiten"
+      },
+      "logout": "Abmelden",
+      "logoutDescription": "Melden Sie sich von Ihrem Konto ab",
+      "reset": "App zurücksetzen",
+      "resetDescription": "Löschen Sie alle Daten und starten Sie neu"
+    },
+    "appearance": {
+      "title": "Erscheinungsbild",
+      "darkMode": {
+        "title": "Dunkelmodus",
+        "description": "Dunkles Erscheinungsbild aktivieren"
+      }
+    },
+    "language": {
+      "title": "Sprache",
+      "current": "Aktuelle Sprache",
+      "en": "Englisch",
+      "de": "Deutsch",
+      "fr": "Französisch"
+    },
+    "dataManagement": {
+      "title": "Datenverwaltung",
+      "import": {
+        "title": "Daten importieren",
+        "description": "Importieren Sie Ihre Daten aus einer Sicherungsdatei",
+        "placeholder": "Wählen Sie eine Datei zum Importieren",
+        "error": {
+          "failed": "Fehler beim Importieren der Daten"
+        }
+      },
+      "export": {
+        "title": "Daten exportieren",
+        "description": "Speichern Sie Ihre Daten in einer Sicherungsdatei",
+        "error": {
+          "failed": "Fehler beim Exportieren der Daten"
+        }
+      }
+    },
+    "ai": {
+      "title": "KI-Einstellungen",
+      "importSuccess": "Modell importiert",
+      "importSuccessMessage": "Das Modell {{name}} wurde erfolgreich importiert und ist jetzt verfügbar.",
+      "models": {
+        "title": "KI-Modelle",
+        "available": "Verfügbare Modelle",
+        "stored": "Gespeicherte Modelle",
+        "hash": "Hash",
+        "size": "Größe",
+        "parameters": "Parameter",
+        "created": "Erstellt",
+        "lastUsed": "Zuletzt verwendet",
+        "timesUsed": "Verwendet",
+        "delete": "Löschen",
+        "noModelManager": "Modell-Manager nicht verfügbar",
+        "noModels": "Keine Modelle verfügbar",
+        "loading": "Modelle werden geladen...",
+        "installed": "Installierte Modelle",
+        "recommended": "Empfohlene Modelle",
+        "delete": {
+          "title": "Modell löschen",
+          "confirmation": "Sind Sie sicher, dass Sie dieses Modell löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+        },
+        "error": {
+          "listFailed": "Fehler beim Auflisten der Modelle",
+          "loadFailed": "Fehler beim Laden des Modells",
+          "deleteFailed": "Fehler beim Löschen des Modells",
+          "importFailed": "Fehler beim Importieren des Modells",
+          "noAIModelsDescription": "Keine KI-Modelle installiert. Importieren Sie ein Modell, um zu beginnen.",
+          "noAIModelManager": "KI-Modell-Manager nicht verfügbar",
+          "noAIModelManagerDescription": "Der KI-Modell-Manager ist nicht initialisiert. Bitte versuchen Sie es später erneut.",
+          "noLLMManager": "LLM-Manager nicht verfügbar",
+          "noLLMManagerDescription": "Der LLM-Manager ist nicht initialisiert. Bitte versuchen Sie es später erneut."
+        },
+        "download": {
+          "title": "Modell herunterladen",
+          "url": "Modell-URL",
+          "button": "Herunterladen",
+          "progress": "Wird heruntergeladen: {{progress}}%"
+        },
+        "import": {
+          "title": "Modell importieren",
+          "fromFile": "Aus Datei importieren",
+          "fromUrl": "Von URL importieren",
+          "success": "Modell erfolgreich importiert",
+          "error": {
+            "failed": "Fehler beim Importieren des Modells",
+            "invalidFile": "Ungültige Modelldatei",
+            "noFile": "Keine Datei ausgewählt"
+          }
+        },
+        "importFromFile": "Aus Datei importieren",
+        "importFromFileDescription": "Wählen Sie eine lokale Datei, um das Modell zu importieren",
+        "importFromUrl": "Von URL importieren",
+        "importFromUrlDescription": "Laden Sie ein Modell von einem entfernten Standort herunter",
+        "modelUrl": "Modell-URL",
+        "noModelsTitle": "Keine KI-Modelle",
+        "noModelsDescription": "Sie haben keine KI-Modelle installiert. Importieren Sie ein Modell, um zu beginnen.",
+        "deleteConfirmTitle": "Modell löschen",
+        "deleteConfirmMessage": "Sind Sie sicher, dass Sie dieses Modell löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+        "bundled": {
+          "title": "Gebündeltes Modell importieren",
+          "description": "Importieren Sie das DeepSeek Distilled 1.5B Modell aus den Assets"
+        }
+      },
+      "recommended": {
+        "title": "EMPFOHLENE MODELLE",
+        "description": "DeepSeek Distilled 1.5B\n1.7 GB • 1.5B Parameter\nEffizientes destilliertes Modell mit exzellenter Leistung"
+      },
+      "providers": {
+        "title": "KI-Anbieter",
+        "status": {
+          "connected": "Verbunden",
+          "connecting": "Verbinde...",
+          "disconnected": "Nicht verbunden"
+        },
+        "local": {
+          "title": "Lokale KI",
+          "description": "Lokales KI-Modell für Offline-Nutzung",
+          "supported": "Lokale KI wird unterstützt",
+          "configure": "Tippen zum Konfigurieren",
+          "noModel": "Kein KI-Modell verfügbar",
+          "threads": {
+            "title": "CPU-Threads",
+            "description": "Anzahl der CPU-Threads für die Inferenz"
+          },
+          "enabled": "Lokale KI aktivieren"
+        },
+        "cloud": {
+          "title": "Cloud KI",
+          "description": "Cloud-basiertes KI-Modell",
+          "configure": "Tippen zum Konfigurieren",
+          "apiKey": {
+            "title": "API-Schlüssel",
+            "description": "Ihr API-Schlüssel für Cloud-Dienste"
+          },
+          "maxTokens": {
+            "title": "Maximale Token",
+            "description": "Maximale Anzahl zu generierender Token"
+          },
+          "enabled": "Cloud KI aktivieren"
+        },
+        "error": {
+          "updateFailed": "Fehler beim Aktualisieren der Anbietereinstellungen"
+        }
+      }
+    },
+    "summarySettings": {
+      "title": "Zusammenfassungseinstellungen",
+      "description": "Konfigurieren Sie, wie die KI Zusammenfassungen generiert",
+      "enable": "Zusammenfassungen aktivieren",
+      "maxTokens": {
+        "title": "Maximale Token",
+        "description": "Maximale Länge der generierten Zusammenfassungen"
+      },
+      "temperature": {
+        "title": "Temperatur",
+        "description": "KI-Kreativität (0.0 - 1.0)"
+      },
+      "topP": {
+        "title": "Top P",
+        "description": "Nucleus-Sampling-Schwellenwert"
+      },
+      "frequencyPenalty": {
+        "title": "Frequenz-Strafe",
+        "description": "Häufig verwendete Token bestrafen (-2.0 bis 2.0)"
+      },
+      "presencePenalty": {
+        "title": "Präsenz-Strafe",
+        "description": "Token basierend auf Präsenz bestrafen (-2.0 bis 2.0)"
+      },
+      "error": {
+        "updateFailed": "Fehler beim Aktualisieren der Zusammenfassungseinstellungen"
+      }
+    }
+  },
+  "modelManagement": "KI-Modelle",
+  "addModel": "Modell hinzufügen",
+  "modelName": "Modellname",
+  "modelUrl": "Modell-URL",
+  "modelDescription": "Lokale KI-Modelle herunterladen und verwalten",
+  "modelUrlPlaceholder": "Modell-URL eingeben",
+  "modelNamePlaceholder": "Modellnamen eingeben",
+  "downloading": "Wird heruntergeladen...",
+  "invalidModelInput": "Bitte geben Sie einen Namen und eine URL für das Modell ein",
+  "downloadFailed": "Download fehlgeschlagen",
+  "deleteFailed": "Löschen fehlgeschlagen",
+  "accountActions": "Konto-Aktionen",
+  "resetTitle": "Zurücksetzen bestätigen",
+  "resetMessage": "Um die App zurückzusetzen, geben Sie bitte diese PIN ein: {{pin}}\nDies löscht alle Ihre Daten!",
+  "enterPin": "PIN eingeben",
+  "enterPinMessage": "Bitte geben Sie die PIN aus dem vorherigen Dialog ein",
+  "error": "Fehler",
+  "wrongPin": "Falsche PIN. Zurücksetzen abgebrochen.",
+  "models": {
+    "llama2": {
+      "description": "Lokales Llama 2 Modell optimiert für Apple Silicon"
+    },
+    "claude": {
+      "description": "Schnelles und effizientes Modell von Anthropic"
+    }
+  },
+  "theme": {
+    "title": "Design",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System"
+  },
+  "common": {
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "error": "Fehler"
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "enable": "Benachrichtigungen aktivieren",
+    "sound": "Ton",
+    "vibration": "Vibration"
+  },
+  "account": {
+    "title": "Konto",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "changePassword": "Passwort ändern"
+  },
+  "privacy": {
+    "title": "Datenschutz",
+    "dataCollection": "Datenerfassung",
+    "cookies": "Cookies"
+  },
+  "contacts": {
+    "title": "Kontakte",
+    "syncDeviceContacts": "Gerätekontakte synchronisieren",
+    "syncDescription": "Kontakte aus dem Adressbuch Ihres Geräts importieren",
+    "permissionDenied": "Die Berechtigung für den Zugriff auf Kontakte wurde verweigert",
+    "syncSuccess": "{{count}} Kontakte erfolgreich importiert",
+    "syncError": "Fehler beim Synchronisieren der Kontakte"
+  },
+  "topic": {
+    "title": "Thema",
+    "new": "Neues Thema",
+    "edit": "Thema bearbeiten",
+    "delete": "Thema löschen"
+  }
+} 

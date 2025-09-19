@@ -1,0 +1,63 @@
+FHIR Implementation Plan
+=====================
+
+Current Integration
+------------------
+The app already has partial FHIR support for:
+1. Questionnaires (FHIR Questionnaire resources)
+2. Health data (FHIR Observation resources)
+3. Vital signs mapping
+
+Future Enhancements
+------------------
+
+1. FHIR Client Setup
+```typescript
+// Using fhir.js
+const client = fhir({
+    baseUrl: 'https://your-fhir-server/fhir',
+    auth: {
+        type: 'bearer',
+        token: 'your-auth-token'
+    }
+});
+
+// Or using fhirclient (SMART on FHIR)
+const smart = FHIR.oauth2.authorize({
+    clientId: 'your-client-id',
+    scope: 'launch/patient patient/*.read',
+    redirectUri: 'your-app-url://callback'
+});
+```
+
+2. Additional FHIR Resources to Implement
+   - Patient
+   - Condition
+   - Procedure
+   - MedicationStatement
+   - CarePlan
+
+3. FHIR Server Integration
+   - REST API endpoints
+   - FHIR search parameters
+   - Resource lifecycle management
+   - SMART on FHIR authentication
+
+4. Required Dependencies
+   - fhir.js or fhirclient
+   - SMART on FHIR SDK (if needed)
+
+Implementation Steps
+------------------
+1. Set up FHIR client with proper authentication
+2. Implement core FHIR resources
+3. Add FHIR server connection
+4. Integrate with existing health data
+5. Add SMART on FHIR support if needed
+
+Notes
+-----
+- Ensure compatibility with both R4 and STU3 versions
+- Consider offline support for mobile usage
+- Implement proper error handling for FHIR operations
+- Add data validation against FHIR profiles 

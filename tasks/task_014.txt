@@ -1,0 +1,11 @@
+# Task ID: 14
+# Title: Refactor InviteManager to use one.models facades
+# Status: review
+# Dependencies: None
+# Priority: medium
+# Description: Replace manual Person/Profile/Someone creation in InviteManager with one.models facades: PairingManager, convertIdentityToProfile, and IdentityExchange utilities
+# Details:
+This task involves refactoring the existing InviteManager class to utilize the higher-level one.models facades. The goal is to reduce complexity, improve reliability, and align with patterns used in one.leute reference implementation. Key steps include: 1) Implement PairingManager for invitation handling, 2) Integrate convertIdentityToProfile for clean contact creation, and 3) Leverage IdentityExchange utilities for type conversions. Code changes will be made to src/models/contacts/InviteManager.ts. The refactored class should maintain the same functionality as the current implementation but with improved modularity and maintainability.
+
+# Test Strategy:
+Verify that the refactored InviteManager class correctly handles invitation creation, contact creation, and identity management using unit tests and integration testing with one.leute at edda.one reference peer.

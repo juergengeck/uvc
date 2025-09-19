@@ -1,0 +1,24 @@
+{
+  "tabs": {
+    "home": "Home",
+    "contacts": "Contacts",
+    "journal": "Journal",
+    "messages": "Messages"
+  },
+  "messages": {
+    "empty": "No messages yet",
+    "loading": "Loading messages...",
+    "error": "Failed to load messages"
+  },
+  "journal": {
+    "noEntries": "No entries yet",
+    "addEntry": "Add Entry",
+    "loading": "Loading entries...",
+    "notAuthenticated": "Please sign in to view your journal"
+  },
+  "questionnaires": {
+    "noQuestionnaires": "No questionnaires available",
+    "loading": "Loading questionnaires...",
+    "error": "Failed to load questionnaires"
+  }
+} 

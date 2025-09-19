@@ -1,0 +1,11 @@
+# Task ID: 18
+# Title: Refactor AppModel to Extract NetworkModel Class
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Move all network transport management (QUIC, UDP, device discovery) from AppModel into a dedicated NetworkModel class.
+# Details:
+To achieve this task, we need to refactor the existing AppModel to extract the network transport management functionality into a separate NetworkModel class. This involves identifying the key properties and methods that are currently handled by AppModel and moving them to the new NetworkModel class. We will also need to update the AppModel to inject the NetworkModel instance instead of managing it directly. The NetworkModel should handle all low-level networking concerns independently, including _quicModel, _deviceDiscoveryModel properties, initQuicModel(), setupDeviceDiscovery(), quicTransport getter, createUdpSocket() method, and setupModelDependencies().
+
+# Test Strategy:
+Verify that the refactored AppModel correctly injects the NetworkModel instance and that all network transport management functionality is properly delegated to the NetworkModel class. Test QUIC and UDP connections, device discovery, and model dependencies to ensure correct implementation.

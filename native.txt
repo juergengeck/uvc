@@ -1,0 +1,157 @@
+Current Status:
+
+iOS Implementation:
+✓ Module Structure:
+  - Frameworks: Metal, Accelerate, Foundation
+✓ Core Features:
+  - Model initialization and cleanup
+  - Text generation with parameters
+  - Token streaming with progress events
+  - State management (load/save)
+  - Metal support detection with graceful fallback
+  - Cache management
+  - Graceful handling of missing models
+✓ Event System:
+  - Generation progress events
+  - Model state change events
+  - Load progress events
+  - Type-safe event forwarding
+  - Resource availability events
+✓ Error Handling:
+  - Custom error handling with typed errors
+  - Proper error codes and messages
+  - Native error translation
+  - Resource cleanup on errors
+  - Graceful degradation on missing resources
+
+UDP Module Implementation:
+✓ iOS Native Implementation:
+  - Uses Network.framework for modern UDP implementation
+  - Implements full socket lifecycle management
+  - Thread-safe event dispatch
+  - Proper resource cleanup
+✓ Event System:
+  - Dual event emission system
+    * Generic 'udp-data' events with type property
+    * Specific event types ('message', 'listening', 'error', 'close')
+  - Socket ID object encapsulation ({id: number})
+  - Binary data handling with proper encoding
+✓ JavaScript Bridge:
+  - Fixed parameter order in native method calls
+  - Implemented socket ID conversion for native methods
+  - Unified event listening on 'udp-data' channel
+  - Timeout mechanisms for operations
+  - Enhanced error handling and reporting
+
+Build Configuration:
+- iOS 16.0+ required (per Core ML requirement)
+- Metal-capable device for GPU acceleration
+- Swift 5.9+
+- Frameworks:
+  * Metal
+  * Accelerate
+  * Foundation
+  * ExpoModulesCore
+- Build flags:
+  * _METAL_
+  * DEFINES_MODULE
+  * CLANG_ENABLE_MODULES
+- Module Configuration:
+  * Standard podspec setup following ExpoModulesCore pattern
+  * Private headers in Sources/Private
+  * Source files include all .h, .m, .mm, and .swift files
+  * Test files excluded from build
+
+Module API:
+1. Initialization:
+   - Model path from one.core blob storage
+   - Core ML model conversion and optimization
+   - Configurable GPU layers with Metal
+   - Thread count and batch size settings
+2. Generation:
+   - Input text/prompt
+   - Max tokens limit
+   - Temperature and top-p sampling
+   - Stop token support
+   - Streaming with KV-cache optimization
+3. State Management:
+   - Save/load model state
+   - KV-cache management
+   - Resource cleanup
+4. Events:
+   - Generation progress
+   - Model state changes
+   - Load progress updates
+
+UDP Module API:
+1. Socket Creation and Management:
+   - create(): Creates a new UDP socket and returns its ID
+   - bind(socketId, port, address): Binds socket to address and port
+   - close(socketId): Closes the socket and cleans up resources
+2. Data Transfer:
+   - send(socketId, data, address, port): Sends data to specified endpoint
+   - Automatic event emission when data is received
+3. Socket Configuration:
+   - setBroadcast(socketId, flag): Enables/disables broadcast mode
+   - addMembership(socketId, multicastAddr, interfaceAddr): Joins multicast group
+   - dropMembership(socketId, multicastAddr, interfaceAddr): Leaves multicast group
+4. Event Handling:
+   - emitEvent(): Emits both generic and specific event types
+   - Native handlers for listening, error, close, and message events
+
+Next Steps:
+1. Performance Optimization:
+   - Implement Core ML conversion pipeline
+   - Enable block-wise Int4 quantization
+   - Optimize KV-cache for token generation
+2. Model Support:
+   - Core ML model format conversion
+   - Quantization calibration
+   - Model format compatibility
+3. Testing:
+   - Unit tests in Sources/Tests
+   - Integration tests with JS
+   - Performance benchmarks with Core ML
+
+UDP Module Next Steps:
+1. Multicast Improvements:
+   - Full testing of multicast group management
+   - Optimize multicast listening across multiple interfaces
+2. Error Handling:
+   - Enhanced error information from native to JavaScript
+   - Network condition detection and reporting
+3. Performance:
+   - Buffer pooling for high-throughput applications
+   - Minimize copying of data between native and JavaScript
+
+Environment:
+- macOS 24.2.0
+- Xcode with iOS Simulator SDK 18.0
+- Expo modules with React Native
+
+References:
+- Core ML On-Device Llama: https://machinelearning.apple.com/research/core-ml-on-device-llama
+- Expo Modules: https://docs.expo.dev/modules/overview/
+- Network.framework: https://developer.apple.com/documentation/network
+
+Changes:
+- Removed Fullmoon module and all related references
+- Removed useFullmoonModel hook from AISettings and AIProviderSettings
+- Removed Fullmoon-specific UI elements and logic
+- Cleaned up model management code to use one.core blob storage
+- Updated type definitions to remove Fullmoon dependencies
+- Integrated with one.core blob storage
+- Added support for model downloading and management
+- Implemented type-safe SHA256Hash<BLOB> handling
+- Added graceful failure handling for missing models
+- Implemented Metal support detection with CPU fallback
+
+UDP Module Changes:
+- Fixed parameter passing in native method calls 
+- Corrected socket ID handling to use numeric IDs for native calls
+- Implemented dual event emission system in native code
+- Updated JavaScript wrapper to handle generic 'udp-data' events
+- Added socket ID conversion helper method for consistency
+- Enhanced error handling with descriptive messages
+- Added socket lifecycle management with proper cleanup
+- Implemented timeout mechanism for asynchronous operations

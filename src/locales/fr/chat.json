@@ -1,0 +1,47 @@
+{
+  "title": "Chat",
+  "newTopic": "Nouveau Chat",
+  "topicName": "Nom du Chat",
+  "noTopics": "Pas encore de chats",
+  "participantCount": "{{count}} participants",
+  "participantCount_one": "{{count}} participant",
+  "participants": "Participants",
+  "loading": "Chargement des chats...",
+  "groupInfo": "Info du Groupe",
+  "contactInfo": "Info du Contact",
+  "conversationDetails": "Détails de la Conversation",
+  "addParticipant": "Ajouter un Participant",
+  "mediaDocsLinks": "Médias, Documents et Liens",
+  "notifications": "Notifications",
+  "notificationsOn": "Activées",
+  "encryption": "Chiffrement",
+  "messagesEncrypted": "Les messages sont chiffrés de bout en bout",
+  "leaveGroup": "Quitter le Groupe",
+  "selectContact": "Sélectionner un Contact",
+  "createGroupChat": "Créer un Chat de Groupe",
+  "selectedParticipants": "Participants Sélectionnés",
+  "selectContacts": "Sélectionner des Contacts",
+  "create": "Créer",
+  "you": "Vous",
+  "currentUser": "Utilisateur actuel",
+  "error": {
+    "failed": "Échec du chargement des chats",
+    "unauthorized": "Veuillez vous connecter pour accéder au chat",
+    "modelsNotAvailable": "Modèles requis non disponibles"
+  },
+  "input": {
+    "placeholder": "Tapez un message...",
+    "send": "Envoyer"
+  },
+  "ai": {
+    "status": {
+      "connected": "IA Connectée",
+      "connecting": "Connexion de l'IA...",
+      "disconnected": "IA Déconnectée"
+    },
+    "models": {
+      "local": "IA Locale",
+      "cloud": "IA Cloud"
+    }
+  }
+} 

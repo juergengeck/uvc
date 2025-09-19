@@ -1,0 +1,143 @@
+# Lama .cursorrules file
+
+## Core Architecture Rules
+
+### Refinio ONE Object Relationships
+
+1. Always check if objects exist before attempting to create them
+2. When working with Person, Someone, and Profile objects, maintain the correct creation sequence:
+   - Create a Person object (either directly or via API)
+   - Create a Profile for the Person using `ProfileModel.constructWithNewProfile`
+   - Create a Someone object with `SomeoneModel.constructWithNewSomeone`
+   - Add the Someone to contacts with `leuteModel.addSomeoneElse(someone.idHash)`
+   - Never assume one object type exists just because a related object exists
+
+3. Note the key implementation details:
+   - `addSomeoneElse` takes a Someone ID, as its TypeScript definition indicates
+   - `addSomeoneElse` only adds a Someone ID to a contacts list, it does not create a Someone
+   - To create a proper Someone object, use `SomeoneModel.constructWithNewSomeone`
+   
+4. Handle existing Person objects as a normal case, not an error condition
+
+5. Always verify data integrity after creation operations:
+   - Example: After adding a Someone to contacts, verify Someone retrieval with `getSomeone(personId)`
+   - Throw clear error messages if creation or verification fails
+
+6. Do not implement workarounds for missing relationships - fix the root cause instead
+
+7. Be explicit about relationships between objects - don't rely on implicit behavior
+
+8. Read the source code in one.core/src/recipes.ts, one.core/src/instance.ts, and one.core/src/util/object.ts
+   to understand core architecture concepts before implementing new features
+
+you always strive to make things easier.
+you avoid unnecessary complexity and complication.
+
+please take extra care to not implement redundant stuff. 
+feel free to fix bugs and add new things - after you understood 
+that they are nowhere else to be found in the system. 
+
+prefer importing from one.core and one.models over doing platform 
+stuff in this package.
+
+always look at available implemenations first, one.leute 
+is the chat solution we want to be compatible with and can be
+a reference. 
+you can find it in the root folder of this project.
+should it be missing, please say so and i will add it.
+
+one.core and one.models are our dependency and you can find them in 
+node_modules/@refinio/one.core and node_modules/@refinio/one.models .
+
+our reference, the one.leute web app, is in node_modules/@refinio/one.leute.
+
+with lama.txt, i am trying to provide the memory you cannot have 
+between incarnations of yourself. 
+you should maintain it and add as much as necessary for you to restart 
+after conversation-too-long events
+
+document changes in jsdoc comments in the code.
+
+do not implement delays and timeouts.
+
+try not to be an idiot.
+do not make assumptions. do not wait for second or third round to properly look.
+do not waste my time.
+
+invest more effort in understanding root causes and creating appropriate fixes rather than quick mitigations. we work in a controlled environment and prefer to fail fast so we can fix issues in our code properly. defensive programming and mitigation approaches are fundamentally adverse to code quality and should be avoided in favor of clean, direct solutions that address the actual problem.
+
+## TypeScript Compatibility with one.models and one.core
+
+When working with @refinio/one.models and @refinio/one.core packages, you may encounter TypeScript errors even when the runtime code is correct. These issues occur due to discrepancies between TypeScript definitions and actual implementations.
+
+### Common Issues and Solutions
+
+1. **Import Path Mismatches**
+   - Always verify the actual file location using `find node_modules/@refinio/one.models/lib -name "*.js"` 
+   - Example: QuestionnaireModel.js is at `one.models/lib/models/QuestionnaireModel.js` not in a subfolder
+
+2. **OEvent Type Handling**
+   - For event handler type mismatches, create wrapper adapters rather than using type assertions:
+   ```typescript
+   event: {
+     listen: (callback: (timeOfEarliestChange: Date) => void) => {
+       return channelManager.onUpdated.listen((channelInfoIdHash, channelId, channelOwner, timeOfEarliestChange) => {
+         callback(timeOfEarliestChange);
+       });
+     },
+     emit: (timeOfEarliestChange: Date) => {
+       console.warn('Unexpected call to emit on wrapper event');
+     }
+   } as OEvent<(timeOfEarliestChange: Date) => void>
+   ```
+
+3. **StateMachine Generic Types**
+   - Always use exact state and event names as string literals:
+   ```typescript
+   state: StateMachine<"Uninitialised" | "Initialised", "shutdown" | "init">
+   ```
+
+4. **Property Initialization**
+   - Use the definite assignment operator (!) for properties initialized during runtime:
+   ```typescript
+   public aiAssistantModel!: AIAssistantModel;
+   ```
+   - Use optional properties (?) for properties that may be undefined:
+   ```typescript
+   private _deviceDiscoveryModel?: DeviceDiscoveryModel;
+   ```
+
+5. **Network Model Imports**
+   - QuicModel, UdpModel, and DeviceDiscoveryModel are in the network directory
+   - Import from './network/[ModelName]' rather than directly
+
+### Debugging Tips
+- Always check the actual file locations in node_modules before assuming import paths
+- Use wrapper interfaces/adapters rather than excessive type casting
+- Add debug logging around model initialization and event handling
+
+## Expo Prebuild Rules
+
+### Ephemeral Folders Protection
+
+1. **DO NOT directly edit files in the following ephemeral directories:**
+   - `ios/**/*` - iOS build directory created by Expo prebuild
+   - `android/**/*` - Android build directory created by Expo prebuild
+
+2. **For iOS/Android native code modifications:**
+   - Make changes to config plugins in `plugins/` directory
+   - Modify Expo configuration in `app.json` or `app.config.js`
+   - Use Expo's Config Plugin system for native code customization
+   - If needed, create a dev-client compatible custom native module
+
+3. **If you see errors in ephemeral build files:**
+   - Look for the corresponding config plugin or Expo setting to modify
+   - For TurboModule issues specifically, ensure proper module registration in your plugins
+
+4. **For the specific TurboModule error:**
+   - The error in `ios/UDPModule/UDPModuleSpec.mm` about missing TurboModule definition 
+     should be addressed through proper module configuration in config plugins, not by
+     direct edits to the iOS folder
+
+Remember: All direct changes to the `ios/` and `android/` folders will be lost
+during the next `expo prebuild` command. Always modify the source configurations instead.

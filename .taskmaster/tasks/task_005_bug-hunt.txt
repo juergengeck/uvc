@@ -1,0 +1,11 @@
+# Task ID: 5
+# Title: Create Invite Generation Service
+# Status: pending
+# Dependencies: 4
+# Priority: medium
+# Description: Develop a React hook/service to encapsulate invite generation logic.
+# Details:
+Implement `useInviteGenerator` using React hooks. This service will interact with the `ConnectionsModel.pairing.createInvitation()` method to generate an invite token, public key, and URL.
+
+# Test Strategy:
+Integration tests ensuring that the hook/service correctly generates invites by mocking the `ConnectionsModel` methods.

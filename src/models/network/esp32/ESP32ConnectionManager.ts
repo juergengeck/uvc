@@ -1,0 +1,1695 @@
+/**
+ * ESP32 Connection Manager
+ * 
+ * Manages secure connections to ESP32 devices using QUIC-VC protocol.
+ * Ensures only authorized owners can control ESP32 devices.
+ */
+
+import { IQuicTransport, NetworkServiceType } from '../interfaces';
+import { VCManager, VerifiedVCInfo } from '../vc/VCManager';
+import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
+import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
+import Debug from 'debug';
+import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
+import type { Person } from '@refinio/one.core/lib/recipes.js';
+import { UdpRemoteInfo } from '../UdpModel';
+import { QuicConnectionManager } from '../QuicConnectionManager';
+import { QuicVCConnectionManager } from '../QuicVCConnectionManager';
+import profiler from '@src/utils/performanceProfiler';
+
+const debug = Debug('one:esp32:connection');
+
+export interface ESP32Device {
+  id: string;
+  name: string;
+  type: string;
+  address: string;
+  port: number;
+  capabilities: string[];
+  lastSeen: number;
+  vcInfo?: VerifiedVCInfo;
+  isAuthenticated: boolean;
+  ownerPersonId?: SHA256IdHash<Person>;
+}
+
+export interface ESP32Command {
+  type: 'led_control' | 'status' | 'config' | 'data';
+  command: string;
+  deviceId: string;
+  timestamp: number;
+  data?: any;
+  manual?: boolean;  // For LED control commands
+}
+
+export interface ESP32Response {
+  type: 'response' | 'error';
+  requestId?: string;
+  command: string;
+  status: 'success' | 'error' | 'unauthorized' | 'sent';
+  data?: any;
+  message?: string;
+  timestamp: number;
+}
+
+export class ESP32ConnectionManager {
+  private static instance: ESP32ConnectionManager | null = null;
+  
+  private transport: IQuicTransport;
+  private vcManager: VCManager;
+  private quicVCManager: QuicVCConnectionManager;
+  private ownPersonId: SHA256IdHash<Person>;
+  private connectedDevices: Map<string, ESP32Device> = new Map();
+  private pendingCommands: Map<string, { resolve: (response: ESP32Response) => void, reject: (error: Error) => void, timeout: NodeJS.Timeout }> = new Map();
+  private connectionManager: QuicConnectionManager;
+  
+  // Command queue for each device
+  private commandQueues: Map<string, Array<{
+    command: ESP32Command;
+    requestId: string;
+    resolve: (response: ESP32Response) => void;
+    reject: (error: Error) => void;
+  }>> = new Map();
+  
+  // Currently processing command for each device
+  private processingCommands: Map<string, string> = new Map(); // deviceId -> requestId
+  
+  // Authentication event deduplication
+  private lastAuthenticatedTime: Map<string, number> = new Map(); // deviceId -> timestamp
+  private readonly AUTH_EVENT_DEBOUNCE_MS = 1000; // Don't emit same device auth within 1 second
+  
+  // Events
+  public readonly onDeviceAuthenticated = new OEvent<(device: ESP32Device) => void>();
+  public readonly onDeviceDisconnected = new OEvent<(deviceId: string) => void>();
+  public readonly onCommandResponse = new OEvent<(deviceId: string, response: ESP32Response) => void>();
+  public readonly onError = new OEvent<(error: Error) => void>();
+  
+  /**
+   * Emit authentication event with deduplication to prevent spam
+   */
+  private emitDeviceAuthenticated(device: ESP32Device): void {
+    const now = Date.now();
+    const lastEmitted = this.lastAuthenticatedTime.get(device.id);
+    
+    // Only emit if we haven't emitted for this device recently
+    if (!lastEmitted || now - lastEmitted > this.AUTH_EVENT_DEBOUNCE_MS) {
+      this.lastAuthenticatedTime.set(device.id, now);
+      this.emitDeviceAuthenticated(device);
+      debug(`[ESP32ConnectionManager] Authentication event emitted for ${device.id}`);
+    } else {
+      debug(`[ESP32ConnectionManager] Authentication event skipped for ${device.id} (debounced)`);
+    }
+  }
+  public readonly onAuthenticationFailed = new OEvent<(deviceId: string, reason: string) => void>();
+  public readonly onDeviceUnclaimed = new OEvent<(deviceId: string, message: string) => void>();
+
+  public static getInstance(transport?: IQuicTransport, vcManager?: VCManager, ownPersonId?: SHA256IdHash<Person>): ESP32ConnectionManager {
+    if (!ESP32ConnectionManager.instance) {
+      if (!transport || !vcManager || !ownPersonId) {
+        throw new Error('ESP32ConnectionManager: Must provide transport, vcManager, and ownPersonId on first initialization');
+      }
+      ESP32ConnectionManager.instance = new ESP32ConnectionManager(transport, vcManager, ownPersonId);
+    }
+    return ESP32ConnectionManager.instance;
+  }
+  
+  public static reset(): void {
+    if (ESP32ConnectionManager.instance) {
+      // Clear all devices and pending commands
+      ESP32ConnectionManager.instance.connectedDevices.clear();
+      ESP32ConnectionManager.instance.pendingCommands.forEach(pending => clearTimeout(pending.timeout));
+      ESP32ConnectionManager.instance.pendingCommands.clear();
+      
+      // Clear command queues
+      ESP32ConnectionManager.instance.commandQueues.forEach(queue => {
+        queue.forEach(queuedCommand => {
+          queuedCommand.reject(new Error('ESP32ConnectionManager reset'));
+        });
+      });
+      ESP32ConnectionManager.instance.commandQueues.clear();
+      ESP32ConnectionManager.instance.processingCommands.clear();
+      
+      ESP32ConnectionManager.instance = null;
+    }
+  }
+  
+  private constructor(transport: IQuicTransport, vcManager: VCManager, ownPersonId: SHA256IdHash<Person>) {
+    this.transport = transport;
+    this.vcManager = vcManager;
+    this.ownPersonId = ownPersonId;
+    this.connectionManager = QuicConnectionManager.getInstance();
+    
+    // Initialize QuicVCConnectionManager for QUIC-VC protocol
+    this.quicVCManager = QuicVCConnectionManager.getInstance(ownPersonId);
+    
+    // Listen for LED responses from QUIC-VC STREAM frames
+    this.quicVCManager.onLEDResponse.listen((deviceId: string, response: any) => {
+      console.log(`[ESP32ConnectionManager] Received LED response via QUIC-VC for ${deviceId}:`, response);
+      
+      // Check if we have a pending command for this request
+      if (response.requestId && this.pendingCommands.has(response.requestId)) {
+        const pending = this.pendingCommands.get(response.requestId)!;
+        clearTimeout(pending.timeout);
+        this.pendingCommands.delete(response.requestId);
+        
+        // Create proper response
+        const esp32Response: ESP32Response = {
+          type: 'response',
+          status: 'success',
+          message: response.message || 'LED command executed',
+          timestamp: Date.now(),
+          data: {
+            deviceId,
+            blue_led: response.blue_led,
+            manual_control: response.manual_control
+          }
+        };
+        
+        pending.resolve(esp32Response);
+        console.log(`[ESP32ConnectionManager] Resolved LED command ${response.requestId} with success`);
+      }
+    });
+    
+    // Register service handler for LED control messages (service type 3)
+    // This handles both commands TO the ESP32 and responses FROM the ESP32
+    this.transport.addService(3, this.handleESP32Message.bind(this));
+    
+    // Register service handler for ESP32 command responses (service type 11)
+    // This handles acknowledgments for ownership provisioning and other commands
+    this.transport.addService(11, this.handleESP32CommandResponse.bind(this));
+    
+    // Register service handler for credential service (service type 2)
+    // This handles ownership removal responses from ESP32
+    this.transport.addService(2, this.handleCredentialMessage.bind(this));
+    
+    // Listen to VC verification events
+    this.vcManager.onVCVerified.listen(this.handleVCVerified.bind(this));
+    this.vcManager.onVCVerificationFailed.listen(this.handleVCVerificationFailed.bind(this));
+    this.vcManager.onDeviceUnclaimed.listen(this.handleDeviceUnclaimed.bind(this));
+    
+    // Listen to QuicVCConnectionManager events permanently
+    this.quicVCManager.onConnectionEstablished.listen((deviceId: string, vcInfo: any) => {
+      console.log(`[ESP32ConnectionManager] QUIC-VC connection established with ${deviceId}`);
+      const device = this.connectedDevices.get(deviceId);
+      if (device) {
+        device.isAuthenticated = true;
+        device.vcInfo = vcInfo;
+        console.log(`[ESP32ConnectionManager] Device ${deviceId} marked as authenticated`);
+        this.emitDeviceAuthenticated(device);
+      } else {
+        console.warn(`[ESP32ConnectionManager] Device ${deviceId} not found during connection establishment`);
+      }
+    });
+
+    // Listen for connection retry requests
+    this.quicVCManager.onConnectionRetryNeeded.listen(async (deviceId: string, address: string, port: number) => {
+      console.log(`[ESP32ConnectionManager] Connection retry needed for ${deviceId} at ${address}:${port}`);
+
+      const device = this.connectedDevices.get(deviceId);
+      if (device) {
+        // Retry authentication with the device
+        console.log(`[ESP32ConnectionManager] Retrying authentication with ${deviceId}`);
+        const appCredential = this.createAppCredential();
+
+        try {
+          await this.quicVCManager.initiateHandshake(deviceId, address, port, appCredential);
+        } catch (error) {
+          console.error(`[ESP32ConnectionManager] Failed to retry handshake with ${deviceId}:`, error);
+        }
+      }
+    });
+    
+    // Listen to connection events
+    this.connectionManager.onConnectionLost.listen((deviceId: string) => {
+      const device = this.connectedDevices.get(deviceId);
+      if (device) {
+        device.isAuthenticated = false;
+        this.onDeviceDisconnected.emit(deviceId);
+        debug(`ESP32 device ${deviceId} disconnected (heartbeat timeout)`);
+      }
+    });
+    
+    debug('ESP32ConnectionManager initialized');
+  }
+
+  /**
+   * Create a DeviceIdentityCredential for this mobile app
+   */
+  private createAppCredential(): DeviceIdentityCredential {
+    // Generate a unique device ID for this app instance
+    const appDeviceId = `lama-app-${this.ownPersonId.substring(0, 8)}`;
+    
+    // For now, use a dummy public key - in production this should be the app's actual Ed25519 public key
+    // TODO: Get actual public key from ONE instance or generate one
+    const publicKeyHex = "0000000000000000000000000000000000000000000000000000000000000000";
+    
+    const credential: DeviceIdentityCredential = {
+      $type$: 'DeviceIdentityCredential',
+      id: appDeviceId,
+      owner: this.ownPersonId,
+      issuer: this.ownPersonId,
+      issuanceDate: new Date().toISOString(),
+      credentialSubject: {
+        id: appDeviceId,
+        publicKeyHex: publicKeyHex,
+        type: 'LamaDeviceApp',
+        capabilities: ['authentication', 'device_control', 'ownership_management']
+      },
+      proof: {
+        type: 'Ed25519Signature2020',
+        created: new Date().toISOString(),
+        verificationMethod: `${this.ownPersonId}#key-1`,
+        proofPurpose: 'assertionMethod',
+        proofValue: '' // Will be filled by signing process
+      }
+    };
+    
+    return credential;
+  }
+
+  /**
+   * Initiate QUIC-VC authentication with an ESP32 device
+   */
+  public async authenticateDevice(deviceId: string, address: string, port: number): Promise<boolean> {
+    console.log(`[ESP32ConnectionManager] Initiating QUIC-VC authentication with ESP32 device ${deviceId} at ${address}:${port}`);
+    debug(`Initiating QUIC-VC authentication with ESP32 device ${deviceId} at ${address}:${port}`);
+    
+    // Always add/update device entry with address and port
+    this.addDiscoveredDevice(deviceId, address, port, deviceId);
+    
+    // Check if already authenticated
+    const device = this.connectedDevices.get(deviceId);
+    if (device?.isAuthenticated) {
+      debug(`Device ${deviceId} is already authenticated`);
+      return true;
+    }
+    
+    try {
+      // Initialize QuicVCConnectionManager if not already initialized
+      if (!this.quicVCManager.isInitialized()) {
+        console.log('[ESP32ConnectionManager] Initializing QuicVCConnectionManager...');
+        // Create credential for this app to present during QUIC-VC handshake
+        const appCredential = this.createAppCredential();
+        console.log('[ESP32ConnectionManager] Created app credential:', appCredential.credentialSubject.id);
+        await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
+      }
+      
+      // Check if we already have an established QUIC-VC connection
+      const existingConnection = this.quicVCManager.getConnection?.(deviceId);
+      if (existingConnection && existingConnection.state === 'established') {
+        console.log(`[ESP32ConnectionManager] Already have established QUIC-VC connection for ${deviceId}`);
+        // Update device state to authenticated
+        const device = this.connectedDevices.get(deviceId);
+        if (device && !device.isAuthenticated) {
+          device.isAuthenticated = true;
+          this.emitDeviceAuthenticated(device);
+        }
+        return true;
+      }
+      
+      // Use QUIC-VC protocol for authentication (port 49497 as per ESP32 spec)
+      const quicvcPort = 49497; // ESP32 QUIC-VC port
+      console.log(`[ESP32ConnectionManager] Initiating QUIC-VC handshake with ${deviceId} at ${address}:${quicvcPort}`);
+      debug(`Initiating QUIC-VC handshake for ${deviceId} at ${address}:${quicvcPort}`);
+      
+      // Set up event listeners for QUIC-VC connection events
+      let authenticationCompleted = false;
+      let isDeviceUnclaimed = false;
+      
+      // Listen for successful connection establishment
+      const connectionListener = (connectedDeviceId: string, vcInfo: any) => {
+        if (connectedDeviceId === deviceId) {
+          console.log(`[ESP32ConnectionManager] QUIC-VC connection established with ${deviceId}`);
+          authenticationCompleted = true;
+          
+          // Update device state
+          const device = this.connectedDevices.get(deviceId);
+          if (device) {
+            device.isAuthenticated = true;
+            device.vcInfo = vcInfo;
+            this.emitDeviceAuthenticated(device);
+          }
+        }
+      };
+      
+      // Listen for connection errors
+      const errorListener = (errorDeviceId: string, error: Error) => {
+        if (errorDeviceId === deviceId) {
+          console.error(`[ESP32ConnectionManager] QUIC-VC connection error for ${deviceId}:`, error);
+          authenticationCompleted = true;
+          
+          // Check if device is unclaimed
+          if (error.message.includes('unclaimed') || error.message.includes('no_owner')) {
+            isDeviceUnclaimed = true;
+            this.onDeviceUnclaimed.emit(deviceId, 'Device is unclaimed');
+          } else {
+            this.onAuthenticationFailed.emit(deviceId, error.message);
+          }
+        }
+      };
+      
+      const connectionUnsubscribe = this.quicVCManager.onConnectionEstablished.listen(connectionListener);
+      const errorUnsubscribe = this.quicVCManager.onError.listen(errorListener);
+      
+      // Initiate QUIC-VC handshake with app credential
+      const appCredential = this.createAppCredential();
+      await this.quicVCManager.initiateHandshake(deviceId, address, quicvcPort, appCredential);
+      
+      // Set timeout for authentication
+      setTimeout(() => {
+        connectionUnsubscribe();
+        errorUnsubscribe();
+        
+        if (!authenticationCompleted) {
+          console.warn(`[ESP32ConnectionManager] QUIC-VC authentication timeout for device ${deviceId}`);
+          this.onAuthenticationFailed.emit(deviceId, 'QUIC-VC authentication timeout');
+        }
+      }, 10000); // 10 second timeout
+      
+      return true;
+    } catch (error) {
+      console.error(`[ESP32ConnectionManager] Failed to initiate QUIC-VC authentication with ${deviceId}:`, error);
+      debug(`Failed to initiate QUIC-VC authentication with ${deviceId}:`, error);
+      return false;
+    }
+  }
+
+
+  /**
+   * Claim ownership of an unclaimed ESP32 device
+   * This is a faster, more direct method than authenticateDevice for claiming
+   */
+  public async claimDevice(deviceId: string, address: string, port: number): Promise<boolean> {
+    console.log(`[ESP32ConnectionManager] Claiming ownership of ESP32 device ${deviceId} at ${address}:${port}`);
+    
+    // Add device to our list
+    this.addDiscoveredDevice(deviceId, address, port, deviceId);
+    
+    try {
+      // Initialize QuicVCConnectionManager if needed
+      if (!this.quicVCManager.isInitialized()) {
+        const appCredential = this.createAppCredential();
+        await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
+      }
+      
+      // Create a promise that resolves when we get a response
+      return new Promise<boolean>((resolve) => {
+        let responded = false;
+        
+        // Set up listeners
+        const successListener = (connectedDeviceId: string, vcInfo: any) => {
+          if (connectedDeviceId === deviceId && !responded) {
+            responded = true;
+            console.log(`[ESP32ConnectionManager] Device ${deviceId} claimed successfully`);
+            
+            // Mark device as authenticated
+            const device = this.connectedDevices.get(deviceId);
+            if (device) {
+              device.isAuthenticated = true;
+              device.vcInfo = vcInfo;
+              device.ownerPersonId = this.ownPersonId;
+              this.emitDeviceAuthenticated(device);
+            }
+            
+            resolve(true);
+          }
+        };
+        
+        const errorListener = (errorDeviceId: string, error: Error) => {
+          if (errorDeviceId === deviceId && !responded) {
+            responded = true;
+            console.error(`[ESP32ConnectionManager] Failed to claim device ${deviceId}:`, error);
+            resolve(false);
+          }
+        };
+        
+        // Listen for response
+        const successUnsubscribe = this.quicVCManager.onConnectionEstablished.listen(successListener);
+        const errorUnsubscribe = this.quicVCManager.onError.listen(errorListener);
+        
+        // Send the ownership claim with app credential
+        const appCredential = this.createAppCredential();
+        this.quicVCManager.initiateHandshake(deviceId, address, 49497, appCredential).catch(error => {
+          if (!responded) {
+            responded = true;
+            console.error(`[ESP32ConnectionManager] Error initiating handshake:`, error);
+            resolve(false);
+          }
+        });
+        
+        // Timeout after 3 seconds - should be plenty for local network
+        setTimeout(() => {
+          successUnsubscribe();
+          errorUnsubscribe();
+          if (!responded) {
+            responded = true;
+            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId}`);
+            resolve(false);
+          }
+        }, 3000);
+      });
+    } catch (error) {
+      console.error(`[ESP32ConnectionManager] Error claiming device ${deviceId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Send a command to an ESP32 device (requires authentication)
+   */
+  public async sendCommand(deviceId: string, command: ESP32Command): Promise<ESP32Response> {
+    const operationId = `esp32_send_command_${deviceId}_${Date.now()}`;
+    profiler.startOperation(operationId, { deviceId, commandType: command.type });
+    
+    const device = this.connectedDevices.get(deviceId);
+    
+    if (!device) {
+      console.error(`[ESP32ConnectionManager] Device ${deviceId} not found`);
+      profiler.endOperation(operationId, { error: 'device_not_found' });
+      throw new Error(`Device ${deviceId} not found`);
+    }
+    
+    if (!device.isAuthenticated) {
+      console.error(`[ESP32ConnectionManager] Device ${deviceId} not authenticated`);
+      console.error(`[ESP32ConnectionManager] Device details:`, device);
+      profiler.endOperation(operationId, { error: 'not_authenticated' });
+      throw new Error(`Device ${deviceId} not authenticated. Please authenticate first.`);
+    }
+    
+    profiler.checkpoint('Validation complete');
+    
+    // Generate request ID for tracking
+    const requestId = `${deviceId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    command.timestamp = Date.now();
+    
+    // Add command to queue
+    return new Promise((resolve, reject) => {
+      const queuedCommand = {
+        command,
+        requestId,
+        resolve,
+        reject
+      };
+      
+      // Get or create queue for this device
+      let queue = this.commandQueues.get(deviceId);
+      if (!queue) {
+        queue = [];
+        this.commandQueues.set(deviceId, queue);
+      }
+      
+      // Check if this is an LED command
+      if (command.type === 'led_control' && command.action) {
+        // Remove any older LED commands targeting the same state
+        const targetState = command.action;
+        queue = queue.filter(item => {
+          if (item.command.type === 'led_control' && item.command.action === targetState) {
+            // Drop this older command targeting same state
+            console.log(`[ESP32ConnectionManager] Dropping redundant LED command ${item.requestId} (target: ${targetState})`);
+            item.resolve({
+              type: 'response',
+              status: 'success',
+              message: 'Superseded by newer command',
+              timestamp: Date.now()
+            });
+            return false;
+          }
+          return true;
+        });
+        this.commandQueues.set(deviceId, queue);
+      }
+      
+      // Add new command to queue
+      queue.push(queuedCommand);
+      console.log(`[ESP32ConnectionManager] Queued command ${requestId} for device ${deviceId}. Queue length: ${queue.length}`);
+      
+      // Process queue if not already processing
+      if (!this.processingCommands.has(deviceId)) {
+        this.processCommandQueue(deviceId);
+      }
+    });
+  }
+
+  /**
+   * Process command queue for a device
+   */
+  private async processCommandQueue(deviceId: string): Promise<void> {
+    const queue = this.commandQueues.get(deviceId);
+    if (!queue || queue.length === 0) {
+      this.processingCommands.delete(deviceId);
+      return;
+    }
+    
+    const queuedCommand = queue.shift()!;
+    const { command, requestId, resolve, reject } = queuedCommand;
+    
+    // Mark as processing
+    this.processingCommands.set(deviceId, requestId);
+    
+    const queueOperationId = `queue_process_${deviceId}_${requestId}`;
+    profiler.startOperation(queueOperationId, { deviceId, requestId, commandType: command.type });
+    
+    try {
+      // Send the actual command
+      profiler.checkpoint('Processing from queue');
+      const response = await this.sendCommandImmediate(deviceId, command, requestId);
+      profiler.endOperation(queueOperationId, { success: true, status: response.status });
+      resolve(response);
+    } catch (error) {
+      profiler.endOperation(queueOperationId, { success: false, error: String(error) });
+      reject(error);
+    } finally {
+      // Process next command in queue
+      this.processingCommands.delete(deviceId);
+      this.processCommandQueue(deviceId);
+    }
+  }
+
+  /**
+   * Send a command immediately (used by queue processor)
+   */
+  private async sendCommandImmediate(deviceId: string, command: ESP32Command, requestId: string): Promise<ESP32Response> {
+    profiler.startOperation('send_immediate', { deviceId, requestId });
+    
+    const device = this.connectedDevices.get(deviceId);
+    if (!device) {
+      profiler.endOperation('send_immediate', { error: 'device_not_found' });
+      throw new Error(`Device ${deviceId} not found`);
+    }
+    
+    profiler.checkpoint('Creating command packet');
+    
+    // Create command packet with our VC for authentication
+    const commandPacket = {
+      requestId,
+      command,
+      issuer: this.ownPersonId,  // ESP32 expects 'issuer' field
+      timestamp: Date.now()
+    };
+    
+    // Create JSON for the command
+    const packetJson = JSON.stringify(commandPacket);
+    debug(`Command packet JSON: ${packetJson}`);
+    debug(`RequestId included: ${requestId}`);
+    
+    // Prepare JSON bytes for the command (used in both QUIC-VC and error paths)
+    const jsonBytes = new TextEncoder().encode(packetJson);
+    
+    try {
+      // ESP32 expects STREAM frames (type 0x08) in PROTECTED packets for LED control
+      // We need to send this through QuicVCConnectionManager
+      
+      // Check if we have an active QUIC-VC connection
+      const connection = this.quicVCManager.getConnection?.(deviceId);
+      console.log(`[ESP32ConnectionManager] Connection lookup for ${deviceId}:`, {
+        found: !!connection,
+        state: connection?.state,
+        isEstablished: connection?.state === 'established'
+      });
+      
+      if (connection && connection.state === 'established') {
+        // Send as STREAM frame through QUIC-VC
+        debug(`Sending LED command as QUIC-VC STREAM frame to ${deviceId}`);
+        console.log(`[ESP32ConnectionManager] Using QUIC-VC connection for LED command to ${deviceId}`);
+        
+        // Create STREAM frame with proper header:
+        // [frame_type(1)][frame_length(2)][stream_id(1)][data(N)]
+        // Frame type: 0x08 (STREAM)
+        // Frame length: stream_id + data length
+        // Stream ID: 0x01 (LED control stream)
+        const framePayloadLength = 1 + jsonBytes.length; // stream_id + data
+        const frameBuffer = new ArrayBuffer(3 + framePayloadLength);
+        const frame = new Uint8Array(frameBuffer);
+        frame[0] = 0x08; // STREAM frame type
+        frame[1] = (framePayloadLength >> 8) & 0xFF; // Frame length high byte
+        frame[2] = framePayloadLength & 0xFF; // Frame length low byte
+        frame[3] = 0x01; // Stream ID 1 for LED control
+        frame.set(jsonBytes, 4); // JSON data starts at byte 4
+        
+        // Send through QuicVCConnectionManager
+        await this.quicVCManager.sendProtectedFrame?.(deviceId, frame);
+        
+        debug(`Sent LED command as QUIC-VC STREAM frame`);
+      } else {
+        // ERROR: ESP32 firmware only supports long header packets
+        // Raw UDP packets use service type headers which ESP32 interprets as invalid short header packets
+        console.error(`[ESP32ConnectionManager] No established QUIC-VC connection for ${deviceId} - LED commands require QUIC-VC`);
+        console.error(`[ESP32ConnectionManager] Connection state:`, connection ? connection.state : 'no connection');
+        
+        // Try to wait for connection establishment if it's in progress
+        if (connection && connection.state !== 'established') {
+          console.log(`[ESP32ConnectionManager] Connection exists but not established (state: ${connection.state}) - waiting for establishment`);
+          
+          // If connection is in initial or handshake state, wait a bit for it to establish
+          if (connection.state === 'initial' || connection.state === 'handshake') {
+            console.log(`[ESP32ConnectionManager] Waiting up to 5 seconds for QUIC-VC connection to establish...`);
+            
+            // Wait for up to 5 seconds for the connection to establish
+            const establishedConnection = await this.waitForConnectionEstablishment(deviceId, 5000);
+            if (establishedConnection) {
+              console.log(`[ESP32ConnectionManager] Connection established! Proceeding with LED command.`);
+              // Retry the command now that connection is established
+              const frameBuffer = new ArrayBuffer(2 + jsonBytes.length);
+              const frame = new Uint8Array(frameBuffer);
+              frame[0] = 0x08; // STREAM frame type
+              frame[1] = 0x01; // Stream ID 1 for LED control
+              frame.set(jsonBytes, 2);
+              
+              await this.quicVCManager.sendProtectedFrame?.(deviceId, frame);
+              debug(`Sent LED command as QUIC-VC STREAM frame after waiting for establishment`);
+            } else {
+              throw new Error(`Device ${deviceId} QUIC-VC connection failed to establish within 5 seconds. LED control requires established connection.`);
+            }
+          } else {
+            throw new Error(`Device ${deviceId} QUIC-VC connection not established. Current state: ${connection.state}. LED control requires established connection.`);
+          }
+        } else if (!connection) {
+          console.log(`[ESP32ConnectionManager] No QUIC-VC connection found for ${deviceId} - device needs to be paired first`);
+          throw new Error(`Device ${deviceId} is not paired or QUIC-VC connection not established. LED control requires established connection.`);
+        } else {
+          throw new Error(`Device ${deviceId} QUIC-VC connection in unexpected state: ${connection.state}`);
+        }
+      }
+      
+      debug(`Command packet sent:`, {
+        deviceId,
+        address: device.address,
+        port: device.port,
+        commandType: command.type,
+        commandAction: command.action || command.command,
+        requestId,
+        timestamp: new Date().toISOString(),
+        method: connection ? 'QUIC-VC' : 'Raw UDP'
+      });
+    } catch (error) {
+      profiler.endOperation('send_immediate', { sent: false, error: String(error) });
+      throw error;
+    }
+    
+    // Set up promise for response
+    return new Promise((resolve, reject) => {
+      // Set timeout for command response - LED commands should be fast
+      const timeout = setTimeout(() => {
+        console.warn(`[ESP32ConnectionManager] Command timeout for ${requestId} - no response received`);
+        console.warn(`[ESP32ConnectionManager] Note: ESP32 firmware must echo back the requestId in its response`);
+        console.warn(`[ESP32ConnectionManager] Expected response format: { "requestId": "${requestId}", "status": "success", "blue_led": "on/off" }`);
+        this.pendingCommands.delete(requestId);
+        
+        // Don't fail the operation - we sent the command successfully
+        // The ESP32 may not support responses yet
+        resolve({
+          type: 'response',
+          status: 'sent' as const,
+          message: 'Command sent. ESP32 firmware needs update to include requestId in responses.',
+          command: command.type,
+          timestamp: Date.now(),
+          data: {
+            deviceId: deviceId,
+            command: command.type,
+            action: command.action,
+            warning: 'ESP32 did not send response with matching requestId'
+          }
+        });
+      }, 3000); // 3 second timeout for LED commands
+      
+      this.pendingCommands.set(requestId, { resolve, reject, timeout });
+      
+      // Command already sent above via QUIC-VC or raw UDP
+      profiler.endOperation('send_immediate', { sent: true });
+      debug(`Command sent to ${deviceId}: ${command.action || command.command || 'unknown'}`);
+    });
+  }
+
+  /**
+   * Handle VC verification success
+   * 
+   * IMPORTANT: Device ownership is determined by the credential's issuer field.
+   * 
+   * Proper device provisioning flow:
+   * 1. ESP32 starts unclaimed (no owner)
+   * 2. User provisions ESP32 by issuing a DeviceIdentityCredential where:
+   *    - issuer = user's Person ID (the owner)
+   *    - credentialSubject.id = device ID
+   * 3. ESP32 stores and presents this credential for authentication
+   * 4. Ownership is verified by checking if credential.issuer matches our Person ID
+   */
+  private async handleVCVerified(verifiedInfo: VerifiedVCInfo): Promise<void> {
+    const deviceId = verifiedInfo.subjectDeviceId;
+    
+    // Check if this is an ESP32 device by looking at the VC subject type
+    // The device type should be in the VC, not inferred from the device ID
+    
+    debug(`ESP32 device ${deviceId} VC verified. Issuer: ${verifiedInfo.issuerPersonId}`);
+    
+    // Create or update device entry
+    const existingDevice = this.connectedDevices.get(deviceId);
+    
+    // The owner is the issuer of the credential (who provisioned the device)
+    // For proper QUICVC model, devices present credentials issued BY their owner
+    const ownerPersonId = verifiedInfo.issuerPersonId;
+    
+    if (existingDevice) {
+      // Update existing device entry
+      existingDevice.vcInfo = verifiedInfo;
+      existingDevice.isAuthenticated = true;
+      existingDevice.ownerPersonId = ownerPersonId;
+      existingDevice.lastSeen = Date.now();
+      existingDevice.capabilities = verifiedInfo.vc.credentialSubject?.capabilities || existingDevice.capabilities;
+      debug(`Updated existing device ${deviceId} - isAuthenticated: ${existingDevice.isAuthenticated}`);
+      console.log(`[ESP32ConnectionManager] Device ${deviceId} authenticated - address: ${existingDevice.address}:${existingDevice.port}`);
+      
+      // For ESP32 devices, VC exchange is sufficient for authentication
+      // We don't need QUIC connection for basic operations like LED control
+      debug(`ESP32 device ${deviceId} authenticated via VC exchange - ready for commands`);
+    } else {
+      // This shouldn't happen - device should be added via addDiscoveredDevice first
+      console.warn(`[ESP32ConnectionManager] Device ${deviceId} not found during VC verification - this is unexpected`);
+      console.warn(`[ESP32ConnectionManager] Device should be added via discovery before authentication`);
+      
+      // Create new device entry with default values - but this is not ideal
+      const device: ESP32Device = {
+        id: deviceId,
+        name: deviceId,
+        type: verifiedInfo.vc.credentialSubject?.type || 'ESP32',
+        address: '', // We don't have address info here - this is the problem
+        port: 49497,
+        capabilities: verifiedInfo.vc.credentialSubject?.capabilities || [],
+        lastSeen: Date.now(),
+        vcInfo: verifiedInfo,
+        isAuthenticated: true,
+        ownerPersonId: ownerPersonId
+      };
+      this.connectedDevices.set(deviceId, device);
+      debug(`Created new device ${deviceId} - isAuthenticated: ${device.isAuthenticated} (WARNING: no address info)`);
+    }
+    
+    // Get the device reference (either existing or newly created)
+    const device = this.connectedDevices.get(deviceId)!;
+    
+    // Check if we are the owner
+    if (ownerPersonId === this.ownPersonId) {
+      debug(`We are the owner of ESP32 device ${deviceId}. Full control enabled.`);
+      
+      // Persist device ownership when we authenticate a device we own
+      // This ensures owned devices are recovered after app restart
+      try {
+        // Use dynamic import to avoid circular dependency
+        const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+        const discoveryModel = DeviceDiscoveryModel.getInstance();
+        await discoveryModel.registerDeviceOwner(deviceId, ownerPersonId);
+        console.log(`[ESP32ConnectionManager] Persisted ownership for device ${deviceId}`);
+      } catch (error) {
+        console.error(`[ESP32ConnectionManager] Failed to persist device ownership:`, error);
+      }
+      
+      // For ESP32 devices, we use simple UDP messaging instead of full QUIC
+      // The VC exchange has already authenticated the device
+      debug(`ESP32 device ${deviceId} ready for UDP-based commands`);
+    } else {
+      debug(`ESP32 device ${deviceId} is owned by ${ownerPersonId}. Limited access.`);
+    }
+    
+    this.emitDeviceAuthenticated(device);
+  }
+
+  /**
+   * Handle VC verification failure
+   */
+  private handleVCVerificationFailed(deviceId: string, reason: string): void {
+    // Handle VC verification failure for any device attempting ESP32 authentication
+    
+    debug(`ESP32 device ${deviceId} VC verification failed: ${reason}`);
+    
+    // Mark device as not authenticated
+    const device = this.connectedDevices.get(deviceId);
+    if (device) {
+      device.isAuthenticated = false;
+      delete device.vcInfo;
+    }
+  }
+
+  /**
+   * Handle unclaimed device response
+   */
+  private handleDeviceUnclaimed(deviceId: string, message: string): void {
+    debug(`Device ${deviceId} is unclaimed: ${message}`);
+    debug(`ESP32 device ${deviceId} is unclaimed: ${message}`);
+    
+    // Update device as discovered but not authenticated
+    const device = this.connectedDevices.get(deviceId);
+    if (device) {
+      device.isAuthenticated = false;
+      delete device.vcInfo;
+      delete device.ownerPersonId;
+    }
+    
+    // This is not an authentication failure - it means the device is available for claiming
+    debug(`Device ${deviceId} is available for ownership claim`);
+    
+    // Emit event for UI to handle ownership claiming
+    this.onDeviceUnclaimed.emit(deviceId, message);
+  }
+
+  /**
+   * Handle ESP32 command responses (service type 11)
+   * These are responses to ownership provisioning and other commands
+   */
+  private async handleESP32CommandResponse(data: any, rinfo: UdpRemoteInfo): Promise<void> {
+    debug(`Received command response from ${rinfo.address}:${rinfo.port}, type:`, typeof data);
+    
+    try {
+      let jsonStr = '';
+      
+      // Handle different data types
+      // Note: Data is processed directly from QUICVC packets
+      if (data instanceof ArrayBuffer) {
+        const uint8Array = new Uint8Array(data);
+        jsonStr = new TextDecoder().decode(uint8Array);
+      } else if (data instanceof Uint8Array) {
+        jsonStr = new TextDecoder().decode(data);
+      } else if (Buffer && Buffer.isBuffer && Buffer.isBuffer(data)) {
+        jsonStr = data.toString();
+      } else {
+        console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
+        return;
+      }
+      
+      let message;
+      try {
+        message = JSON.parse(jsonStr);
+        debug(`Parsed command response:`, message);
+      } catch (parseError) {
+        console.warn('[ESP32ConnectionManager] Failed to parse command response:', {
+          from: `${rinfo.address}:${rinfo.port}`,
+          error: parseError.message,
+          preview: jsonStr.substring(0, 100)
+        });
+        return;
+      }
+      
+      // Handle provisioning acknowledgment
+      if (message.type === 'provisioning_ack') {
+        const deviceId = message.device_id || message.deviceId; // Support both field names
+        const ownerId = message.owner || message.owner_id; // Support both field names
+        
+        debug(`Received provisioning acknowledgment for device ${deviceId}, owner: ${ownerId}`);
+        
+        // Update device in our connected devices map IMMEDIATELY
+        let device = this.connectedDevices.get(deviceId);
+        if (!device) {
+          // Device might not be in the map yet if this response came quickly
+          // Create a basic device entry
+          debug(`Device ${deviceId} not in map, creating entry`);
+          device = {
+            id: deviceId,
+            name: deviceId,
+            type: 'ESP32',
+            address: rinfo.address,
+            port: rinfo.port,
+            capabilities: [],
+            lastSeen: Date.now(),
+            isAuthenticated: true,
+            ownerPersonId: ownerId as SHA256IdHash<Person>
+          };
+          this.connectedDevices.set(deviceId, device);
+        } else {
+          device.ownerPersonId = ownerId as SHA256IdHash<Person>;
+          device.isAuthenticated = true;
+          debug(`Updated device ${deviceId} with owner ${ownerId}`);
+        }
+        
+        // Emit device authenticated event IMMEDIATELY to trigger UI updates
+        this.emitDeviceAuthenticated(device);
+        
+        // Do discovery model updates in parallel, not blocking the UI update
+        Promise.resolve().then(async () => {
+          try {
+            // Track device activity to reset heartbeat timers
+            const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+            const discoveryModel = DeviceDiscoveryModel.getInstance();
+            if (discoveryModel) {
+              // Do these operations in parallel for speed
+              await Promise.all([
+                discoveryModel.trackDeviceActivity(deviceId, 'provisioning_ack'),
+                discoveryModel.registerDeviceOwner(deviceId, ownerId)
+              ]);
+              
+              debug(`Registered device owner in discovery model`);
+              
+              // The device has just confirmed ownership via provisioning_ack
+              if (ownerId === this.ownPersonId) {
+                debug(`Device ${deviceId} ownership confirmed via provisioning_ack - already authenticated`);
+                // Update discovery model to mark device as authenticated
+                discoveryModel.updateDevice(deviceId, {
+                  ownerId: ownerId,
+                  hasValidCredential: true,
+                  isAuthenticated: true
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`[ESP32ConnectionManager] Error updating discovery model:`, error);
+          }
+        });
+      }
+    } catch (error) {
+      console.error(`[ESP32ConnectionManager] Error handling command response:`, error);
+    }
+  }
+
+  /**
+   * Handle credential service messages (service type 2)
+   */
+  private async handleCredentialMessage(data: any, rinfo: UdpRemoteInfo): Promise<void> {
+    debug(`Received credential message from ${rinfo.address}:${rinfo.port}`);
+    
+    try {
+      let jsonStr = '';
+      
+      // Handle different data types
+      if (data instanceof ArrayBuffer) {
+        const uint8Array = new Uint8Array(data);
+        jsonStr = new TextDecoder().decode(uint8Array);
+      } else if (data instanceof Uint8Array) {
+        jsonStr = new TextDecoder().decode(data);
+      } else if (Buffer && Buffer.isBuffer && Buffer.isBuffer(data)) {
+        jsonStr = data.toString();
+      } else {
+        console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
+        return;
+      }
+      
+      let message;
+      try {
+        message = JSON.parse(jsonStr);
+        debug(`Parsed credential message:`, message);
+      } catch (parseError) {
+        console.warn('[ESP32ConnectionManager] Failed to parse credential message:', parseError);
+        return;
+      }
+      
+      // Handle provisioning acknowledgment from ESP32
+      if (message.type === 'provisioning_ack') {
+        const deviceId = message.device_id || message.deviceId;
+        const ownerId = message.owner || message.owner_id;
+        
+        debug(`Received provisioning acknowledgment for device ${deviceId}, owner: ${ownerId}`);
+        
+        // Update device in our connected devices map IMMEDIATELY
+        let device = this.connectedDevices.get(deviceId);
+        if (!device) {
+          // Device might not be in the map yet if this response came quickly
+          // Create a basic device entry
+          debug(`Device ${deviceId} not in map, creating entry`);
+          device = {
+            id: deviceId,
+            name: deviceId,
+            type: 'ESP32',
+            address: rinfo.address,
+            port: rinfo.port,
+            capabilities: [],
+            lastSeen: Date.now(),
+            isAuthenticated: true,
+            ownerPersonId: ownerId as SHA256IdHash<Person>
+          };
+          this.connectedDevices.set(deviceId, device);
+        } else {
+          device.ownerPersonId = ownerId as SHA256IdHash<Person>;
+          device.isAuthenticated = true;
+          debug(`Updated device ${deviceId} with owner ${ownerId}`);
+        }
+        
+        // Emit device authenticated event IMMEDIATELY to trigger UI updates
+        this.emitDeviceAuthenticated(device);
+        
+        // Do discovery model updates in parallel, not blocking the UI update
+        Promise.resolve().then(async () => {
+          try {
+            // Track device activity to reset heartbeat timers
+            const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+            const discoveryModel = DeviceDiscoveryModel.getInstance();
+            if (discoveryModel) {
+              // Do these operations in parallel for speed
+              await Promise.all([
+                discoveryModel.trackDeviceActivity(deviceId, 'provisioning_ack'),
+                discoveryModel.registerDeviceOwner(deviceId, ownerId)
+              ]);
+              
+              debug(`Registered device owner in discovery model`);
+              
+              // The device has just confirmed ownership via provisioning_ack
+              if (ownerId === this.ownPersonId) {
+                debug(`Device ${deviceId} ownership confirmed via provisioning_ack - already authenticated`);
+                // Update discovery model to mark device as authenticated
+                discoveryModel.updateDevice(deviceId, {
+                  ownerId: ownerId,
+                  hasValidCredential: true,
+                  isAuthenticated: true
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`[ESP32ConnectionManager] Error updating discovery model:`, error);
+          }
+        });
+        
+        return; // Important: return early to avoid duplicate handling
+      }
+      
+      // Handle ownership removal acknowledgment
+      if (message.type === 'ownership_remove_ack') {
+        const deviceId = message.device_id || message.deviceId;
+        console.log(`[ESP32ConnectionManager] Received ownership removal acknowledgment from device ${deviceId}`);
+        
+        // Update device state
+        const device = this.connectedDevices.get(deviceId);
+        if (device) {
+          device.isAuthenticated = false;
+          delete device.ownerPersonId;
+          delete device.vcInfo;
+        }
+        
+        // Notify discovery model
+        try {
+          // Use dynamic import to avoid circular dependency
+          const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+          const discoveryModel = DeviceDiscoveryModel.getInstance();
+          if (discoveryModel) {
+            // Track device activity
+            discoveryModel.trackDeviceActivity(deviceId, 'ownership_remove_ack');
+            
+            // Emit device update to remove ownership from UI
+            discoveryModel.updateDevice(deviceId, {
+              ownerId: undefined,
+              hasValidCredential: false
+            });
+          }
+        } catch (error) {
+          console.error('[ESP32ConnectionManager] Error updating discovery model:', error);
+        }
+      }
+    } catch (error) {
+      debug('Failed to parse credential message:', error);
+      this.onError.emit(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  /**
+   * Wait for a QUIC-VC connection to establish for a device
+   */
+  private async waitForConnectionEstablishment(deviceId: string, timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      
+      // Check periodically if connection is established
+      const checkInterval = setInterval(() => {
+        const connection = this.quicVCManager.getConnection?.(deviceId);
+        
+        if (connection && connection.state === 'established') {
+          clearInterval(checkInterval);
+          resolve(true);
+          return;
+        }
+        
+        // Check for timeout
+        if (Date.now() - startTime >= timeoutMs) {
+          clearInterval(checkInterval);
+          console.warn(`[ESP32ConnectionManager] Connection establishment timeout for ${deviceId} after ${timeoutMs}ms`);
+          resolve(false);
+        }
+      }, 100); // Check every 100ms
+    });
+  }
+
+  /**
+   * Handle incoming ESP32 messages (service type 3 - LED control)
+   */
+  private async handleESP32Message(data: any, rinfo: UdpRemoteInfo): Promise<void> {
+    debug(`Received ESP32 message from ${rinfo.address}:${rinfo.port}`);
+    
+    try {
+      let jsonStr = '';
+      
+      // Handle different data types
+      // Note: Data is processed directly from QUICVC packets
+      if (data instanceof ArrayBuffer) {
+        const uint8Array = new Uint8Array(data);
+        jsonStr = new TextDecoder().decode(uint8Array);
+      } else if (data instanceof Uint8Array) {
+        jsonStr = new TextDecoder().decode(data);
+      } else if (Buffer && Buffer.isBuffer && Buffer.isBuffer(data)) {
+        jsonStr = data.toString();
+      } else {
+        console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
+        return;
+      }
+      
+      let message;
+      try {
+        message = JSON.parse(jsonStr);
+        debug(`Parsed LED response:`, message);
+      } catch (parseError) {
+        console.error(`[ESP32ConnectionManager] JSON parse error:`, parseError);
+        console.error(`[ESP32ConnectionManager] First 200 chars of problematic JSON:`, jsonStr.substring(0, 200));
+        // Log hex representation to see if there are hidden characters
+        const hexStr = Array.from(new TextEncoder().encode(jsonStr.substring(0, 50)))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        console.error(`[ESP32ConnectionManager] Hex of first 50 chars:`, hexStr);
+        throw parseError;
+      }
+      
+      // Handle heartbeat/ping from ESP32
+      if (message.type === 'heartbeat' || message.type === 'ping') {
+        const deviceId = message.device_id || message.deviceId;
+        if (deviceId) {
+          const device = this.connectedDevices.get(deviceId);
+          if (device) {
+            // Update lastSeen to keep device alive
+            device.lastSeen = Date.now();
+            debug(`Received heartbeat from ESP32 device ${deviceId}`);
+            
+            // Track device activity to reset heartbeat timers
+            try {
+              const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+              const discoveryModel = DeviceDiscoveryModel.getInstance();
+              if (discoveryModel) {
+                discoveryModel.trackDeviceActivity(deviceId, message.type);
+              }
+            } catch (error) {
+              debug('Error tracking device activity:', error);
+            }
+          }
+        }
+        return;
+      }
+      
+      if (message.type === 'led_status' || message.type === 'response' || message.type === 'error') {
+        // Handle command response
+        // ESP32 sends type:'led_status' for LED commands
+        const response = message as ESP32Response;
+        
+        // Check if response includes requestId
+        const requestId = message.requestId;
+        
+        if (requestId && this.pendingCommands.has(requestId)) {
+          // Handle response with requestId
+          const pending = this.pendingCommands.get(requestId)!;
+          clearTimeout(pending.timeout);
+          this.pendingCommands.delete(requestId);
+          
+          if (message.status === 'success') {
+            // Add the actual response data
+            response.status = 'success';
+            response.data = {
+              blue_led: message.blue_led,
+              manual_control: message.manual_control
+            };
+            
+            // Update LED status in discovery model
+            if (message.blue_led && message.device_id) {
+              try {
+                // Use dynamic import to avoid circular dependency
+                const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+                const discoveryModel = DeviceDiscoveryModel.getInstance();
+                if (discoveryModel && discoveryModel.updateDeviceLEDStatus) {
+                  console.log(`[ESP32ConnectionManager] Updating LED status for ${message.device_id} to ${message.blue_led}`);
+                  discoveryModel.updateDeviceLEDStatus(message.device_id, message.blue_led);
+                }
+              } catch (error) {
+                console.error(`[ESP32ConnectionManager] Error updating LED status:`, error);
+              }
+            }
+            
+            pending.resolve(response);
+          } else if (message.status === 'unauthorized') {
+            pending.reject(new Error(`Unauthorized: ${response.message || 'ESP32 rejected command - not owner'}`));
+          } else {
+            pending.reject(new Error(response.message || 'Command failed'));
+          }
+        } else if (!requestId && this.pendingCommands.size > 0) {
+          // ESP32 firmware doesn't include requestId - try to match by device
+          console.warn(`[ESP32ConnectionManager] Received response without requestId from ${rinfo.address}:${rinfo.port}`);
+          console.warn(`[ESP32ConnectionManager] Response:`, message);
+          
+          // Find the first pending command for a device at this address
+          // This is a workaround for ESP32 firmware that doesn't echo requestId
+          for (const [pendingId, pending] of this.pendingCommands.entries()) {
+            // Extract deviceId from the requestId (format: deviceId-timestamp-random)
+            const deviceIdFromRequest = pendingId.split('-')[0];
+            const device = this.connectedDevices.get(deviceIdFromRequest);
+            
+            if (device && device.address === rinfo.address) {
+              console.log(`[ESP32ConnectionManager] Matching response to pending command ${pendingId} by device address`);
+              clearTimeout(pending.timeout);
+              this.pendingCommands.delete(pendingId);
+              
+              if (message.status === 'success' || message.blue_led !== undefined) {
+                response.status = 'success';
+                response.data = {
+                  blue_led: message.blue_led || message.blue_led_status,
+                  manual_control: message.manual_control
+                };
+                pending.resolve(response);
+              } else {
+                pending.reject(new Error(response.message || 'Command failed'));
+              }
+              break; // Only match the first pending command
+            }
+          }
+          
+          // Find device by address for event emission
+          const device = Array.from(this.connectedDevices.values()).find(
+            d => d.address === rinfo.address && (d.port === rinfo.port || d.port === 49497)
+          );
+          
+          if (device) {
+            // Track device activity and update LED status
+            try {
+              const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+              const discoveryModel = DeviceDiscoveryModel.getInstance();
+              if (discoveryModel) {
+                discoveryModel.trackDeviceActivity(device.id, 'command_response');
+                
+                // Update device LED status in discovery model
+                if (message.status === 'success' && message.blue_led) {
+                  if (discoveryModel.updateDeviceLEDStatus) {
+                    discoveryModel.updateDeviceLEDStatus(device.id, message.blue_led);
+                    debug(`Updated LED status for ${device.id}: ${message.blue_led}`);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error(`[ESP32ConnectionManager] Error updating discovery model:`, error);
+            }
+            
+            this.onCommandResponse.emit(device.id, response);
+          }
+        } else {
+          // Fallback: ESP32 doesn't send back requestId, find by device
+          console.log(`[ESP32ConnectionManager] No requestId in response, using fallback matching`);
+          const device = Array.from(this.connectedDevices.values()).find(
+            d => d.address === rinfo.address && (d.port === rinfo.port || d.port === 49497)
+          );
+          
+          if (device) {
+            debug(`Found device for response: ${device.id}`);
+            
+            // Track device activity to reset heartbeat timers
+            try {
+              const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+              const discoveryModel = DeviceDiscoveryModel.getInstance();
+              if (discoveryModel) {
+                discoveryModel.trackDeviceActivity(device.id, 'command_response_fallback');
+              }
+            } catch (error) {
+              debug('Error tracking device activity:', error);
+            }
+            
+            // Find the first pending command for this device
+            console.log(`[ESP32ConnectionManager] Looking for pending commands for device ${device.id}`);
+            console.log(`[ESP32ConnectionManager] Pending commands:`, Array.from(this.pendingCommands.keys()));
+            for (const [pendingRequestId, pending] of this.pendingCommands) {
+              if (pendingRequestId.startsWith(device.id)) {
+                console.log(`[ESP32ConnectionManager] Found pending command: ${pendingRequestId}`);
+                clearTimeout(pending.timeout);
+                this.pendingCommands.delete(pendingRequestId);
+                
+                if (message.status === 'success') {
+                  // Add the actual response data
+                  response.status = 'success';
+                  response.data = {
+                    blue_led: message.blue_led,
+                    manual_control: message.manual_control
+                  };
+                  
+                  // Update device LED status in discovery model
+                  try {
+                    const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
+                    const discoveryModel = DeviceDiscoveryModel.getInstance();
+                    if (discoveryModel && discoveryModel.updateDeviceLEDStatus) {
+                      console.log(`[ESP32ConnectionManager] Updating LED status for ${device.id} to ${message.blue_led}`);
+                      discoveryModel.updateDeviceLEDStatus(device.id, message.blue_led);
+                      console.log(`[ESP32ConnectionManager] LED status updated successfully`);
+                    }
+                  } catch (error) {
+                    console.error(`[ESP32ConnectionManager] Error updating LED status in discovery model:`, error);
+                  }
+                  
+                  console.log(`[ESP32ConnectionManager] Resolving command with success response:`, response);
+                  pending.resolve(response);
+                  console.log(`[ESP32ConnectionManager] Promise resolved successfully`);
+                } else if (message.status === 'unauthorized') {
+                  console.log(`[ESP32ConnectionManager] Rejecting command as unauthorized`);
+                  pending.reject(new Error(`Unauthorized: ${response.message || 'ESP32 rejected command - not owner'}`));
+                } else {
+                  console.log(`[ESP32ConnectionManager] Rejecting command with error:`, response.message || 'Command failed');
+                  pending.reject(new Error(response.message || 'Command failed'));
+                }
+                
+                this.onCommandResponse.emit(device.id, response);
+                break;
+              }
+            }
+          } else {
+            console.warn(`[ESP32ConnectionManager] Could not find device for response from ${rinfo.address}:${rinfo.port}`);
+          }
+        }
+      } else {
+        debug('Unknown ESP32 message type:', message.type);
+      }
+    } catch (error) {
+      debug('Failed to parse ESP32 message:', error);
+      this.onError.emit(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  /**
+   * Add a discovered device (before authentication)
+   */
+  public addDiscoveredDevice(deviceId: string, address: string, port: number, name?: string, ownerPersonId?: SHA256IdHash<Person>): void {
+    const existingDevice = this.connectedDevices.get(deviceId);
+    if (existingDevice) {
+      // Update address and port if they changed
+      existingDevice.address = address;
+      existingDevice.port = port;
+      existingDevice.lastSeen = Date.now();
+      if (name) existingDevice.name = name;
+      // IMPORTANT: Preserve authentication state when updating device info
+      // Don't reset isAuthenticated or ownerPersonId if they're already set
+      debug(`Updated discovered ESP32 device ${deviceId} at ${address}:${port}, auth=${existingDevice.isAuthenticated}`);
+    } else {
+      // Create new device entry
+      const device: ESP32Device = {
+        id: deviceId,
+        name: name || deviceId,
+        type: 'ESP32',
+        address,
+        port,
+        capabilities: [],
+        lastSeen: Date.now(),
+        isAuthenticated: false, // Only trust credentials from device
+        ownerPersonId: undefined // Don't trust stale ownership data
+      };
+      this.connectedDevices.set(deviceId, device);
+      debug(`Added device ${deviceId} with owner: ${ownerPersonId || 'none'}`);
+      debug(`Added discovered ESP32 device ${deviceId} at ${address}:${port}`);
+    }
+  }
+
+  /**
+   * Get connected device info
+   */
+  public getDevice(deviceId: string): ESP32Device | undefined {
+    return this.connectedDevices.get(deviceId);
+  }
+
+  /**
+   * Get all connected devices
+   */
+  public getDevices(): ESP32Device[] {
+    return Array.from(this.connectedDevices.values());
+  }
+
+  /**
+   * Check if we own a device
+   */
+  public isDeviceOwner(deviceId: string): boolean {
+    const device = this.connectedDevices.get(deviceId);
+    if (!device || !device.ownerPersonId || !this.ownPersonId) {
+      return false;
+    }
+    
+    // Direct match
+    if (device.ownerPersonId === this.ownPersonId) {
+      return true;
+    }
+    
+    // Workaround for ESP32 truncated owner ID (63 chars instead of 64)
+    if (device.ownerPersonId.length === 63 && 
+        this.ownPersonId.length === 64 &&
+        this.ownPersonId.startsWith(device.ownerPersonId)) {
+      console.warn(`[ESP32ConnectionManager] Accepting truncated owner ID for device ${deviceId}`);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Update device information (used when recreating from heartbeat)
+   */
+  public updateDevice(deviceId: string, deviceInfo: any): void {
+    const existingDevice = this.connectedDevices.get(deviceId);
+    const device: ESP32Device = {
+      id: deviceId,
+      name: deviceInfo.name || existingDevice?.name || deviceId,
+      type: 'ESP32',
+      address: deviceInfo.address,
+      port: deviceInfo.port,
+      capabilities: deviceInfo.capabilities || existingDevice?.capabilities || [],
+      lastSeen: Date.now(),
+      isAuthenticated: existingDevice?.isAuthenticated || false,
+      ownerPersonId: deviceInfo.ownerId || existingDevice?.ownerPersonId,
+      vcInfo: existingDevice?.vcInfo
+    };
+    
+    this.connectedDevices.set(deviceId, device);
+    debug(`Updated device ${deviceId} from heartbeat: ${device.name} at ${device.address}:${device.port}`);
+    
+    // For ESP32 devices, we maintain the device info but don't need QUIC connection
+    if (device.ownerPersonId === this.ownPersonId) {
+      debug(`Owned device ${deviceId} info updated from heartbeat`);
+    }
+  }
+  
+  /**
+   * Update device ownership information
+   */
+  public updateDeviceOwnership(
+    deviceId: string, 
+    address: string, 
+    port: number, 
+    name: string,
+    ownerPersonId: SHA256IdHash<Person>
+  ): void {
+    const device = this.connectedDevices.get(deviceId) || {
+      id: deviceId,
+      name,
+      type: 'ESP32',
+      address,
+      port,
+      capabilities: [],
+      lastSeen: Date.now(),
+      isAuthenticated: false,
+      ownerPersonId
+    };
+    
+    device.address = address;
+    device.port = port;
+    device.ownerPersonId = ownerPersonId;
+    device.lastSeen = Date.now();
+    
+    this.connectedDevices.set(deviceId, device);
+    debug(`Updated device ${deviceId} with owner ${ownerPersonId}`);
+  }
+  
+  /**
+   * Check if a device is connected (authenticated and has active QUICVC connection)
+   */
+  public isDeviceConnected(deviceId: string): boolean {
+    const device = this.connectedDevices.get(deviceId);
+    if (!device || !device.isAuthenticated) {
+      return false;
+    }
+    
+    // For owned devices, check QUICVC connection status
+    if (device.ownerPersonId === this.ownPersonId) {
+      return this.connectionManager.isConnected(deviceId);
+    }
+    
+    // For non-owned devices, just check authentication status
+    return device.isAuthenticated;
+  }
+
+  /**
+   * Remove a device
+   */
+  public removeDevice(deviceId: string): void {
+    if (this.connectedDevices.delete(deviceId)) {
+      // Close QUICVC connection if it exists
+      this.connectionManager.closeConnection(deviceId);
+      this.onDeviceDisconnected.emit(deviceId);
+      debug(`Removed ESP32 device ${deviceId}`);
+    }
+  }
+
+  /**
+   * Release ownership of a device (send ownership removal command)
+   */
+  public async releaseDevice(deviceId: string, address?: string, port?: number): Promise<boolean> {
+    const device = this.connectedDevices.get(deviceId);
+    
+    // Always try to send the removal command if we have address and port
+    // This ensures owned devices that haven't authenticated in this session still get the command
+    const deviceAddress = device?.address || address;
+    const devicePort = device?.port || port || 49497;
+    
+    if (!deviceAddress) {
+      debug(`Cannot send removal command to ${deviceId} - no address available`);
+      // Still remove from local list
+      if (device) {
+        this.removeDevice(deviceId);
+      }
+      return false;
+    }
+
+    try {
+      // Create DeviceOwnershipRevocation credential that ESP32 expects
+      const revocationCredential = {
+        $type$: 'DeviceOwnershipRevocation',
+        id: `revocation-${deviceId}-${Date.now()}`,
+        issuer: this.ownPersonId,  // Must match current owner
+        issuanceDate: new Date().toISOString(),
+        credentialSubject: {
+          id: deviceId,
+          action: 'revoke_ownership'
+        }
+      };
+      
+      debug(`Sending ownership revocation to ${deviceId} at ${deviceAddress}:${devicePort}`);
+      
+      // The ESP32 expects revocation as a VC_INIT with DeviceOwnershipRevocation credential
+      // It verifies ownership by checking the issuer matches the current owner
+      // So we need to send it as an INITIAL packet, not through authenticated channel
+      
+      // Initialize QuicVCConnectionManager if needed
+      if (!this.quicVCManager.isInitialized()) {
+        const appCredential = this.createAppCredential();
+        await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
+      }
+      
+      // Send revocation using the QuicVCConnectionManager with custom credential
+      await this.quicVCManager.initiateHandshake(deviceId, deviceAddress, devicePort, revocationCredential);
+      
+      debug(`Ownership revocation sent to ${deviceId}`);
+      console.log(`[ESP32ConnectionManager] Sent ownership_remove to ${deviceId} at ${deviceAddress}:${devicePort}`);
+      
+      // Remove device from our list immediately (acknowledgment will be handled by handleCredentialMessage)
+      if (device) {
+        this.removeDevice(deviceId);
+      }
+      return true;
+    } catch (error) {
+      debug(`Error releasing device ${deviceId}:`, error);
+      console.error(`[ESP32ConnectionManager] Failed to send ownership_remove to ${deviceId}:`, error);
+      // Even on error, remove from local list
+      if (device) {
+        this.removeDevice(deviceId);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Restore authentication state from stored devices
+   * This should be called after DeviceModel is initialized
+   */
+  public async restoreAuthenticationState(): Promise<void> {
+    try {
+      debug('Restoring authentication state from stored devices...');
+      
+      // Import DeviceModel to avoid circular dependency
+      const deviceModel = await import('../../device/DeviceModel');
+      const model = deviceModel.default.getInstance();
+      
+      if (!model.isInitialized()) {
+        debug('DeviceModel not initialized, cannot restore authentication state');
+        return;
+      }
+      
+      // Get all stored devices
+      const devices = await model.getDevices();
+      
+      for (const device of devices) {
+        // Only process ESP32 devices that we own and have valid credentials
+        if (device.deviceType === 'ESP32' && 
+            device.hasValidCredential && 
+            device.owner === this.ownPersonId) {
+          
+          debug(`Restoring authentication for device ${device.deviceId}`);
+          
+          // Check if device already exists in our map
+          let esp32Device = this.connectedDevices.get(device.deviceId);
+          
+          if (!esp32Device) {
+            // Create new device entry
+            esp32Device = {
+              id: device.deviceId,
+              name: device.name,
+              type: 'ESP32',
+              address: device.address,
+              port: device.port,
+              capabilities: device.capabilities || [],
+              lastSeen: device.lastSeen,
+              isAuthenticated: true, // We own it and it has valid credentials
+              ownerPersonId: device.owner
+            };
+            
+            this.connectedDevices.set(device.deviceId, esp32Device);
+            debug(`Created authenticated device entry for ${device.deviceId}`);
+          } else {
+            // Update existing device
+            esp32Device.isAuthenticated = true;
+            esp32Device.ownerPersonId = device.owner;
+            debug(`Updated authentication state for existing device ${device.deviceId}`);
+          }
+          
+          // Emit authentication event
+          this.onDeviceAuthenticated.emit(esp32Device);
+        }
+      }
+      
+      debug(`Restored authentication state for ${this.connectedDevices.size} devices`);
+    } catch (error) {
+      debug('Error restoring authentication state:', error);
+    }
+  }
+
+  /**
+   * Shutdown the connection manager
+   */
+  public async shutdown(): Promise<void> {
+    debug('Shutting down ESP32ConnectionManager...');
+    
+    // Clear pending commands
+    for (const [requestId, pending] of this.pendingCommands) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Connection manager shutting down'));
+    }
+    this.pendingCommands.clear();
+    
+    // Clear command queues
+    for (const [deviceId, queue] of this.commandQueues) {
+      for (const queuedCommand of queue) {
+        queuedCommand.reject(new Error('Connection manager shutting down'));
+      }
+    }
+    this.commandQueues.clear();
+    this.processingCommands.clear();
+    
+    // Close all QUICVC connections
+    for (const deviceId of this.connectedDevices.keys()) {
+      this.connectionManager.closeConnection(deviceId);
+    }
+    
+    // Clear devices
+    this.connectedDevices.clear();
+    
+    // Remove service handlers
+    this.transport.removeService(3);  // LED control
+    this.transport.removeService(11); // Command responses
+    this.transport.removeService(2);  // Credential service
+    
+    debug('ESP32ConnectionManager shutdown complete');
+  }
+}

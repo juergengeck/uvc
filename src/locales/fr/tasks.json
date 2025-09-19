@@ -1,0 +1,50 @@
+{
+  "title": "Tâches",
+  "noTasks": "Aucune tâche disponible",
+  "loading": "Chargement des tâches...",
+  "error": "Erreur lors du chargement des tâches",
+  "create": {
+    "title": "Créer une tâche",
+    "button": "Nouvelle tâche"
+  },
+  "edit": {
+    "title": "Modifier la tâche",
+    "button": "Modifier"
+  },
+  "delete": {
+    "title": "Supprimer la tâche",
+    "button": "Supprimer",
+    "confirm": "Voulez-vous vraiment supprimer cette tâche ?",
+    "success": "Tâche supprimée avec succès"
+  },
+  "fields": {
+    "title": {
+      "label": "Titre",
+      "placeholder": "Entrez le titre de la tâche"
+    },
+    "description": {
+      "label": "Description",
+      "placeholder": "Entrez la description de la tâche"
+    },
+    "dueDate": {
+      "label": "Date d'échéance",
+      "placeholder": "Sélectionnez la date d'échéance"
+    },
+    "priority": {
+      "label": "Priorité",
+      "options": {
+        "low": "Basse",
+        "medium": "Moyenne",
+        "high": "Haute"
+      }
+    },
+    "status": {
+      "label": "Statut",
+      "options": {
+        "pending": "En attente",
+        "inProgress": "En cours",
+        "completed": "Terminée"
+      }
+    }
+  }
+} 

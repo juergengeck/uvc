@@ -1,0 +1,160 @@
+# DigiOnko Authentication System Documentation
+
+## Overview
+
+DigiOnko uses MultiUser from one.core for authentication state management. The authentication system manages user login, registration, and instance lifecycle.
+
+## Core Components
+
+### 1. MultiUser
+- Handles authentication state machine
+- Manages user registration and login
+- Handles session persistence
+- Integrated with one.core storage system
+
+### 2. AuthContext
+- React context for authentication state
+- Provides login/register operations
+- Handles error states and user feedback
+- Manages credential storage in SecureStore
+
+### 3. Secure Storage
+- Uses expo-secure-store for credential storage
+- Stores email and secret separately
+- Keys are prefixed with app name for isolation
+- Only stores credentials after successful operations
+
+## State Machine
+
+```typescript
+States:
+- logged_out (initial state)
+- logging_in
+- logged_in
+- logging_out
+
+Transitions:
+- login: logged_out -> logging_in
+- login_failure: logging_in -> logged_out
+- login_success: logging_in -> logged_in
+- logout: logged_in -> logging_out
+- logout_done: logging_out -> logged_out
+```
+
+## Implementation Details
+
+### 1. Login Flow
+```typescript
+const handleLogin = async (email: string, password: string) => {
+  try {
+    // First attempt login
+    await model.one.login(email, password, APP_CONFIG.name);
+    
+    // Only store credentials after successful login
+    await storeCredentials(email, password);
+    
+    // Only navigate after successful credential storage
+    router.replace('/(tabs)');
+  } catch (error) {
+    // Handle specific error cases
+    if (error.message.includes('FileNotFoundError')) {
+      setError(new Error('Account not found. Please register first.'));
+    } else if (error.message.includes('WrongSecret')) {
+      setError(new Error('Invalid password. Please try again.'));
+    } else {
+      setError(new Error('Login failed. Please try again.'));
+    }
+    throw error;
+  }
+};
+```
+
+### 2. Registration Flow
+```typescript
+const handleRegister = async (email: string, password: string) => {
+  try {
+    // Check if already registered
+    const isRegistered = await model.one.isRegistered(email, APP_CONFIG.name);
+    if (isRegistered) {
+      throw new Error('Email already registered');
+    }
+
+    // Attempt registration
+    await model.one.register(email, password, APP_CONFIG.name);
+
+    // Only store credentials after successful registration
+    await storeCredentials(email, password);
+    
+    // Only navigate after successful credential storage
+    router.replace('/(tabs)');
+  } catch (error) {
+    // FileNotFoundError is expected for new users
+    if (error.message.includes('FileNotFoundError')) {
+      console.log('[AuthProvider] Expected FileNotFoundError during registration');
+    } else {
+      setError(new Error('Registration failed. Please try again.'));
+      throw error;
+    }
+  }
+};
+```
+
+### 3. Session Restoration
+```typescript
+// In initialization/index.ts
+try {
+  const storedEmail = await SecureStore.getItemAsync(`${APP_CONFIG.name}:email`);
+  const storedSecret = await SecureStore.getItemAsync(`${APP_CONFIG.name}:secret`);
+  
+  if (storedEmail && storedSecret) {
+    await multiUser.login(storedEmail, storedSecret, APP_CONFIG.name);
+  }
+} catch (error) {
+  // Login failed but model is still created
+  console.log('[Init] Error during login', error);
+}
+```
+
+## Error Handling
+
+1. **Login Errors**
+   - FileNotFoundError: Account doesn't exist
+   - WrongSecret: Invalid password
+   - Other errors: Generic login failure
+
+2. **Registration Errors**
+   - FileNotFoundError: Expected for new users
+   - Email already registered
+   - Other errors: Generic registration failure
+
+3. **Session Restoration Errors**
+   - Non-blocking: Model creation continues
+   - Errors logged but not propagated
+   - User can still manually log in
+
+## Best Practices
+
+1. **Credential Storage**
+   - Only store after successful operations
+   - Use SecureStore for sensitive data
+   - Prefix keys with app name
+   - Clear on logout/errors
+
+2. **Error Handling**
+   - Provide specific error messages
+   - Log errors for debugging
+   - Clean up on failures
+   - Don't expose internal errors to users
+
+3. **State Management**
+   - Let MultiUser handle state transitions
+   - React to state changes for navigation
+   - Clean up state on errors
+   - Prevent race conditions
+
+4. **Security**
+   - No plaintext password storage
+   - Clear sensitive data on logout
+   - Use secure storage for credentials
+   - Validate operations before storage
+``` 

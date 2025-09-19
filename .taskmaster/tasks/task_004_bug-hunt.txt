@@ -1,0 +1,11 @@
+# Task ID: 4
+# Title: User Identity Validation Setup
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: Ensure the system validates user identity before invite generation.
+# Details:
+Implement a validation function to check if the current user has a valid main identity, instance, and cryptographic keys. This will involve checking user credentials against stored data in the database or secure storage.
+
+# Test Strategy:
+Unit tests for each component of the identity (main identity, instance, cryptographic keys) ensuring they are correctly validated.

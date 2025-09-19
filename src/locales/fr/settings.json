@@ -1,0 +1,251 @@
+{
+  "settings": {
+    "title": "Paramètres",
+    "welcome": "Bienvenue",
+    "user": {
+      "title": "Utilisateur",
+      "profile": {
+        "title": "Profil",
+        "edit": "Modifier le profil"
+      },
+      "logout": "Se déconnecter",
+      "logoutDescription": "Déconnectez-vous de votre compte",
+      "reset": "Réinitialiser l'application",
+      "resetDescription": "Supprimez toutes les données et recommencez à zéro"
+    },
+    "appearance": {
+      "title": "Apparence",
+      "darkMode": {
+        "title": "Mode sombre",
+        "description": "Activer le mode sombre"
+      }
+    },
+    "language": {
+      "title": "Langue",
+      "current": "Langue actuelle",
+      "en": "Anglais",
+      "de": "Allemand",
+      "fr": "Français"
+    },
+    "dataManagement": {
+      "title": "Gestion des données",
+      "import": {
+        "title": "Importer les données",
+        "description": "Importer vos données depuis un fichier de sauvegarde",
+        "placeholder": "Sélectionner un fichier à importer",
+        "error": {
+          "failed": "Échec de l'importation des données"
+        }
+      },
+      "export": {
+        "title": "Exporter les données",
+        "description": "Sauvegarder vos données dans un fichier de sauvegarde",
+        "error": {
+          "failed": "Échec de l'exportation des données"
+        }
+      }
+    },
+    "ai": {
+      "title": "Paramètres IA",
+      "importSuccess": "Modèle importé",
+      "importSuccessMessage": "Le modèle {{name}} a été importé avec succès et est maintenant disponible.",
+      "models": {
+        "title": "Modèles IA",
+        "available": "Modèles disponibles",
+        "stored": "Modèles stockés",
+        "hash": "Hash",
+        "size": "Taille",
+        "parameters": "Paramètres",
+        "created": "Créé",
+        "lastUsed": "Dernière utilisation",
+        "timesUsed": "Utilisé",
+        "delete": "Supprimer",
+        "noModelManager": "Gestionnaire de modèles non disponible",
+        "noModels": "Aucun modèle disponible",
+        "loading": "Chargement des modèles...",
+        "installed": "Modèles installés",
+        "recommended": "Modèles recommandés",
+        "delete": {
+          "title": "Supprimer le modèle",
+          "confirmation": "Êtes-vous sûr de vouloir supprimer ce modèle ? Cette action ne peut pas être annulée."
+        },
+        "error": {
+          "listFailed": "Échec de la liste des modèles",
+          "loadFailed": "Échec du chargement du modèle",
+          "deleteFailed": "Échec de la suppression du modèle",
+          "importFailed": "Échec de l'importation du modèle",
+          "noAIModelsDescription": "Aucun modèle IA n'est installé. Importez un modèle pour commencer.",
+          "noAIModelManager": "Gestionnaire de modèles IA non disponible",
+          "noAIModelManagerDescription": "Le gestionnaire de modèles IA n'est pas initialisé. Veuillez réessayer plus tard.",
+          "noLLMManager": "Gestionnaire LLM non disponible",
+          "noLLMManagerDescription": "Le gestionnaire LLM n'est pas initialisé. Veuillez réessayer plus tard."
+        },
+        "download": {
+          "title": "Télécharger un modèle",
+          "url": "URL du modèle",
+          "button": "Télécharger",
+          "progress": "Téléchargement : {{progress}}%"
+        },
+        "import": {
+          "title": "Importer un modèle",
+          "fromFile": "Importer depuis un fichier",
+          "fromUrl": "Importer depuis une URL",
+          "success": "Modèle importé avec succès",
+          "error": {
+            "failed": "Échec de l'importation du modèle",
+            "invalidFile": "Fichier de modèle invalide",
+            "noFile": "Aucun fichier sélectionné"
+          }
+        },
+        "importFromFile": "Importer depuis un fichier",
+        "importFromFileDescription": "Sélectionner un fichier local pour importer le modèle",
+        "importFromUrl": "Importer depuis une URL",
+        "importFromUrlDescription": "Télécharger un modèle depuis un emplacement distant",
+        "modelUrl": "URL du modèle",
+        "noModelsTitle": "Aucun modèle IA",
+        "noModelsDescription": "Vous n'avez pas de modèles IA installés. Importez un modèle pour commencer.",
+        "deleteConfirmTitle": "Supprimer le modèle",
+        "deleteConfirmMessage": "Êtes-vous sûr de vouloir supprimer ce modèle ? Cette action ne peut pas être annulée.",
+        "bundled": {
+          "title": "Importer le modèle intégré",
+          "description": "Importer le modèle DeepSeek Distilled 1.5B depuis les ressources"
+        }
+      },
+      "recommended": {
+        "title": "MODÈLES RECOMMANDÉS",
+        "description": "DeepSeek Distilled 1.5B\n1.7 GB • 1.5B paramètres\nModèle distillé efficace avec d'excellentes performances"
+      },
+      "providers": {
+        "title": "Fournisseurs IA",
+        "status": {
+          "connected": "Connecté",
+          "connecting": "Connexion...",
+          "disconnected": "Déconnecté"
+        },
+        "local": {
+          "title": "IA Locale",
+          "description": "Modèle IA local pour une utilisation hors ligne",
+          "supported": "IA locale prise en charge",
+          "configure": "Appuyez pour configurer",
+          "noModel": "Aucun modèle disponible",
+          "threads": {
+            "title": "Threads CPU",
+            "description": "Nombre de threads CPU pour l'inférence"
+          },
+          "enabled": "Activer l'IA locale"
+        },
+        "cloud": {
+          "title": "IA Cloud",
+          "description": "Modèle IA basé sur le cloud",
+          "configure": "Appuyez pour configurer",
+          "apiKey": {
+            "title": "Clé API",
+            "description": "Votre clé API pour les services cloud"
+          },
+          "maxTokens": {
+            "title": "Tokens maximum",
+            "description": "Nombre maximum de tokens à générer"
+          },
+          "enabled": "Activer l'IA cloud"
+        },
+        "error": {
+          "updateFailed": "Échec de la mise à jour des paramètres du fournisseur"
+        }
+      }
+    },
+    "summarySettings": {
+      "title": "Paramètres de résumé",
+      "description": "Configurer la génération des résumés",
+      "enable": "Activer les résumés",
+      "maxTokens": {
+        "title": "Tokens maximum",
+        "description": "Longueur maximale des résumés générés"
+      },
+      "temperature": {
+        "title": "Température",
+        "description": "Créativité de l'IA (0.0 - 1.0)"
+      },
+      "topP": {
+        "title": "Top P",
+        "description": "Seuil d'échantillonnage nucleus"
+      },
+      "frequencyPenalty": {
+        "title": "Pénalité de fréquence",
+        "description": "Pénaliser les tokens fréquents (-2.0 à 2.0)"
+      },
+      "presencePenalty": {
+        "title": "Pénalité de présence",
+        "description": "Pénaliser les tokens selon leur présence (-2.0 à 2.0)"
+      },
+      "error": {
+        "updateFailed": "Échec de la mise à jour des paramètres de résumé"
+      }
+    }
+  },
+  "accountActions": "Actions du compte",
+  "logout": "Se déconnecter",
+  "reset": "Réinitialiser",
+  "resetTitle": "Réinitialiser l'application",
+  "resetMessage": "Pour confirmer la réinitialisation, veuillez entrer le code PIN: {{pin}}\nCela supprimera toutes vos données!",
+  "enterPin": "Entrer le code PIN",
+  "enterPinMessage": "Veuillez entrer le code PIN pour confirmer",
+  "error": "Erreur",
+  "wrongPin": "Code PIN incorrect",
+  "modelManagement": "Modèles IA",
+  "addModel": "Ajouter un modèle",
+  "modelName": "Nom du modèle",
+  "modelUrl": "URL du modèle",
+  "invalidModelInput": "Veuillez entrer un nom et une URL pour le modèle",
+  "downloadFailed": "Échec du téléchargement",
+  "deleteFailed": "Échec de la suppression",
+  "models": {
+    "llama2": {
+      "description": "Modèle Llama 2 local optimisé pour Apple Silicon"
+    },
+    "claude": {
+      "description": "Modèle rapide et efficace d'Anthropic"
+    }
+  },
+  "common": {
+    "back": "Retour",
+    "cancel": "Annuler",
+    "confirm": "Confirmer"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "enable": "Activer les notifications",
+    "sound": "Son",
+    "vibration": "Vibration"
+  },
+  "theme": {
+    "title": "Thème",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système"
+  },
+  "account": {
+    "title": "Compte",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "changePassword": "Changer le mot de passe"
+  },
+  "privacy": {
+    "title": "Confidentialité",
+    "dataCollection": "Collecte de données",
+    "cookies": "Cookies"
+  },
+  "contacts": {
+    "title": "Contacts",
+    "syncDeviceContacts": "Synchroniser les contacts de l'appareil",
+    "syncDescription": "Importer les contacts depuis le carnet d'adresses de votre appareil",
+    "permissionDenied": "L'autorisation d'accès aux contacts a été refusée",
+    "syncSuccess": "{{count}} contacts importés avec succès",
+    "syncError": "Erreur lors de la synchronisation des contacts"
+  },
+  "topic": {
+    "title": "Sujet",
+    "new": "Nouveau sujet",
+    "edit": "Modifier le sujet",
+    "delete": "Supprimer le sujet"
+  }
+} 

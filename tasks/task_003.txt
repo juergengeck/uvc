@@ -1,0 +1,11 @@
+# Task ID: 3
+# Title: Optimize Crypto API Usage
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: Implement crypto API caching to reduce frequent secret key retrievals
+# Details:
+Added crypto API caching in TrustModel to prevent constant secret key retrieval spam. TrustModel now provides getCryptoApi() method that caches crypto APIs per person ID.
+
+# Test Strategy:
+Monitor logs for reduced frequency of '[SecretKeyStorage] Retrieving secret keys' messages. Should see significant reduction in crypto API creation calls.

@@ -1,0 +1,11 @@
+# Task ID: 8
+# Title: Parse Invite Data
+# Status: pending
+# Dependencies: 7
+# Priority: medium
+# Description: Extract token and public key from invite URLs.
+# Details:
+Implement logic to parse the incoming URL and extract necessary data such as the token and public key. This will be used in subsequent pairing steps.
+
+# Test Strategy:
+Unit tests for parsing functions ensuring correct extraction of invite data from URLs.

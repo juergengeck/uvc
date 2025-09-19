@@ -1,0 +1,11 @@
+# Task ID: 12
+# Title: Reimplement Message Handler Logic
+# Status: pending
+# Dependencies: 11
+# Priority: high
+# Description: Develop a new message handler for CHUM messages compatible with Expo.
+# Details:
+Rewrite the `onMsgHandler` logic to process incoming CHUM messages using standard `ArrayBuffer`. Avoid reliance on unavailable features like `SharedArrayBuffer`.
+
+# Test Strategy:
+Unit tests for message handling functions ensuring correct processing of CHUM messages.

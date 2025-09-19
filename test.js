@@ -1,0 +1,1 @@
+const LlamaModule = require('NativeLlamaModule');

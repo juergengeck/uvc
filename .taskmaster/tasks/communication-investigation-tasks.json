@@ -1,0 +1,167 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Research communication_request Message Flow",
+      "description": "Investigate how communication_request messages should flow from receiving connection to pairing protocol initiation",
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [],
+      "details": "The core issue is that communication_request messages are being received by NetworkPlugin but never routed to ConnectionsModel/LeuteConnectionsModule to trigger pairing. Need to understand the expected message routing architecture.",
+      "testStrategy": "Trace message flow from WebSocket receipt through plugin chain to pairing protocol initiation",
+      "subtasks": [
+        {
+          "id": 1.1,
+          "title": "Map Current Plugin Chain Order",
+          "description": "Document the current plugin processing order in connections",
+          "status": "pending",
+          "details": "Current order appears to be: WebSocketPlugin -> PromisePlugin -> StatisticsPlugin -> NetworkPlugin. Need to verify this and understand what each plugin should do with communication_request messages."
+        },
+        {
+          "id": 1.2,
+          "title": "Identify Missing Routing Component",
+          "description": "Find what component should route communication_request to ConnectionsModel",
+          "status": "pending",
+          "details": "NetworkPlugin only logs messages - there should be a component that routes protocol messages to the appropriate handlers (LeuteConnectionsModule, PairingManager, etc.)"
+        },
+        {
+          "id": 1.3,
+          "title": "Study one.leute Reference Implementation",
+          "description": "Examine how one.leute handles incoming communication_request messages",
+          "status": "pending",
+          "details": "one.leute is the reference implementation that works correctly. Compare its connection setup and message routing with lama's implementation."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Analyze ConnectionsModel Integration",
+      "description": "Investigate how ConnectionsModel should receive and process incoming connections",
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [1],
+      "details": "ConnectionsModel is properly configured with LeuteConnectionsModule and event handlers, but incoming connections never trigger onUnknownConnection events.",
+      "testStrategy": "Add debug logging to ConnectionsModel event handlers and verify they are called",
+      "subtasks": [
+        {
+          "id": 2.1,
+          "title": "Verify ConnectionsModel Event Handler Setup",
+          "description": "Confirm that onUnknownConnection and onKnownConnection handlers are properly registered",
+          "status": "pending",
+          "details": "Check that AppModel.initializeConnectionManagement() properly sets up ConnectionsModel with correct event handlers."
+        },
+        {
+          "id": 2.2,
+          "title": "Trace Connection Registration Flow",
+          "description": "Follow how new connections should be registered with LeuteConnectionsModule",
+          "status": "pending",
+          "details": "Understand the flow from WebSocket connection creation to LeuteConnectionsModule.acceptConnection() call."
+        },
+        {
+          "id": 2.3,
+          "title": "Debug ConnectionsModel Logging",
+          "description": "Add comprehensive logging to ConnectionsModel to track when events are triggered",
+          "status": "pending",
+          "details": "Add debug logs to constructor, init, onUnknownConnection, onKnownConnection to verify the flow."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Fix Connection Message Routing",
+      "description": "Implement proper routing of communication_request messages to pairing protocol",
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [1, 2],
+      "details": "Based on research findings, implement the missing component that routes protocol messages from connection plugins to ConnectionsModel.",
+      "testStrategy": "Verify that communication_request messages trigger pairing protocol and connections establish successfully",
+      "subtasks": [
+        {
+          "id": 3.1,
+          "title": "Create Protocol Routing Plugin",
+          "description": "Implement plugin that routes protocol messages to appropriate handlers",
+          "status": "pending",
+          "details": "Create a plugin that recognizes communication_request and other protocol messages and routes them to ConnectionsModel/LeuteConnectionsModule."
+        },
+        {
+          "id": 3.2,
+          "title": "Integrate Routing Plugin into Connection Chain",
+          "description": "Add the routing plugin to the connection plugin chain in correct order",
+          "status": "pending",
+          "details": "Ensure the routing plugin is positioned correctly in the plugin chain to receive messages before NetworkPlugin but after necessary preprocessing."
+        },
+        {
+          "id": 3.3,
+          "title": "Update Connection Factory Methods",
+          "description": "Modify connection creation to include protocol routing plugin",
+          "status": "pending",
+          "details": "Update WebSocketListener, CommunicationServer, and other connection creation points to include the routing plugin."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Resolve Ping/Pong JSON Parsing Issue",
+      "description": "Fix the secondary issue where ping messages cause JSON parsing errors",
+      "status": "pending",
+      "priority": "medium",
+      "dependencies": [],
+      "details": "Even with proper routing, the ping/pong filtering needs to work correctly to prevent connection timeouts.",
+      "testStrategy": "Verify connections survive 25-second ping intervals without JSON parsing errors",
+      "subtasks": [
+        {
+          "id": 4.1,
+          "title": "Verify Ping/Pong Filtering in All Plugins",
+          "description": "Ensure all plugins that parse JSON have ping/pong filtering",
+          "status": "pending",
+          "details": "Check WebSocketPlugin, PromisePlugin, and any other JSON-parsing plugins have proper ping/pong filtering."
+        },
+        {
+          "id": 4.2,
+          "title": "Test Plugin Chain Ordering",
+          "description": "Verify that ping/pong filtering happens before JSON parsing attempts",
+          "status": "pending",
+          "details": "Ensure WebSocketPlugin filters ping/pong messages before PromisePlugin tries to parse them as JSON."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Validate Complete Connection Flow",
+      "description": "End-to-end testing of connection establishment and pairing protocol",
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [3, 4],
+      "details": "Comprehensive testing to ensure the complete connection flow works from initial WebSocket connection through pairing protocol completion.",
+      "testStrategy": "Test full pairing flow with invite generation, QR code scanning, and successful connection establishment",
+      "subtasks": [
+        {
+          "id": 5.1,
+          "title": "Test Invite Generation and Scanning",
+          "description": "Verify that invite URLs are generated correctly and can be processed",
+          "status": "pending",
+          "details": "Test the complete invite flow from generation to QR code scanning to connection initiation."
+        },
+        {
+          "id": 5.2,
+          "title": "Test Pairing Protocol Completion",
+          "description": "Verify that pairing protocol completes successfully with proper person/contact creation",
+          "status": "pending",
+          "details": "Ensure that after communication_request routing works, the pairing protocol completes and creates proper Person/Someone objects."
+        },
+        {
+          "id": 5.3,
+          "title": "Test Connection Persistence",
+          "description": "Verify that established connections survive ping intervals and remain stable",
+          "status": "pending",
+          "details": "Test that connections remain stable over time and handle ping/pong messages correctly without disconnecting."
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "created": "2024-12-23",
+    "description": "Investigation and resolution of communication_request routing issues preventing connection establishment",
+    "priority": "critical"
+  }
+} 

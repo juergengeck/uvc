@@ -1,0 +1,110 @@
+{
+  "add_contact": {
+    "title": "Kontakt hinzufügen",
+    "identifier": "Kontakt-ID",
+    "add": "Kontakt hinzufügen",
+    "share_my_contact": "Meinen Kontakt teilen",
+    "addFailed": "Kontakt konnte nicht hinzugefügt werden",
+    "standard_title": "Kontaktinformationen",
+    "advanced_title": "Erweiterte Optionen",
+    "name": "Name",
+    "email": "E-Mail-Adresse",
+    "hash_identifier": "Hash-Kennung",
+    "hash_placeholder": "Nur für fortgeschrittene Benutzer",
+    "errors": {
+      "system_unavailable": "Kontaktsystem ist nicht verfügbar",
+      "email_required": "E-Mail-Adresse ist erforderlich",
+      "failed": "Kontakt konnte nicht hinzugefügt werden",
+      "invalid_hash": "Ungültige Hash-Kennung",
+      "not_retrievable": "Kontakt wurde hinzugefügt, kann aber nicht abgerufen werden. Dies könnte auf ein Problem mit dem Kontaktsystem hinweisen.",
+      "invalid_qr": "Ungültige QR-Code-Daten",
+      "processing_failed": "QR-Code konnte nicht verarbeitet werden"
+    }
+  },
+  "share_contact": {
+    "title": "Kontakt teilen",
+    "description": "Lassen Sie andere diesen QR-Code scannen, um Sie als Kontakt hinzuzufügen.",
+    "share_message": "Füge mich als Kontakt in LAMA.ONE hinzu:",
+    "share_link": "Link teilen",
+    "share_text": "Als Text teilen"
+  },
+  "scanner": {
+    "requesting_permission": "Kamerazugriff wird angefordert...",
+    "no_access": "Kein Zugriff auf die Kamera. Kameraberechtigung ist erforderlich, um QR-Codes zu scannen.",
+    "instructions": "Kamera auf einen Kontakt-QR-Code richten"
+  },
+  "invite": {
+    "title": "Einladen",
+    "description": "Teilen Sie Ihre Kontaktinformationen mit anderen.",
+    "generating": "QR-Code wird generiert...",
+    "generation_error": "QR-Code konnte nicht generiert werden",
+    "no_data": "Keine Daten verfügbar",
+    "scan_to_connect": "Scannen, um zu verbinden",
+    "share_message": "Scanne diesen QR-Code, um dich mit mir zu verbinden"
+  },
+  "list": {
+    "title": "Kontakte",
+    "search": "Kontakte durchsuchen...",
+    "unnamed": "Unbenannter Kontakt",
+    "loading": "Kontakte werden geladen...",
+    "no_contacts": "Keine Kontakte",
+    "no_connected": "Keine verbundenen Kontakte",
+    "no_ai": "Keine KI-Assistenten",
+    "no_people": "Keine Personen-Kontakte",
+    "empty": "Ihre Kontaktliste ist leer",
+    "no_search_results": "Keine Kontakte entsprechen Ihrer Suche",
+    "connections_count": "{{active}}/{{total}} verbunden",
+    "no_connections": "Keine Verbindungen",
+    "available_operations": "Verfügbare Operationen",
+    "open_editor": "Editor öffnen",
+    "editing_error": "Fehler beim Laden der Bearbeitungsoptionen"
+  },
+  "details": {
+    "title": "Kontaktdetails",
+    "loading": "Kontaktdetails werden geladen...",
+    "loading_title": "Kontakt laden",
+    "error": "Fehler",
+    "error_title": "Kontakt-Fehler",
+    "not_found": "Kontakt nicht gefunden",
+    "not_found_title": "Kontakt nicht gefunden",
+    "info": "Kontaktinformationen",
+    "contact_info": "Kontaktinformationen",
+    "connection_info": "Verbindungsdetails",
+    "technical_info": "Technische Informationen",
+    "contact_id": "Kontakt-ID",
+    "person_id": "Person-ID",
+    "someone_id": "Someone-ID",
+    "profile_count": "Profil-Anzahl",
+    "active_connections": "Aktive Verbindungen",
+    "last_seen": "Zuletzt gesehen",
+    "you_badge": "DU",
+    "ai_badge": "KI",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "connect": "Verbinden",
+    "errors": {
+      "not_available": "Kontaktsystem ist nicht verfügbar",
+      "not_found": "Kontakt nicht gefunden",
+      "no_profile": "Kontaktprofil nicht gefunden",
+      "loading": "Fehler beim Laden der Kontaktdetails",
+      "delete": "Fehler beim Löschen des Kontakts"
+    }
+  },
+  "contextMenu": {
+    "createTopic": "Thema erstellen"
+  },
+  "me": "Dein Kontakt",
+  "others": "Andere Kontakte",
+  "noContacts": "Keine Kontakte verfügbar",
+  "noResults": "Keine Kontakte entsprechen deiner Suche",
+  "unnamed": "Unbenannter Kontakt",
+  "settings": {
+    "title": "Kontakte",
+    "syncDeviceContacts": "Gerätekontakte synchronisieren",
+    "syncDescription": "Importieren und synchronisieren Sie Ihre Gerätekontakte",
+    "syncError": "Fehler beim Synchronisieren der Kontakte",
+    "syncSuccess": "{{count}} Kontakte erfolgreich importiert",
+    "permissionDenied": "Die Berechtigung für den Zugriff auf Kontakte wurde verweigert",
+    "noLeuteModel": "Kontaktsystem ist nicht verfügbar"
+  }
+} 

@@ -1,0 +1,11 @@
+# Task ID: 1
+# Title: Verify WebSocket Implementation Consistency
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Ensure both lama and edda use the same WebSocket implementation with proper ping/pong handling
+# Details:
+The core issue was that pairing used generic WebSocket instead of Expo-specific WebSocket with ping/pong handling. Fixed in EncryptedConnectionHandshake.ts by changing import from '@refinio/one.core/lib/system/websocket.js' to '@refinio/one.core/lib/system/expo/websocket.js'
+
+# Test Strategy:
+Verify that lama→edda pairing no longer fails with 'ping is not valid JSON' errors. Test bidirectional pairing multiple times.

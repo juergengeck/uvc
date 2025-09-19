@@ -1,0 +1,31 @@
+{
+  "models": {
+    "main": {
+      "provider": "ollama",
+      "modelId": "deepseek-r1:7b",
+      "maxTokens": 8000,
+      "temperature": 0.2
+    },
+    "research": {
+      "provider": "ollama",
+      "modelId": "qwen2.5:3b",
+      "maxTokens": 4000,
+      "temperature": 0.1
+    },
+    "fallback": {
+      "provider": "ollama",
+      "modelId": "phi4:latest",
+      "maxTokens": 8000,
+      "temperature": 0.2
+    }
+  },
+  "global": {
+    "logLevel": "info",
+    "debug": false,
+    "defaultSubtasks": 5,
+    "defaultPriority": "medium",
+    "projectName": "Lama Connection Architecture Cleanup",
+    "ollamaBaseUrl": "http://localhost:11434/api",
+    "userId": "1234567890"
+  }
+}

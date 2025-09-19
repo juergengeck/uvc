@@ -1,0 +1,337 @@
+[
+  {
+    "id": "fix-connections-model-integration",
+    "priority": "high",
+    "status": "pending",
+    "title": "Fix ConnectionsModel Integration with one.models",
+    "description": "Ensure proper one.models ConnectionsModel initialization alongside custom CommServer implementation for reliable pairing flow",
+    "details": {
+      "files_to_modify": [
+        "src/models/AppModel.ts",
+        "src/initialization/index.ts",
+        "src/providers/app/AppModelProvider.tsx"
+      ],
+      "key_changes": [
+        "Initialize ConnectionsModel with proper configuration in AppModel.ts:156",
+        "Ensure acceptUnknownPersons: false for invite flow",
+        "Set up proper pairing token expiration (15 minutes)",
+        "Call ConnectionsModel.init() with blacklistGroupModel",
+        "Verify initialization order in app startup sequence"
+      ],
+      "acceptance_criteria": [
+        "ConnectionsModel properly initialized in AppModel",
+        "No TypeScript errors related to ConnectionsModel",
+        "Pairing configuration matches one.models requirements",
+        "Debug logs show ConnectionsModel initialization success",
+        "Integration tests pass for ConnectionsModel methods"
+      ],
+      "implementation_notes": "Reference connections.md lines 312-341 for exact configuration. Must coordinate with custom CommServer implementation without conflicts.",
+      "estimated_complexity": "medium",
+      "estimated_hours": 4
+    }
+  },
+  {
+    "id": "complete-leute-access-rights-setup",
+    "priority": "high", 
+    "status": "pending",
+    "title": "Complete LeuteAccessRightsManager Setup and Event Handling",
+    "description": "Connect pairing success events to trust establishment through LeuteAccessRightsManager for proper contact creation",
+    "details": {
+      "files_to_modify": [
+        "src/models/AppModel.ts",
+        "src/models/LeuteAccessRightsManager.ts",
+        "src/services/ContactCreationService.ts"
+      ],
+      "key_changes": [
+        "Initialize LeuteAccessRightsManager in AppModel with proper dependencies",
+        "Connect onPairingSuccess event to trustPairingKeys method",
+        "Implement trustPairingKeys static method with TrustKeysCertificate creation",
+        "Add proper error handling for trust establishment failures",
+        "Integrate with ContactCreationService for complete contact flow"
+      ],
+      "acceptance_criteria": [
+        "LeuteAccessRightsManager properly initialized in AppModel",
+        "Pairing success events trigger trust establishment",
+        "Trust certificates created and stored correctly",
+        "ContactCreationService creates Someone objects successfully",
+        "Debug logs show trust establishment completion",
+        "End-to-end pairing flow creates usable contacts"
+      ],
+      "implementation_notes": "Reference connections.md lines 284-308 and 334-340 for exact implementation. Critical for successful contact creation after pairing.",
+      "estimated_complexity": "high",
+      "estimated_hours": 6
+    }
+  },
+  {
+    "id": "implement-contact-add-route",
+    "priority": "high",
+    "status": "pending", 
+    "title": "Implement Missing Contact Add UI Route",
+    "description": "Add /contact/add route for handling invitation acceptance and provide proper navigation flow",
+    "details": {
+      "files_to_modify": [
+        "app/(screens)/contacts/add.tsx",
+        "app/(tabs)/contacts.tsx", 
+        "src/components/contacts/InviteAcceptance.tsx"
+      ],
+      "key_changes": [
+        "Create new contact add screen with invitation URL input",
+        "Add QR code scanning capability for invitation URLs",
+        "Implement invitation validation and preview",
+        "Add pairing progress indicator during connection",
+        "Integrate with InviteManager.connectUsingInvitation method",
+        "Add navigation from contacts tab to add screen"
+      ],
+      "acceptance_criteria": [
+        "New /contact/add route accessible from contacts tab",
+        "Users can paste invitation URLs or scan QR codes",
+        "Invitation validation provides clear feedback",
+        "Pairing progress shown with appropriate loading states",
+        "Successful pairing navigates to new contact conversation",
+        "Error states handled with user-friendly messages"
+      ],
+      "implementation_notes": "Follow existing screen patterns in app/(screens). Use connections.md lines 102-128 for invitation processing logic.",
+      "estimated_complexity": "medium",
+      "estimated_hours": 5
+    }
+  },
+  {
+    "id": "implement-deep-linking",
+    "priority": "high",
+    "status": "pending",
+    "title": "Add Deep Linking for Invitation URLs", 
+    "description": "Handle invitation URLs when app is opened via deep links or when already running",
+    "details": {
+      "files_to_modify": [
+        "app.json",
+        "src/navigation/LinkingConfiguration.ts",
+        "app/(screens)/contacts/invitation-handler.tsx",
+        "src/hooks/useInvitationDeepLink.ts"
+      ],
+      "key_changes": [
+        "Configure deep link scheme in app.json for invitation URLs",
+        "Add linking configuration for edda.one invitation URLs", 
+        "Create invitation handler screen for processing deep links",
+        "Implement useInvitationDeepLink hook for URL parameter extraction",
+        "Handle app state transitions (cold start vs warm start)",
+        "Add invitation processing queue for multiple rapid invitations"
+      ],
+      "acceptance_criteria": [
+        "App opens and processes invitation URLs correctly",
+        "Deep links work from browser, messages, and other apps",
+        "Invitation parameters extracted and validated properly",
+        "Users guided through pairing flow when invitation URL clicked",
+        "Multiple invitation URLs handled gracefully",
+        "Proper error handling for malformed or expired invitations"
+      ],
+      "implementation_notes": "Reference connections.md lines 68-98 for URL format and extraction logic. Test with actual edda.one invitation URLs.",
+      "estimated_complexity": "medium", 
+      "estimated_hours": 4
+    }
+  },
+  {
+    "id": "improve-connection-error-handling",
+    "priority": "medium",
+    "status": "pending",
+    "title": "Implement Comprehensive Connection Error Handling",
+    "description": "Add robust error recovery throughout the connection and pairing flow with user-friendly feedback",
+    "details": {
+      "files_to_modify": [
+        "src/models/network/CommServerProtocolHandler.ts",
+        "src/models/network/PeerToPeerPairingHandler.ts", 
+        "src/models/contacts/InviteManager.ts",
+        "src/services/ConnectionErrorService.ts"
+      ],
+      "key_changes": [
+        "Add specific error types and codes for different failure scenarios",
+        "Implement retry logic for network timeouts and temporary failures",
+        "Add error recovery for authentication failures and key mismatches",
+        "Create ConnectionErrorService for centralized error handling",
+        "Add user-friendly error messages with suggested actions",
+        "Implement connection cleanup on failures"
+      ],
+      "acceptance_criteria": [
+        "Network failures trigger appropriate retry attempts",
+        "Authentication errors provide clear guidance to users",
+        "Timeout errors handled gracefully with user notification", 
+        "Invalid invitations show helpful error messages",
+        "Connection resources cleaned up properly on failures",
+        "Error logs provide sufficient debugging information",
+        "Users can easily retry failed connection attempts"
+      ],
+      "implementation_notes": "Reference connections.md lines 405-456 for common issues. Add comprehensive logging for debugging connection problems.",
+      "estimated_complexity": "medium",
+      "estimated_hours": 5
+    }
+  },
+  {
+    "id": "add-pairing-progress-ui",
+    "priority": "medium", 
+    "status": "pending",
+    "title": "Implement Pairing Progress UI and User Feedback",
+    "description": "Provide detailed user feedback during connection establishment with progress indicators and status updates",
+    "details": {
+      "files_to_modify": [
+        "src/components/pairing/PairingProgressModal.tsx",
+        "src/components/pairing/ConnectionStepIndicator.tsx",
+        "src/hooks/usePairingProgress.ts",
+        "app/(screens)/contacts/add.tsx"
+      ],
+      "key_changes": [
+        "Create PairingProgressModal with step-by-step progress display",
+        "Add ConnectionStepIndicator component showing current pairing phase",
+        "Implement usePairingProgress hook for state management",
+        "Add progress tracking for: CommServer connection, authentication, identity exchange, contact creation",
+        "Include estimated time remaining and current step descriptions",
+        "Add ability to cancel pairing process"
+      ],
+      "acceptance_criteria": [
+        "Users see clear progress indication during pairing",
+        "Each major step (CommServer, auth, identity, contact) shown",
+        "Progress modal displays current status and estimated time",
+        "Users can cancel pairing process at any time",
+        "Success state shows completed pairing with contact preview",
+        "Error states display in progress modal with retry options"
+      ],
+      "implementation_notes": "Reference connections.md lines 466-478 for expected log sequence. Map protocol steps to user-friendly progress indicators.",
+      "estimated_complexity": "medium",
+      "estimated_hours": 4
+    }
+  },
+  {
+    "id": "implement-connection-persistence",
+    "priority": "medium",
+    "status": "pending", 
+    "title": "Add Connection Persistence and Reconnection Logic",
+    "description": "Handle network interruptions and app state changes with automatic reconnection for active pairing sessions",
+    "details": {
+      "files_to_modify": [
+        "src/models/network/NetworkPlugin.ts",
+        "src/services/ConnectionPersistenceService.ts",
+        "src/hooks/useNetworkState.ts",
+        "src/models/network/ReconnectionManager.ts"
+      ],
+      "key_changes": [
+        "Create ConnectionPersistenceService for storing active pairing states",
+        "Add ReconnectionManager for automatic WebSocket reconnection",
+        "Implement useNetworkState hook for monitoring connectivity",
+        "Add pairing state persistence across app backgrounding/foregrounding",
+        "Handle WebSocket reconnection with protocol state restoration",
+        "Add connection health monitoring and automatic recovery"
+      ],
+      "acceptance_criteria": [
+        "Active pairing sessions survive network interruptions", 
+        "App backgrounding/foregrounding preserves pairing state",
+        "WebSocket connections automatically reconnect when possible",
+        "Protocol state restored correctly after reconnection",
+        "Users notified of connection issues and recovery attempts",
+        "Failed reconnections trigger appropriate fallback actions"
+      ],
+      "implementation_notes": "Focus on preserving pairing tokens and protocol state. Reference connections.md lines 346-368 for WebSocket management patterns.",
+      "estimated_complexity": "high",
+      "estimated_hours": 6
+    }
+  },
+  {
+    "id": "add-invitation-revocation",
+    "priority": "medium",
+    "status": "pending",
+    "title": "Implement Invitation Revocation and Management",
+    "description": "Provide mechanism to cancel pending invitations and manage active invitation tokens",
+    "details": {
+      "files_to_modify": [
+        "src/models/contacts/InviteManager.ts",
+        "src/components/contacts/ActiveInvitations.tsx",
+        "app/(screens)/contacts/invite.tsx",
+        "src/services/InvitationTokenService.ts"
+      ],
+      "key_changes": [
+        "Add token storage and management in InviteManager",
+        "Implement revokeInvitation method to invalidate tokens",
+        "Create ActiveInvitations component showing pending invitations",
+        "Add invitation expiration handling (15 minute default)",
+        "Implement InvitationTokenService for centralized token management",
+        "Add UI for viewing and revoking active invitations"
+      ],
+      "acceptance_criteria": [
+        "Users can view list of active/pending invitations",
+        "Invitations can be manually revoked before acceptance",
+        "Expired invitations automatically cleaned up",
+        "Revoked invitations reject connection attempts",
+        "Invitation creation UI shows current active invitations",
+        "Clear indication of invitation status and expiration times"
+      ],
+      "implementation_notes": "Reference connections.md lines 60-65 for token storage patterns. Coordinate with CommServer for token validation.",
+      "estimated_complexity": "low",
+      "estimated_hours": 3
+    }
+  },
+  {
+    "id": "add-comprehensive-testing",
+    "priority": "medium",
+    "status": "pending",
+    "title": "Implement Comprehensive Connection Flow Testing",
+    "description": "Add unit, integration, and end-to-end tests for the complete connection and pairing flow",
+    "details": {
+      "files_to_modify": [
+        "src/tests/ConnectionFlowIntegrationTest.ts",
+        "src/tests/InviteManagerTest.ts",
+        "src/tests/CommServerProtocolTest.ts",
+        "src/tests/PairingEndToEndTest.ts"
+      ],
+      "key_changes": [
+        "Create ConnectionFlowIntegrationTest for complete pairing flow",
+        "Add InviteManagerTest for invitation creation and parsing",
+        "Implement CommServerProtocolTest with mock CommServer",
+        "Create PairingEndToEndTest with actual edda.one instance",
+        "Add error scenario testing for various failure modes",
+        "Implement test utilities for connection mocking and state verification"
+      ],
+      "acceptance_criteria": [
+        "Unit tests cover all major components with >80% coverage",
+        "Integration tests verify complete pairing flow",
+        "End-to-end tests work with real edda.one instances",
+        "Error scenario tests cover network failures and invalid data",
+        "Tests can be run in CI/CD pipeline",
+        "Mock CommServer implementation for reliable testing"
+      ],
+      "implementation_notes": "Reference connections.md lines 516-520 for testing strategy. Use existing test patterns from the codebase.",
+      "estimated_complexity": "high",
+      "estimated_hours": 8
+    }
+  },
+  {
+    "id": "optimize-multi-connection-support",
+    "priority": "low",
+    "status": "pending",
+    "title": "Add Multi-Connection Support and Management",
+    "description": "Enable simultaneous connections to multiple peers and proper connection lifecycle management",
+    "details": {
+      "files_to_modify": [
+        "src/models/network/NetworkPlugin.ts",
+        "src/models/network/ConnectionManager.ts",
+        "src/services/MultiConnectionService.ts",
+        "src/components/network/ConnectionStatus.tsx"
+      ],
+      "key_changes": [
+        "Implement ConnectionManager for tracking multiple active connections",
+        "Add MultiConnectionService for coordinating simultaneous pairings",
+        "Update NetworkPlugin to handle multiple WebSocket connections",
+        "Create ConnectionStatus component for monitoring active connections",
+        "Add connection priority and resource management",
+        "Implement connection cleanup and resource limiting"
+      ],
+      "acceptance_criteria": [
+        "Multiple simultaneous pairing sessions supported",
+        "Connection resources properly managed and cleaned up",
+        "Priority system for handling resource conflicts",
+        "UI shows status of all active connections",
+        "Performance remains stable with multiple connections",
+        "Memory usage stays within reasonable bounds"
+      ],
+      "implementation_notes": "Build on existing NetworkPlugin patterns. Consider resource limits for mobile device constraints.",
+      "estimated_complexity": "high", 
+      "estimated_hours": 7
+    }
+  }
+]

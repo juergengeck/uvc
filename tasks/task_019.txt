@@ -1,0 +1,11 @@
+# Task ID: 19
+# Title: Refactor AIAssistantModel to Extract LLMManager Lifecycle Management
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Move all LLMManager lifecycle management from AIAssistantModel into a dedicated LLMManager class. This includes managing model loading, unloading, and metadata storage.
+# Details:
+To achieve this task, we need to refactor the existing AIAssistantModel to extract the LLMManager lifecycle management functionality into a separate LLMManager class. This involves identifying the key properties and methods that are currently handled by AIAssistantModel and moving them to the new LLMManager class. We will also need to update the AIAssistantModel to inject the LLMManager instance instead of managing it directly. Key steps include: 1) Identifying and extracting all LLM-related properties and methods from AIAssistantModel, 2) Creating a new LLMManager class with its own lifecycle management functionality, and 3) Updating AIAssistantModel to use the new LLMManager instance for model loading and unloading. Additionally, we need to ensure proper relationships between LLMManager and other models, such as Person, Profile, and Someone, to maintain data consistency and integrity.
+
+# Test Strategy:
+1) Verify that the new LLMManager class correctly manages model loading and unloading, 2) Test that the AIAssistantModel uses the new LLMManager instance correctly for model loading and unloading, 3) Ensure that proper relationships between LLMManager and other models are maintained, and 4) Perform thorough testing of the refactored code to ensure data consistency and integrity.

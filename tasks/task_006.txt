@@ -1,0 +1,11 @@
+# Task ID: 6
+# Title: Validate InvitationURL Generation
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: Ensure invitation URLs are properly formatted and compatible between lama and edda
+# Details:
+InviteManager generates proper edda.one URLs with correct format: https://edda.one/invites/invitePartner/?invited=true#[encoded-json]. JSON contains token, publicKey, and url fields. Verified URL parsing works correctly.
+
+# Test Strategy:
+Generate URLs from lama, verify they contain proper JSON structure, test parsing in edda.one, ensure no encoding/decoding issues.

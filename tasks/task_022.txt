@@ -1,0 +1,31 @@
+# Task ID: 22
+# Title: Fix Node.js Buffer Import Issues in Expo Environment
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Resolve bundling errors caused by Node.js buffer imports in React Native/Expo environment by ensuring all buffer operations use the expo-compatible buffer implementation from one.core.
+# Details:
+Fix the recurring Node.js buffer import errors that prevent the app from bundling. The errors show files attempting to import from 'buffer' which is not available in React Native. All buffer operations should use the expo-compatible implementation from @refinio/one.core/lib/system/expo/index.js. Issues identified:
+
+1. Some files may still have direct 'buffer' imports despite being updated
+2. Transitive dependencies (like react-native-svg) may be importing Node.js buffer
+3. Metro bundler cache may be serving stale module resolutions
+4. The enhanced buffer implementation in one.core may need validation
+
+Errors seen:
+- "You attempted to import the Node standard library module 'buffer' from [various files]"
+- Files mentioned: InviteManager.ts, DiscoveryProtocol.ts, CredentialVerifier.ts, react-native-svg
+
+Approach:
+1. Audit all buffer imports across the codebase
+2. Check for any remaining Node.js buffer imports
+3. Investigate transitive dependency issues
+4. Validate the enhanced one.core buffer implementation
+5. Clear Metro cache and test bundling
+
+# Test Strategy:
+1. Search entire codebase for any remaining 'buffer' imports
+2. Verify all files use @refinio/one.core/lib/system/expo buffer implementation
+3. Test app bundling with Metro cache cleared
+4. Verify buffer operations work correctly in Expo environment
+5. Test on both iOS and Android builds

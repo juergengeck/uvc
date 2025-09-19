@@ -1,0 +1,31 @@
+# Ignore everything by default
+*
+
+# But include these files/folders
+!src/**
+!ios/**
+!android/**
+!lib/**
+!react-native-udp-direct.podspec
+!package.json
+!README.md
+!LICENSE
+!CONTRIBUTING.md
+
+# Exclude test files
+**/__tests__
+**/__fixtures__
+**/__mocks__
+**/.*
+
+# Exclude build artifacts
+ios/build
+android/build
+example/
+
+# Exclude config files that aren't needed in the package
+tsconfig.json
+tsconfig.build.json
+.eslintrc.js
+.prettierrc.js
+jest.config.js

@@ -1,0 +1,126 @@
+{
+  "add_contact": {
+    "title": "Add Contact",
+    "identifier": "Contact ID",
+    "add": "Add Contact",
+    "share_my_contact": "Share My Contact",
+    "addFailed": "Failed to add contact",
+    "standard_title": "Contact Information",
+    "advanced_title": "Advanced Options",
+    "name": "Name",
+    "email": "Email Address",
+    "hash_identifier": "Hash Identifier",
+    "hash_placeholder": "For advanced users only",
+    "errors": {
+      "system_unavailable": "Contact system is not available",
+      "email_required": "Email address is required",
+      "failed": "Failed to add contact",
+      "invalid_hash": "Invalid hash identifier",
+      "not_retrievable": "Contact was added but cannot be retrieved. This may indicate an issue with the contact system.",
+      "invalid_qr": "Invalid QR code data",
+      "processing_failed": "Failed to process QR code"
+    }
+  },
+  "share_contact": {
+    "title": "Share Contact",
+    "description": "Let others scan this QR code to add you as a contact.",
+    "share_message": "Add me as a contact in LAMA.ONE:",
+    "share_link": "Share Link",
+    "share_text": "Share as Text"
+  },
+  "scanner": {
+    "requesting_permission": "Requesting camera permission...",
+    "no_access": "No access to camera. Camera permission is required to scan QR codes.",
+    "instructions": "Point the camera at a contact QR code"
+  },
+  "invite": {
+    "title": "Invite",
+    "description": "Share your contact information with others.",
+    "generating": "Generating QR code...",
+    "generation_error": "Failed to generate QR code",
+    "no_data": "No data available",
+    "scan_to_connect": "Scan to connect",
+    "scan_qr_code": "Scan this QR code to connect with me",
+    "copy_link": "Copy Link",
+    "regenerate_code": "Regenerate Code",
+    "share_message": "Scan this QR code to connect with me"
+  },
+  "list": {
+    "title": "Contacts",
+    "search": "Search contacts...",
+    "unnamed": "Unnamed Contact",
+    "loading": "Loading contacts...",
+    "no_contacts": "No Contacts",
+    "no_connected": "No connected contacts",
+    "no_ai": "No AI assistants",
+    "no_people": "No people contacts",
+    "empty": "Your contact list is empty",
+    "no_search_results": "No contacts match your search",
+    "connections_count": "{{active}}/{{total}} connected",
+    "no_connections": "No connections",
+    "available_operations": "Available operations",
+    "open_editor": "Open Editor",
+    "editing_error": "Failed to load editing options"
+  },
+  "details": {
+    "title": "Contact Details",
+    "loading": "Loading contact details...",
+    "loading_title": "Loading Contact",
+    "error": "Error",
+    "error_title": "Contact Error",
+    "not_found": "Contact not found",
+    "not_found_title": "Contact Not Found",
+    "info": "Contact Information",
+    "contact_info": "Contact Information",
+    "connection_info": "Connection Details",
+    "technical_info": "Technical Information",
+    "contact_id": "Contact ID",
+    "person_id": "Person ID",
+    "someone_id": "Someone ID",
+    "profile_count": "Profile Count",
+    "active_connections": "Active Connections",
+    "last_seen": "Last Seen",
+    "you_badge": "YOU",
+    "ai_badge": "AI",
+    "edit": "Edit",
+    "delete": "Delete",
+    "connect": "Connect",
+    "errors": {
+      "not_available": "Contact system is not available",
+      "not_found": "Contact not found",
+      "no_profile": "Contact profile not found",
+      "loading": "Error loading contact details",
+      "delete": "Error deleting contact"
+    }
+  },
+  "contextMenu": {
+    "createTopic": "Create Topic"
+  },
+  "me": "Your Contact",
+  "others": "Other Contacts",
+  "noContacts": "No contacts available",
+  "noResults": "No contacts matching your search",
+  "unnamed": "Unnamed Contact",
+  "error": "Unable to load contacts",
+  "initializeChannel": "Fix Contacts",
+  "settings": {
+    "title": "Contacts",
+    "syncDeviceContacts": "Sync Device Contacts",
+    "syncDescription": "Import and keep your device contacts in sync",
+    "syncError": "Error syncing contacts",
+    "syncSuccess": "Successfully imported {{count}} contacts",
+    "permissionDenied": "Permission to access contacts was denied",
+    "noLeuteModel": "Contact system is not available"
+  },
+  "verifiableCredentials": {
+    "export": "Export Device Credentials",
+    "title": "Export Device Ownership Credentials",
+    "noDevices": "No ESP32 devices found in the network. Make sure devices are powered on and connected to the same network.",
+    "selectDevice": "Select a device to export credentials to:",
+    "refresh": "Refresh Devices",
+    "selectedDevice": "Selected Device: {{device}}",
+    "export": "Export Credentials",
+    "exportSuccess": "Credentials exported successfully!",
+    "exportFailed": "Failed to export credentials to device. Please try again."
+  }
+} 

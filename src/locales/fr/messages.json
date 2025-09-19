@@ -1,0 +1,11 @@
+{
+  "title": "Messages",
+  "topics": {
+    "title": "Sujets",
+    "empty": "Pas encore de sujets",
+    "add": "Ajouter un sujet"
+  },
+  "empty": "Pas encore de messages",
+  "loading": "Chargement des messages...",
+  "error": "Erreur lors du chargement des messages"
+} 

@@ -1,0 +1,11 @@
+# Task ID: 7
+# Title: Document Connection Architecture
+# Status: pending
+# Dependencies: 4, 5
+# Priority: low
+# Description: Create comprehensive documentation of the lama-edda connection architecture and protocols
+# Details:
+Document the complete connection flow: invitation creation, URL format, WebSocket handshake, encryption setup, message routing through CommServer, and troubleshooting common issues.
+
+# Test Strategy:
+Technical documentation review, ensure all connection components and flows are clearly documented for future maintenance.

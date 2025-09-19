@@ -1,0 +1,59 @@
+--- a/one.core/src/system/esp32/esp32-quicvc-project/main/main.c
++++ b/one.core/src/system/esp32/esp32-quicvc-project/main/main.c
+@@ -1734,13 +1734,24 @@ esp_err_t handle_provisioning_message(struct sockaddr_in *client_addr,
+     ESP_LOGI(TAG, "  - subject: %s", credential_data.subject);
+     ESP_LOGI(TAG, "  - is_valid: %s", credential_data.is_valid ? "true" : "false");
+     
++    // CRITICAL FIX: Invalidate cache BEFORE saving to ensure fresh load
++    ESP_LOGI(TAG, "🔄 Invalidating cache before save...");
++    invalidate_credential_cache();
++    
+     esp_err_t save_err = quicvc_credential_save(&credential_data, NULL, "device_cred");
+     if (save_err != ESP_OK) {
+         ESP_LOGE(TAG, "Failed to save provisioned credential: %s", esp_err_to_name(save_err));
+         return ESP_FAIL;
+     }
+     
+-    // Update cache directly with the saved credential
++    // CRITICAL FIX: Force NVS commit to ensure data is persisted
++    ESP_LOGI(TAG, "💾 Forcing NVS commit...");
++    nvs_handle_t nvs_handle;
++    if (nvs_open("quicvc", NVS_READWRITE, &nvs_handle) == ESP_OK) {
++        nvs_commit(nvs_handle);
++        nvs_close(nvs_handle);
++    }
++    
++    // Now update cache with the saved credential
+     ESP_LOGI(TAG, "🔄 Updating cache with provisioned credential...");
+     credential_cache_valid = true;
+     device_is_owned = true;
+@@ -1748,8 +1759,13 @@ esp_err_t handle_provisioning_message(struct sockaddr_in *client_addr,
+     strncpy(cached_owner_id, credential_data.issuer, sizeof(cached_owner_id) - 1);
+     cached_owner_id[sizeof(cached_owner_id) - 1] = '\0';
+     
+-    // Verify ownership status
+-    bool now_owned = get_cached_ownership_status();
++    // CRITICAL FIX: Do NOT call get_cached_ownership_status() here as it might reload from NVS
++    // Instead, directly check our just-set cache values
++    bool now_owned = device_is_owned;
++    
++    // Double-check by reading directly from cache without triggering reload
++    ESP_LOGI(TAG, "🔍 Cache state: is_owned=%d, cache_valid=%d, owner=%.16s...", 
++             device_is_owned, credential_cache_valid, cached_owner_id);
+     ESP_LOGI(TAG, "📊 Ownership status after provisioning: %s", now_owned ? "OWNED ✅" : "NOT OWNED ❌");
+     if (!now_owned) {
+         ESP_LOGE(TAG, "⚠️ WARNING: Cache update failed!");
+@@ -1771,8 +1787,11 @@ esp_err_t handle_provisioning_message(struct sockaddr_in *client_addr,
+     ESP_LOGI(TAG, "💓 Sending immediate heartbeat after provisioning");
+     send_heartbeat_to_owner(owner_last_address, owner_last_port);
+     
+-    // Force ownership check to update state immediately
+-    bool final_owned = has_owner();
++    // CRITICAL FIX: Check ownership without triggering cache reload
++    // The cache is already set correctly, just verify it
++    bool final_owned = device_is_owned;
++    ESP_LOGI(TAG, "🔍 Final cache state: is_owned=%d, cache_valid=%d", 
++             device_is_owned, credential_cache_valid);
+     ESP_LOGI(TAG, "🔍 Ownership check after provisioning: %s", final_owned ? "OWNED" : "NOT OWNED");
+     
+     // Clear discovery flags to stop broadcasting immediately

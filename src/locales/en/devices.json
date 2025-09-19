@@ -1,0 +1,57 @@
+{
+  "devices": {
+    "title": "Device List",
+    "discoveryActive": "Discovery Active",
+    "discoveryInactive": "Discovery Inactive",
+    "startingDiscovery": "Starting Discovery...",
+    "stoppingDiscovery": "Stopping Discovery...",
+    "discoveryProtocols": "Discovery Protocols",
+    "searchPlaceholder": "Search devices",
+    "allDevices": "All Devices",
+    "online": "Online",
+    "offline": "Offline",
+    "neverSeen": "Never",
+    "lastSeen": "Last seen",
+    "noDevicesFound": "No devices found",
+    "noMatchingDevices": "No devices match your search",
+    "discoveringDevices": "Searching for devices...",
+    "enableDiscovery": "Enable Discovery",
+    "error": {
+      "title": "Device Error",
+      "toggleEnabled": "Failed to toggle device",
+      "remove": "Failed to remove device",
+      "toggleDiscovery": "Failed to toggle discovery",
+      "ledToggleFailed": "Failed to toggle LED",
+      "btleToggleFailed": "Failed to toggle Bluetooth discovery"
+    },
+    "remove": {
+      "title": "Remove Device",
+      "confirm": "Are you sure you want to remove {{name}}?"
+    },
+    "connect": {
+      "title": "Connect to Device",
+      "inProgress": "Connecting to {{name}}..."
+    },
+    "details": {
+      "title": "Device Details"
+    },
+    "credential": {
+      "title": "Credential Device",
+      "confirm": "Send credential to {{name}}?"
+    },
+    "owner": "Owner",
+    "type": "Type",
+    "removeOwnership": {
+      "title": "Remove Ownership",
+      "confirm": "Remove ownership from {{name}}?",
+      "success": "Ownership removed. The device will restart."
+    },
+    "success": {
+      "title": "Success"
+    },
+    "warning": {
+      "title": "Warning",
+      "deviceNoResponse": "{{name}} did not respond to the ownership removal command. The device may still show as owned until it processes the command."
+    }
+  }
+} 

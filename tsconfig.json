@@ -1,0 +1,47 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "jsx": "react-native",
+    "downlevelIteration": true,
+    "target": "es2015",
+    "module": "esnext",
+    "paths": {
+      "@app/*": [
+        "app/*"
+      ],
+      "@src/*": [
+        "src/*"
+      ],
+      "@/*": [
+        "src/*"
+      ],
+      "@lama/llama-module": ["llama-module/src"]
+    },
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "customConditions": [],
+    "allowSyntheticDefaultImports": true,
+    "types": ["react", "react-native", "node"],
+    "typeRoots": ["./node_modules/@types"],
+    "skipLibCheck": true,
+    "noImplicitAny": false
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "llama-module/src/*.d.ts",
+    "@OneObjectInterfaces.d.ts",
+    "@OneCoreTypes.d.ts",
+    "@OneCoreErrors.d.ts",
+    "@OneCoreObjects.d.ts"
+  ],
+  "exclude": [
+    "src/@OneObjectInterfaces.d.ts",
+    "src/types/@OneObjectInterfaces.d.ts",
+    "one.leute.replicant/**/*",
+    "examples/**/*"
+  ]
+}

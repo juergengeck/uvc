@@ -1,0 +1,62 @@
+# Task ID: 30
+# Title: Fix CommServer Protocol Phase Implementation
+# Status: in-progress
+# Dependencies: None
+# Priority: high
+# Description: Fix the CommServer protocol phase implementation to properly handle authentication, encryption, and pairing protocol exchange.
+# Details:
+**ACTUAL ROOT CAUSE IDENTIFIED**: The issue was not route lifecycle management but incomplete CommServer protocol implementation.
+
+**PROTOCOL PHASES IMPLEMENTED**:
+✅ **Registration Phase**: Working correctly - sends register command with public key
+✅ **Authentication Phase**: Working correctly - handles challenge/response with proper key matching
+🔧 **Encryption Phase**: Fixed Buffer compatibility issue for React Native
+🔄 **Pairing Phase**: In progress - implementing person/instance exchange protocol
+
+**KEY FIXES COMPLETED**:
+1. **Authentication Context Storage**: Fixed AuthenticationPhase to store symmetric key in context
+2. **Encryption Setup**: Fixed EncryptionPhase to read authentication context and enable encryption
+3. **Buffer Compatibility**: Replaced Buffer.from() with React Native compatible hex conversion
+4. **Key Mismatch Resolution**: Fixed Instance vs Person key usage in authentication
+
+**CURRENT STATUS**:
+- Authentication succeeds and generates symmetric key
+- Encryption context is properly passed between phases  
+- NetworkPlugin encryption support implemented
+- Next: Complete person/instance exchange protocol after encryption
+
+**PROTOCOL SEQUENCE**:
+1. Registration → Authentication → Encryption → Pairing
+2. Pairing includes: person_id_object ↔ keys_object ↔ instance_id_object exchange
+3. After pairing: Normal encrypted message exchange
+
+# Test Strategy:
+1. Verify all protocol phases complete successfully
+2. Test encryption/decryption of messages after authentication
+3. Confirm person/instance exchange works with edda.one
+4. Test bidirectional pairing and message exchange
+
+# Subtasks:
+## 1. Complete Encryption Phase Implementation [in-progress]
+### Dependencies: None
+### Description: Ensure encryption is properly enabled after authentication and can decrypt peer messages
+### Details:
+Fixed Buffer compatibility issue. Need to verify encryption/decryption works with incoming binary messages from peer.
+
+## 2. Implement Person/Instance Exchange Protocol [pending]
+### Dependencies: Encryption Phase
+### Description: Complete the one.models person/instance exchange protocol after encryption setup
+### Details:
+Implement simultaneous bidirectional exchange:
+- Send person_id_object, wait for peer's person_id_object
+- Send keys_object, wait for peer's keys_object  
+- Perform key challenge/response (binary messages)
+- Send instance_id_object, wait for peer's instance_id_object
+
+## 3. Test End-to-End Protocol with edda.one [pending] 
+### Dependencies: Person/Instance Exchange
+### Description: Validate complete protocol works with live one.leute instance
+### Details:
+Test invitation acceptance from edda.one, verify all protocol phases complete, confirm bidirectional messaging works.
+
+

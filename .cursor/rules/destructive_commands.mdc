@@ -1,0 +1,46 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# CRITICAL: Destructive Command Safety Rule
+
+## Mandatory Permission Protocol
+
+**NEVER execute destructive commands without explicit user permission:**
+
+- `rm -rf` (recursive deletion)
+- `rm` (file deletion) 
+- `mv` (moving/renaming that could overwrite)
+- `cp` with overwrite potential
+- `git reset --hard`
+- `git clean -fd`
+- `npm install` (can overwrite modified node_modules)
+- Any command that could destroy user work
+
+## Required Process
+
+1. **STOP** before executing any destructive command
+2. **ASK** the user explicitly: "This command will delete/modify [specific files/directories]. Are you sure you want me to proceed?"
+3. **WAIT** for explicit confirmation
+4. **ONLY THEN** execute if confirmed
+
+## Historical Context
+
+The agent has TWICE destroyed user work by carelessly running `rm -rf node_modules/@refinio/one.models` without permission, causing massive data loss of intentional modifications. This must never happen again.
+
+## Examples
+
+❌ **WRONG:**
+```bash
+rm -rf node_modules/@refinio/one.models
+```
+
+✅ **CORRECT:**
+```
+I need to run `rm -rf node_modules/@refinio/one.models` which will permanently delete this directory and any modifications you may have made. This cannot be undone. Are you absolutely sure you want me to proceed?
+```
+
+## No Exceptions
+
+This rule has NO exceptions. Always ask first, even if you think the operation is "safe" or "necessary".

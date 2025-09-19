@@ -1,0 +1,43 @@
+# Task ID: 15
+# Title: Fix database integrity violations in contact creation
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Fix database integrity violations by correcting one.core singleton access patterns, ensuring proper ONE object relationship patterns (Person → Profile → Someone), and integrating NetworkSettings correctly.
+# Details:
+This task involves fixing database integrity issues that prevent proper contact creation. Key areas include: 1) Correcting one.core singleton access patterns using proper getInstanceIdHash() calls, 2) Ensuring proper object relationship patterns (Person → Profile → Someone), 3) Adding duplicate checks to prevent database violations, 4) Integrating NetworkSettings correctly, and 5) Resolving TypeScript module resolution issues.
+
+# Test Strategy:
+1) Review existing database access patterns for correctness, 2) Verify database fixes resolve integrity violations, 3) Ensure proper contact creation sequence follows Person → Profile → Someone pattern, 4) Validate NetworkSettings integration works properly, 5) Check that TypeScript resolution issues are resolved.
+
+# Subtasks:
+## 15.1. Fix one.core singleton access using getInstanceIdHash() [pending]
+### Dependencies: None
+### Description: Implement corrected singleton access patterns for Person, Profile, and Someone models to resolve database integrity issues.
+### Details:
+Replace incorrect singleton access patterns with proper getInstanceIdHash() calls to prevent database corruption.
+
+## 15.2. Correct contact creation sequence (Person → Profile → Someone) [pending]
+### Dependencies: None
+### Description: Adjust the flow of creating profiles from persons and then creating someone objects with proper profileIdHash.
+### Details:
+Ensure proper object relationship patterns are followed during contact creation to maintain data integrity.
+
+## 15.3. Integrate NetworkSettings correctly [pending]
+### Dependencies: None
+### Description: Adapt NetworkSettingsService.acceptInvitationFromUrl() for proper contact creation validation.
+### Details:
+Fix NetworkSettings integration to work properly with corrected contact creation patterns.
+
+## 15.4. Implement duplicate checking in database storage [pending]
+### Dependencies: None
+### Description: Add checks to prevent duplicate entries of Person, Profile, and Someone objects.
+### Details:
+Add validation to prevent duplicate database entries that cause integrity violations.
+
+## 15.5. Resolve TypeScript linter issues [pending]
+### Dependencies: None
+### Description: Address module system complexity in one.core/one.models for dynamic imports and correct code resolution.
+### Details:
+Fix TypeScript module resolution issues that interfere with proper dependency resolution.
+

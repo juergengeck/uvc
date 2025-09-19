@@ -1,0 +1,49 @@
+# Task ID: 26
+# Title: Fix CommServer Registration Timing Issue
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: The mobile app\u2019s CommServer registration is working but timing out after 30 seconds. The registration actually completes later, causing the app to think it failed when it actually succeeded. This creates inconsistent state and broken invitation handling.
+# Details:
+1. Removed incorrect one:// URL format from InviteManager\n2. Fixed the invitation URL format mismatch: \n- Removed createInvitationUrl() method that generated wrong one://invite URLs\n- Removed parseInvitationUrl() method that parsed wrong one://invite URLs\n- Removed generateInvitationToken() method that was only used for wrong format\n- Now createInvitationUrl() delegates to generateInvitationUrl() which uses correct edda.one format\n3. All invitation URLs now use the consistent edda.one format: `https://edda.one/invites/invitePartner/?invited=true#${encodedJsonData}`\n4. This should fix the invitation format mismatch between mobile and web apps.\n5. Removed increased maxWaitTime from CommServerRegistration class\n6. Reverted progress logging as timing issue is not the root cause\n7. Removed elapsed time reporting for both success and timeout cases
+
+# Test Strategy:
+Implement changes focusing on fixing the actual invitation flow. This includes testing URL parsing, handshake process verification, network layer compatibility checks (QUIC/UDP), detailed authentication steps, and ensuring both app layers are correctly aligned for communication.
+
+# Subtasks:
+## 26-0. Fix invitation URL format mismatch between mobile and web apps [completed]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 26-1. Investigate and resolve invitation URL handling issues [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 26-2. Verify handshake process after successful connection [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 26-3. Test network layer compatibility (QUIC/UDP) [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 26-4. Examine authentication and trust certificate problems [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 26-5. Ensure protocol compatibility between apps [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+

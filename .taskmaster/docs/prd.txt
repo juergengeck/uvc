@@ -1,0 +1,578 @@
+# LAMA.ONE - Local Federated AI Chat Platform
+## Product Requirements Document
+
+<context>
+# Overview  
+LAMA.ONE is a revolutionary local federated chat platform where AI models serve as first-class citizens alongside human users. Built on the proven one.core/one.models architecture, it enables private, decentralized conversations with local AI agents while maintaining complete data sovereignty and offline-first operation.
+
+The platform leverages local LLM inference, peer-to-peer networking, and cryptographic identity management to create a new paradigm where AI agents can participate naturally in conversations, form relationships, and contribute meaningfully to group discussions - all without relying on centralized servers or cloud services.
+
+# Core Features  
+## Local AI Citizens
+- **AI Identity Management**: AI models have their own cryptographic identities, profiles, and can form relationships with humans and other AIs
+- **Local LLM Inference**: Complete AI processing happens locally using llama.rn for privacy and autonomy
+- **AI-Human Conversations**: Natural conversation flows where AIs participate as equal participants in chat topics
+- **Model Marketplace**: Import, manage, and share AI models within the federated network
+
+## Federated Chat Network
+- **Peer-to-Peer Connectivity**: Direct device-to-device communication using QUIC/UDP protocols
+- **Local Mesh Networking**: Bluetooth Low Energy support for offline local networks
+- **Cross-Platform Sync**: Real-time synchronization across devices without central servers
+- **End-to-End Encryption**: Military-grade cryptographic security for all communications
+
+## Data Sovereignty
+- **Local-First Architecture**: All data stored locally with optional peer sharing
+- **CRDT Conflict Resolution**: Automatic handling of distributed data conflicts
+- **Offline Operation**: Full functionality without internet connectivity
+- **Zero-Trust Security**: Cryptographic verification of all identities and communications
+
+# User Experience  
+## User Personas
+- **Privacy-Conscious Users**: Individuals who want AI assistance without data surveillance
+- **Developers/Researchers**: Technical users building on the platform or studying AI behavior
+- **Community Groups**: Teams wanting private AI-assisted collaboration
+- **AI Enthusiasts**: Users experimenting with local LLMs and AI personalities
+
+## Key User Flows
+### AI Onboarding Flow
+1. User discovers and imports an AI model file
+2. System creates cryptographic identity for the AI
+3. User configures AI personality and capabilities
+4. AI joins the user's contact list as a "Someone"
+5. User can start conversations with the AI immediately
+
+### Federated Connection Flow
+1. Users discover each other via local discovery or pairing codes
+2. Cryptographic handshake establishes secure connection
+3. Users can share AI models and join group conversations
+4. AIs from different users can interact in shared topics
+
+### Group AI Conversations
+1. Multiple humans and AIs participate in the same topic
+2. Each participant (human or AI) has a distinct identity
+3. Conversation flows naturally with AI contributions
+4. Full conversation history maintained locally for all participants
+
+## UI/UX Considerations
+- **Unified Contact List**: Humans and AIs displayed together as "Someones"
+- **Visual AI Distinction**: Clear indicators for AI vs human participants
+- **Model Management Interface**: Easy import, configuration, and management of AI models
+- **Connection Status**: Real-time indication of federated connection health
+- **Privacy Controls**: Granular control over data sharing and AI model access
+</context>
+
+<PRD>
+# Technical Architecture  
+## System Components
+### Core Infrastructure (one.core/one.models)
+- **ObjectRecipes**: Type system for all data structures (Person, Profile, Someone, Topic, Message)
+- **ChannelManager**: Real-time communication channels with CRDT synchronization
+- **LeuteModel**: Identity and contact management for humans and AIs
+- **ConnectionsModel**: Federated peer-to-peer connection management
+- **TopicModel**: Chat rooms supporting mixed human/AI participation
+
+### AI Integration Layer
+- **LlamaModel**: Direct interface to llama.rn native module for local inference
+- **LLMManager**: AI model metadata, storage, and lifecycle management
+- **AIAssistantModel**: Coordination between chat topics and AI responses
+- **AI Identity System**: Cryptographic identity creation and management for AI models
+
+### Native Networking Stack
+- **QuicModel**: High-performance UDP/QUIC transport for federated communication
+- **DeviceDiscoveryModel**: Local device discovery and peer connection establishment
+- **BleModel** (Planned): Bluetooth Low Energy for offline mesh networking
+- **PairingService**: Secure cryptographic handshake for new connections
+
+### Platform Integration
+- **React Native TurboModules**: High-performance native code integration
+- **Expo Prebuild Architecture**: Clean separation of native modules and JS code
+- **Cross-Platform Compatibility**: iOS and Android support with platform-specific optimizations
+
+## Data Models
+### AI Citizen Structure
+```typescript
+interface LLM {
+  $type$: 'LLM';
+  name: string;
+  personId: string;           // Cryptographic identity for the AI
+  filename: string;           // Local model file path
+  modelType: 'local';
+  capabilities: Array<'chat' | 'inference'>;
+  
+  // Model parameters
+  temperature: number;
+  maxTokens: number;
+  contextSize: number;
+  
+  // Metadata
+  active: boolean;
+  lastUsed: string;
+  usageCount: number;
+  relationships: string[];    // Connected humans/AIs
+}
+```
+
+### Conversation Participants
+- **Person**: Human users with cryptographic identities
+- **Profile**: User profile information and preferences  
+- **Someone**: Unified contact representation (human or AI)
+- **Topic**: Chat rooms with mixed participation
+- **Message**: Individual messages with sender identity and content
+
+## APIs and Integrations
+### Internal APIs
+- **AI Model Loading**: `LlamaModel.initialize()`, `LlamaModel.generate()`
+- **Identity Management**: `LeuteModel.addSomeoneElse()`, `ProfileModel.constructWithNewProfile()`
+- **Chat Operations**: `TopicModel.sendMessage()`, `ChannelManager.subscribe()`
+- **Connection Management**: `PairingService.initiateConnection()`, `ConnectionsModel.getConnections()`
+
+### External Integration Points
+- **Model Import**: File system integration for importing .gguf model files
+- **Network Discovery**: Platform networking APIs for peer discovery
+- **Cryptographic Services**: Device keychain for secure key storage
+- **Background Processing**: Platform background execution for message handling
+
+## Infrastructure Requirements
+### Local Device Requirements
+- **iOS 15+ / Android API 23+**: Modern platform support for native modules
+- **4GB+ RAM**: Sufficient memory for local LLM inference
+- **2GB+ Storage**: Space for AI models and local data
+- **Network Capability**: WiFi or mobile data for federated connections
+
+### Networking Infrastructure
+- **UDP Port 49497**: Designated port for QUIC protocol communication
+- **Local Network Discovery**: mDNS/Bonjour for same-network device discovery
+- **NAT Traversal**: STUN/TURN support for cross-network connections
+- **Bluetooth LE**: Local mesh networking when internet unavailable
+
+# Development Roadmap  
+## Phase 1: AI Foundation (MVP)
+### Core AI Integration
+- [ ] Complete llama.rn native module integration with TurboModule architecture
+- [ ] Implement LlamaModel with proper initialization, text generation, and cleanup
+- [ ] Create AI identity system with cryptographic Person/Profile/Someone creation
+- [ ] Establish AI-to-contact relationships through LeuteModel integration
+- [ ] Basic chat interface with single AI model conversations
+
+### Essential Infrastructure  
+- [ ] Stabilize one.core object creation patterns for consistent AI identities
+- [ ] Implement proper error handling and model validation
+- [ ] Create model import and management UI
+- [ ] Basic conversation interface with AI response generation
+- [ ] Local model storage and metadata management
+
+**Success Criteria**: Users can import a local AI model, create conversations, and chat naturally with AI agents that maintain persistent identities.
+
+## Phase 2: Federated Networking
+### Peer-to-Peer Foundation
+- [ ] Complete QuicModel implementation with reliable UDP transport
+- [ ] Implement DeviceDiscoveryModel for local network device discovery
+- [ ] Stabilize PairingService for secure connection establishment
+- [ ] ConnectionsModel integration for persistent peer relationships
+- [ ] Cross-device AI model sharing capabilities
+
+### Multi-User Chat Support
+- [ ] TopicModel enhancement for mixed human/AI participation
+- [ ] ChannelManager CRDT synchronization for distributed conversations  
+- [ ] Conflict resolution for concurrent message delivery
+- [ ] Real-time status indicators for connection health
+- [ ] Group conversation management interface
+
+**Success Criteria**: Users can discover and connect to peers, share AI models across devices, and participate in group conversations with multiple humans and AIs.
+
+## Phase 3: Advanced AI Capabilities
+### Enhanced AI Features
+- [ ] Multiple AI model support in single conversations
+- [ ] AI personality configuration and customization
+- [ ] AI-to-AI communication and interaction patterns
+- [ ] Context sharing between AI models
+- [ ] Advanced prompt engineering and conversation flow control
+
+### Model Ecosystem
+- [ ] AI model marketplace and discovery
+- [ ] Model versioning and update management
+- [ ] Community model sharing and ratings
+- [ ] Model performance monitoring and optimization
+- [ ] Custom model fine-tuning support
+
+**Success Criteria**: Rich ecosystem of AI models with distinct personalities that can interact naturally with each other and maintain long-term conversation context.
+
+## Phase 4: Mesh Networking & Autonomy
+### Offline Capabilities
+- [ ] Bluetooth Low Energy mesh networking implementation
+- [ ] Offline conversation synchronization
+- [ ] Local-only AI model operation
+- [ ] Peer-to-peer model distribution over BLE
+- [ ] Autonomous AI operation without human intervention
+
+### Advanced Federation
+- [ ] Cross-platform compatibility with one.leute web interface
+- [ ] Scalable network topology for large federated groups
+- [ ] Advanced cryptographic features and privacy controls
+- [ ] AI agent persistence and autonomous behavior
+- [ ] Integration with external systems and protocols
+
+**Success Criteria**: Fully autonomous AI agents operating in offline mesh networks with sophisticated interaction patterns and persistent behavior.
+
+# Logical Dependency Chain
+## Foundation Layer (Build First)
+1. **Native Module Stability**: Complete llama.rn TurboModule implementation with proper Promise handling
+2. **AI Identity Creation**: Reliable Person/Profile/Someone object creation for AI models
+3. **Basic AI Chat**: Single-user AI conversations with persistent model identities
+4. **Model Management**: Import, storage, and lifecycle management of local AI models
+
+## Networking Layer (Build Second)  
+5. **UDP/QUIC Transport**: Stable peer-to-peer communication foundation
+6. **Device Discovery**: Local network device discovery and connection establishment
+7. **Secure Pairing**: Cryptographic handshake and connection establishment
+8. **Basic Federation**: Two-device communication with AI model sharing
+
+## Collaboration Layer (Build Third)
+9. **Multi-User Topics**: Group conversations with mixed human/AI participation
+10. **Real-Time Sync**: CRDT-based synchronization of conversation state
+11. **AI Interaction**: AI-to-AI communication within group conversations
+12. **Connection Management**: Robust handling of connection state and recovery
+
+## Enhancement Layer (Build Fourth)
+13. **Advanced AI Features**: Personality customization, context sharing, autonomous behavior
+14. **Mesh Networking**: Bluetooth LE support for offline operation
+15. **Model Ecosystem**: Marketplace, versioning, and community features
+16. **Cross-Platform Integration**: Compatibility with one.leute and external systems
+
+# Risks and Mitigations  
+## Technical Challenges
+### AI Model Integration Complexity
+- **Risk**: Native module integration issues, memory management problems, model loading failures
+- **Mitigation**: Incremental testing, comprehensive error handling, fallback mechanisms for model failures
+- **Current Status**: Partial implementation with known issues in TurboModule registration
+
+### Object Relationship Management  
+- **Risk**: Inconsistent Person/Profile/Someone creation leading to orphaned AI identities
+- **Mitigation**: Strict creation sequence validation, automated relationship verification, comprehensive testing of object creation patterns
+- **Current Status**: Known issues with missing private keys and object creation sequence
+
+### Federated Networking Reliability
+- **Risk**: Connection failures, NAT traversal issues, synchronization conflicts
+- **Mitigation**: Robust retry mechanisms, fallback protocols, comprehensive connection state management
+- **Current Status**: Basic QUIC implementation working, pairing service has recent fixes
+
+## Product-Market Fit
+### Privacy-First AI Adoption
+- **Risk**: Users may prefer convenience of cloud AI over local complexity
+- **Mitigation**: Emphasize privacy benefits, provide smooth onboarding experience, demonstrate unique AI interaction capabilities
+- **Strategy**: Target privacy-conscious early adopters and demonstrate clear value proposition
+
+### Technical Complexity Barrier
+- **Risk**: Model import and management too complex for average users  
+- **Mitigation**: Simplified model marketplace, one-click installations, guided setup process
+- **Strategy**: Focus on developer/enthusiast community first, then simplify for broader adoption
+
+## Resource Constraints
+### Device Performance Requirements
+- **Risk**: Local AI inference too demanding for mobile devices
+- **Mitigation**: Model size optimization, efficient memory management, progressive enhancement based on device capabilities
+- **Strategy**: Support range of model sizes from lightweight to high-capability
+
+### Development Complexity
+- **Risk**: Complex architecture delays delivery and increases bugs
+- **Mitigation**: Incremental development approach, extensive testing at each phase, clear architectural boundaries
+- **Strategy**: Build minimal viable features first, add complexity only when foundation is stable
+
+# Appendix  
+## Research Findings
+### Local AI Performance
+- Modern mobile devices can run 7B parameter models effectively
+- Memory usage optimization critical for stable operation
+- Quantized models provide good performance/quality tradeoff
+
+### Federated Networking Patterns
+- QUIC protocol provides superior performance for real-time communication
+- Local discovery protocols essential for seamless device pairing
+- CRDT synchronization enables robust distributed state management
+
+### AI Identity and Relationships
+- Cryptographic identities enable verifiable AI authenticity
+- Persistent AI personalities require careful context management
+- AI-to-AI interaction patterns show emergent collaborative behaviors
+
+## Technical Specifications
+### Supported AI Model Formats
+- **GGUF Format**: Primary support for llama.cpp compatible models
+- **Quantization Levels**: Q4_0, Q4_1, Q8_0 for different performance/quality tradeoffs
+- **Model Sizes**: 1B to 70B parameters (device capability dependent)
+
+### Cryptographic Standards
+- **Ed25519**: Digital signatures for identity verification
+- **X25519**: Key exchange for secure communication  
+- **ChaCha20-Poly1305**: Symmetric encryption for message content
+- **HKDF**: Key derivation for session keys
+
+### Network Protocols
+- **QUIC over UDP**: Primary transport for federated communication
+- **mDNS/Bonjour**: Local network device discovery
+- **Bluetooth LE**: Offline mesh networking (planned)
+- **WebRTC Data Channels**: Fallback for NAT traversal (future consideration)
+</PRD>
+
+# EncryptionPlugin Protocol Implementation PRD
+
+## Project Overview
+Fix the symmetric decryption error in the lama React Native/Expo app by implementing the correct one.models EncryptionPlugin-based peer-to-peer communication protocol.
+
+## Problem Statement
+The app currently fails during peer-to-peer encrypted communication with the error: `[Error: CYENC-SYMDEC: Decryption with symmetric key failed]`. This is caused by a fundamental protocol mismatch between our manual encryption approach and the one.models expected EncryptionPlugin approach.
+
+## Current State
+- ✅ CommServer connection and authentication working
+- ✅ Challenge-response phase (asymmetric crypto) working  
+- ❌ Encrypted JSON message phase failing due to protocol mismatch
+- ❌ Manual encryption/decryption approach incompatible with one.models
+
+## Target State
+- ✅ Peer-to-peer connections using EncryptionPlugin for automatic encryption/decryption
+- ✅ JSON messages sent normally with transparent encryption
+- ✅ Compatible with one.models protocol and one.leute reference implementation
+- ✅ Successful pairing and communication with edda.one
+
+## Technical Requirements
+
+### Core Architecture Changes
+1. **Remove Manual Encryption**: Eliminate manual encryption/decryption methods
+2. **Implement EncryptionPlugin**: Add EncryptionPlugin to connections during handshake
+3. **JSON Message Protocol**: Use normal JSON message sending with automatic encryption
+4. **Follow one.models Pattern**: Match the EncryptedConnectionHandshake.js implementation
+
+### Key Components to Modify
+- `src/models/network/PeerToPeerPairingHandler.ts` - Main pairing logic
+- Connection establishment flow in NetworkPlugin
+- Message handling for encrypted JSON communication
+
+### Protocol Flow (Following one.models)
+1. **Phase 1**: Unencrypted handshake (communication_request/communication_ready)
+2. **Phase 2**: Exchange temporary keypairs with asymmetric encryption
+3. **Phase 3**: Derive shared key and add EncryptionPlugin to connection
+4. **Phase 4**: Normal JSON communication (auto-encrypted by plugin)
+
+### Dependencies
+- `@refinio/one.models` EncryptionPlugin
+- `@refinio/one.models` Connection plugins (PromisePlugin, KeepAlivePlugin, FragmentationPlugin)
+- `tweetnacl` for key derivation
+
+### Success Criteria
+- Peer-to-peer connections establish successfully
+- JSON messages send/receive without manual encryption
+- Compatible with edda.one pairing protocol
+- No CYENC-SYMDEC decryption errors
+- Follows one.models security patterns
+
+### Reference Implementation
+- `node_modules/@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/EncryptedConnectionHandshake.js`
+- `one.leute/src/model/ConnectionsHelper.ts` usage patterns
+- `node_modules/@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/CommunicationInitiationProtocolMessages.js`
+
+### Testing Strategy
+- Test with edda.one invitation flow
+- Verify JSON message encryption/decryption
+- Confirm compatibility with one.models protocol
+- Validate security and key handling
+
+## Timeline
+High priority fix - should be completed as soon as possible to enable peer-to-peer communication functionality.
+
+## Constraints
+- Must maintain security best practices (no raw secret key exposure)
+- Must be compatible with existing one.models architecture
+- Must work with React Native/Expo environment
+- Must follow the established one.leute reference patterns
+
+# Connection Phase Management PRD
+
+## Overview
+The lama application's connection system needs dedicated subtasks for each phase of the connection process to improve debugging, monitoring, and reliability. Currently, connection establishment goes through multiple distinct phases that should be tracked and managed separately.
+
+## Problem Statement
+The current connection system has multiple phases that are intermingled, making it difficult to:
+- Debug connection failures at specific phases
+- Monitor connection progress
+- Implement proper error handling per phase
+- Track performance metrics per phase
+
+## Solution Requirements
+
+### Phase 1: NetworkPlugin Connection Establishment
+- Create WebSocket connection to CommServer
+- Load one.models classes (Connection, PromisePlugin, FragmentationPlugin)
+- Add basic plugins (PromisePlugin, FragmentationPlugin)
+- Wait for connection to open
+- Validate plugin ordering
+- Update connection state to 'connected'
+
+### Phase 2: CommServer Registration Protocol
+- Send registration message with listening: true
+- Handle authentication challenge from CommServer
+- Complete challenge-response authentication
+- Receive registration confirmation
+- Update connection state to 'authenticated'
+
+### Phase 3: Pairing Request Handling
+- Listen for incoming pairing requests
+- Validate pairing request format
+- Extract source and target public keys
+- Forward pairing request to PeerToPeerPairingHandler
+- Emit pairing request events
+
+### Phase 4: P2P Connection Handover
+- Receive connection handover from CommServer
+- Initialize PairingConnection state
+- Set up challenge-response handling
+- Prepare for key exchange protocol
+- Update connection state to 'handover_complete'
+
+### Phase 5: Encryption Setup
+- Handle key exchange messages (124-byte messages)
+- Create temporary keypair for key exchange
+- Derive shared key for EncryptionPlugin
+- Set up EncryptionPlugin on connection
+- Validate encryption is working
+
+### Phase 6: Pairing Completion
+- Send/receive final pairing confirmation
+- Update connection state to 'pairing_complete'
+- Add peer to contacts
+- Emit pairing success events
+- Clean up temporary pairing state
+
+## Technical Requirements
+- Each phase should be a separate subtask with clear entry/exit criteria
+- Each phase should have dedicated error handling
+- Each phase should emit specific events for monitoring
+- Each phase should have timeout handling
+- Each phase should have retry logic where appropriate
+
+## Success Criteria
+- Connection establishment can be debugged at the phase level
+- Connection failures can be isolated to specific phases
+- Connection progress can be monitored in real-time
+- Each phase has clear success/failure states
+- Performance metrics are available per phase
+
+## Implementation Notes
+- Use existing CommServerManager, CommServerProtocolHandler, and PeerToPeerPairingHandler
+- Add phase-specific event emitters
+- Add phase-specific timeout handling
+- Add phase-specific error types
+- Maintain backward compatibility with existing connection events
+
+# CommServer Authentication Fix PRD
+
+## Problem Statement
+The lama app is unable to authenticate with the CommServer. Through testing, we discovered that the CommServer rejects registration attempts with the error "Expected string to be an even number of characters", indicating that the public key being sent is not properly formatted as a valid hex string.
+
+## Root Cause Analysis
+1. **CommServer Validation**: The CommServer expects public keys to be valid hex strings with even character count
+2. **Public Key Format**: Our app extracts the public key from the one.core keychain but doesn't validate or convert the format
+3. **Type Mismatch**: The keychain might return Uint8Array or other formats that need conversion to hex string
+
+## Technical Requirements
+
+### Core Fix
+- Extract public key from one.core keychain using proper APIs
+- Convert public key to valid hex string format if needed
+- Validate hex string format (even character count, valid hex characters)
+- Ensure CommServer registration succeeds with properly formatted key
+
+### Validation Requirements
+- Public key must be valid hex string (only 0-9, a-f, A-F characters)
+- Public key must have even number of characters
+- Add comprehensive logging for debugging public key extraction and formatting
+
+### Testing Requirements
+- Create test script to verify CommServer accepts our registration
+- Test with actual app initialization to confirm authentication works
+- Verify pairing and messaging functionality after authentication fix
+
+## Success Criteria
+1. CommServer responds with `authentication_request` instead of closing connection
+2. App logs show properly formatted public key (hex string, even character count)
+3. No "Expected string to be an even number of characters" errors
+4. Full CommServer authentication flow completes successfully
+
+## Implementation Notes
+- Use `@refinio/one.core/lib/util/arraybuffer-to-and-from-hex-string` for conversion
+- Follow one.leute reference implementation for public key handling
+- Maintain compatibility with existing transport architecture
+- Don't break other functionality while fixing authentication
+
+## Technical Context
+- CommServer URL: `wss://comm10.dev.refinio.one`
+- Public key extraction: `getDefaultKeys()` → `getObject()` → `keys.publicKey`
+- Conversion utility: `uint8arrayToHexString()` from one.core
+- Validation: regex `/^[0-9a-fA-F]+$/` and even character count
+
+# Product Requirements Document: Connection Management Optimization
+
+## Project Overview
+Fix connection management issues in the one.core/one.models networking stack to prevent duplicate connection attempts and improve spare connection lifecycle management.
+
+## Problem Statement
+The current CommunicationServerListener creates too many spare connections simultaneously, leading to:
+- "No listening connection for the specified publicKey" errors
+- Wasted network resources
+- Connection churn and instability
+- Race conditions in connection handover
+
+## Current Behavior
+1. CommunicationServerListener establishes spare connections eagerly
+2. Multiple spare connections are created before previous ones are handed over
+3. Comm-Server rejects duplicate connection attempts with "No listening connection" error
+4. Connection retry logic continues to flood the server
+
+## Goals
+1. **Option 1: Dial down spare connection limit** - Reduce the number of simultaneous spare connections to prevent flooding
+2. **Option 2: Sequential spare connection management** - Wait for previous spare to be handed over before creating the next one
+
+## Success Criteria
+- Eliminate "No listening connection for the specified publicKey" errors
+- Maintain connection reliability and availability
+- Reduce unnecessary network traffic
+- Preserve existing connection handover functionality
+
+## Technical Requirements
+
+### Option 1: Connection Limit Management
+- Implement configurable maximum spare connection limit
+- Add connection pool management
+- Prevent creation of new spares when limit is reached
+- Maintain connection availability for legitimate use cases
+
+### Option 2: Sequential Connection Management  
+- Modify CommunicationServerListener.updateState() to track handover status
+- Implement state machine for spare connection lifecycle
+- Add handover completion detection
+- Serialize spare connection creation based on previous handover completion
+
+## Implementation Considerations
+- Must not break existing connection handover protocol
+- Should maintain backward compatibility
+- Need to handle edge cases (connection failures, timeouts)
+- Consider impact on connection establishment latency
+
+## Testing Requirements
+- Verify connection stability under load
+- Test handover scenarios
+- Validate error message elimination
+- Performance testing for connection establishment time
+
+## Dependencies
+- one.core networking stack
+- one.models CommunicationServerListener
+- WebSocket connection management
+- Connection handover protocol
+
+## Deliverables
+1. Updated CommunicationServerListener implementation
+2. Connection state management improvements
+3. Configuration options for connection limits
+4. Unit tests for connection management
+5. Integration tests for handover scenarios
+6. Documentation updates

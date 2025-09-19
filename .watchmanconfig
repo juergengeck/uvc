@@ -1,0 +1,8 @@
+{
+  "ignore_dirs": [
+    ".git",
+    "node_modules/llama.rn/ios",
+    "node_modules/llama.rn/cpp",
+    "node_modules/llama.rn/android/build"
+  ]
+}

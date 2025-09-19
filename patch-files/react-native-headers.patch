@@ -1,0 +1,25 @@
+#import <React/RCTDefines.h>
+#import <React/RCTJSThread.h>
+
+/**
+ * RCT_DEPRECATED Compatibility Fix
+ *
+ * This section fixes the RCT_DEPRECATED macro for React Native 0.79+
+ * to ensure it works correctly in both C++ and Objective-C contexts.
+ */
+#ifndef RCT_DEPRECATED_FIXED
+// Undefine existing problematic macro
+#undef RCT_DEPRECATED
+
+// Define different versions based on language
+#if defined(__cplusplus)
+#define RCT_DEPRECATED __attribute__((deprecated))
+#else
+#define RCT_DEPRECATED __attribute__((deprecated));
+#endif
+#define RCT_DEPRECATED_FIXED 1
+#endif
+
+RCT_EXTERN NSString *const RCTBridgeModuleDidNotRespondToMethodError;
+
+@class RCTBridge; 

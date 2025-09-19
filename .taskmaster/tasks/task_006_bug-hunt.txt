@@ -1,0 +1,11 @@
+# Task ID: 6
+# Title: Generate Invite URL
+# Status: pending
+# Dependencies: 5
+# Priority: medium
+# Description: Implement logic for generating a QR code and invite URL.
+# Details:
+Use the output from `useInviteGenerator` to create a QR code and provide options to copy or share the invite URL. Ensure clipboard operations are stable across different devices.
+
+# Test Strategy:
+UI tests verifying that QR codes are generated correctly and clipboard actions work as expected.

@@ -1,0 +1,328 @@
+{
+  "settings": {
+    "title": "Settings",
+    "welcome": "Welcome",
+    "user": {
+      "title": "Account",
+      "profile": {
+        "title": "Profile",
+        "edit": "Edit Profile"
+      },
+      "logout": "Logout",
+      "logoutDescription": "Sign out of your account",
+      "reset": "Reset Account",
+      "resetDescription": "Delete all data and start fresh",
+      "confirmLogout": "Are you sure you want to log out?",
+      "confirmReset": "Are you sure you want to reset? This will delete all your data!"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "darkMode": {
+        "title": "Dark Mode",
+        "description": "Use dark theme for the app"
+      }
+    },
+    "language": {
+      "title": "Language",
+      "current": "Current Language",
+      "en": "English",
+      "de": "German",
+      "fr": "French",
+      "description": "Set the app display language"
+    },
+    "dataManagement": {
+      "title": "Data Management",
+      "import": {
+        "title": "Import Data",
+        "description": "Import your data from a backup file",
+        "placeholder": "Select a file to import",
+        "success": "Data imported successfully",
+        "error": {
+          "failed": "Failed to import data",
+          "invalidFile": "Invalid backup file",
+          "noFile": "No file selected"
+        }
+      },
+      "export": {
+        "title": "Export Data",
+        "description": "Save your data to a backup file",
+        "success": "Data exported successfully",
+        "error": {
+          "failed": "Failed to export data"
+        }
+      }
+    },
+    "ai": {
+      "title": "AI Settings",
+      "importSuccess": "Model Imported",
+      "importSuccessMessage": "The model {{name}} was successfully imported and is now available for use.",
+      "globalSettings": "Global Settings",
+      "temperatureTitle": "Temperature",
+      "maxTokensTitle": "Max Tokens",
+      "autoSummary": "Auto Summary",
+      "autoResponse": "Auto Response",
+      "defaultPrompt": {
+        "title": "Default System Prompt",
+        "description": "System instructions used to guide AI responses in conversations"
+      },
+      "provider": "Provider",
+      "architecture": "Architecture",
+      "parametersTitle": "Parameters",
+      "lastUsed": "Last Used",
+      "modelSpecificSettings": "Model-Specific Settings",
+      "threadsTitle": "Threads",
+      "importError": "Import Error",
+      "setupError": "Model was imported but failed to set up AI assistant: ",
+      "importErrorMessage": "Failed to import model: ",
+      "models": {
+        "title": "AI Models",
+        "available": "Available Models",
+        "stored": "Stored Models",
+        "hash": "Hash",
+        "size": "Size",
+        "parameters": "Parameters",
+        "created": "Created",
+        "deleteAction": "Delete",
+        "status": "AI Model Status",
+        "details": "Model Details",
+        "noModelManager": "AI models are not configured",
+        "needsConfiguration": "AI features need to be configured. This could be due to hardware limitations, network issues, or incomplete setup.",
+        "noModel": "No AI models available",
+        "noModels": "No models available",
+        "loading": "Loading models...",
+        "installed": "Installed Models",
+        "recommended": "Recommended Models",
+        "delete": {
+          "title": "Delete Model",
+          "confirmation": "Are you sure you want to delete this model? This action cannot be undone."
+        },
+        "error": {
+          "listFailed": "Failed to list models",
+          "loadFailed": "Failed to load model",
+          "deleteFailed": "Failed to delete model",
+          "importFailed": "Failed to import model",
+          "noAIModelsDescription": "No AI models are currently installed. Import a model to get started.",
+          "noAIModelManager": "AI model manager not available",
+          "noAIModelManagerDescription": "The AI model manager is not initialized. Please try again later."
+        },
+        "download": {
+          "title": "Download Model",
+          "url": "Model URL",
+          "button": "Download",
+          "progress": "Downloading: {{progress}}%"
+        },
+        "import": {
+          "title": "Import Model",
+          "fromFile": "Import from File",
+          "fromUrl": "Import from URL",
+          "success": "Model imported successfully",
+          "error": {
+            "failed": "Failed to import model",
+            "invalidFile": "Invalid model file",
+            "noFile": "No file selected"
+          }
+        },
+        "importFromFile": "Import from File",
+        "importFromFileDescription": "Select a local file to import the model",
+        "importFromUrl": "Import from URL",
+        "importFromUrlDescription": "Download a model from a remote location",
+        "modelUrl": "Model URL",
+        "noModelsTitle": "No AI Models",
+        "noModelsDescription": "You have no AI models installed. Import a model to get started.",
+        "deleteConfirmTitle": "Delete Model",
+        "deleteConfirmMessage": "Are you sure you want to delete this model? This action cannot be undone."
+      },
+      "recommended": "Recommended Models",
+      "contact": {
+        "created": "AI Contact created. You can now chat with this model in the Messages tab."
+      },
+      "providers": {
+        "title": "AI Providers",
+        "status": {
+          "connected": "Connected",
+          "connecting": "Connecting...",
+          "disconnected": "Disconnected"
+        },
+        "local": {
+          "title": "Local AI",
+          "description": "Local AI model for offline use",
+          "supported": "Local AI supported",
+          "configure": "Tap to configure",
+          "noModel": "No model available",
+          "threads": {
+            "title": "CPU Threads",
+            "description": "Number of CPU threads to use for inference"
+          },
+          "enabled": "Enable Local AI"
+        },
+        "cloud": {
+          "title": "Cloud AI",
+          "description": "Cloud-based AI model",
+          "configure": "Tap to configure",
+          "apiKey": {
+            "title": "API Key",
+            "description": "Your API key for cloud services"
+          },
+          "endpoint": {
+            "title": "API Endpoint",
+            "description": "Service endpoint (e.g., https://api.anthropic.com/v1/messages)"
+          },
+          "maxTokens": {
+            "title": "Max Tokens",
+            "description": "Maximum number of tokens to generate"
+          },
+          "temperature": {
+            "title": "Temperature",
+            "description": "Controls randomness (0.0 - 1.0, lower is more deterministic)"
+          },
+          "enabled": "Enable Cloud AI"
+        },
+        "error": {
+          "updateFailed": "Failed to update provider settings"
+        }
+      }
+    },
+    "summarySettings": {
+      "title": "Summary Settings",
+      "description": "Configure how AI generates summaries",
+      "enable": "Enable summaries",
+      "maxTokens": {
+        "title": "Maximum Tokens",
+        "description": "Maximum length of generated summaries"
+      },
+      "temperature": {
+        "title": "Temperature",
+        "description": "AI creativity (0.0 - 1.0)"
+      },
+      "topP": {
+        "title": "Top P",
+        "description": "Nucleus sampling threshold"
+      },
+      "frequencyPenalty": {
+        "title": "Frequency Penalty",
+        "description": "Penalize frequently used tokens (-2.0 to 2.0)"
+      },
+      "presencePenalty": {
+        "title": "Presence Penalty",
+        "description": "Penalize tokens based on presence (-2.0 to 2.0)"
+      },
+      "error": {
+        "updateFailed": "Failed to update summary settings"
+      }
+    },
+    "device": {
+      "title": "Device Settings",
+      "discovery": "Device Discovery",
+      "discoveryDescription": "Search for other devices on the network",
+      "discoverySettings": "Discovery Settings",
+      "discoveryEnabled": "Device Discovery",
+      "discoveryEnabledDesc": "Search for other devices on the network",
+      "autoConnect": "Auto Connect",
+      "autoConnectDesc": "Automatically connect to known devices",
+      "port": "Discovery Port",
+      "portDescription": "Port for device discovery (1024-65535)",
+      "discoveryPort": "Discovery Port",
+      "addOnlyConnected": "Add only connected devices",
+      "addOnlyConnectedDesc": "Only add devices to settings when a connection is established",
+      "testESP32Connectivity": "Test ESP32 Connectivity",
+      "testResults": "Test Results",
+      "update": "Update",
+      "devices": "Connected Devices",
+      "discoveredDevices": "Discovered Devices",
+      "connectedDevices": "Connected Devices",
+      "noDevices": "No devices found. Enable discovery to find nearby devices.",
+      "noDevicesWithDiscoveryEnabled": "No devices found. Make sure your ESP32 devices are powered on and connected to the same network.",
+      "noDevicesWithDiscoveryDisabled": "No devices found. Enable device discovery to find nearby devices.",
+      "noConnectedDevices": "No connected devices. Discovered devices will appear here when connected.",
+      "discoveryDisabled": "Device discovery is disabled. Enable it to find nearby devices.",
+      "error": "Device Error",
+      "toggleError": "Failed to update device setting",
+      "portError": "Port must be between 1024 and 65535",
+      "removeTitle": "Remove Device",
+      "removeConfirm": "Are you sure you want to remove this device?",
+      "removeError": "Failed to remove device",
+      "discoveryToggleError": "Failed to toggle device discovery"
+    },
+    "contacts": {
+      "title": "Contacts",
+      "syncDeviceContacts": "Sync Device Contacts",
+      "syncDescription": "Import contacts from your device's address book",
+      "permissionDenied": "Permission to access contacts was denied",
+      "syncSuccess": "Successfully imported {{count}} contacts",
+      "syncError": "Error syncing contacts",
+      "noLeuteModel": "Contact system is not available"
+    },
+    "backupRestore": {
+      "title": "Backup & Restore"
+    },
+    "instances": {
+      "title": "Instances"
+    }
+  },
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "error": "Error",
+    "success": "Success",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "sync": "Sync"
+  },
+  "modelManagement": "AI Models",
+  "addModel": "Add Model",
+  "modelName": "Model Name",
+  "modelUrl": "Model URL",
+  "modelDescription": "Download and manage local AI models",
+  "modelUrlPlaceholder": "Enter model URL",
+  "modelNamePlaceholder": "Enter model name",
+  "downloading": "Downloading...",
+  "invalidModelInput": "Please enter both name and URL for the model",
+  "downloadFailed": "Failed to download model",
+  "deleteFailed": "Failed to delete model",
+  "accountActions": "Account Actions",
+  "logout": "Logout",
+  "reset": "Reset App",
+  "resetTitle": "Confirm Reset",
+  "resetMessage": "To reset the app, please enter this PIN: {{pin}}\nThis will delete all your data!",
+  "enterPin": "Enter PIN",
+  "enterPinMessage": "Please enter the PIN from the previous dialog",
+  "wrongPin": "Wrong PIN. Reset cancelled.",
+  "theme": {
+    "title": "Theme",
+    "dark": "Dark Mode",
+    "description": "Enable dark appearance"
+  },
+  "backup": {
+    "title": "Backup",
+    "export": {
+      "title": "Export Settings",
+      "description": "Save your settings to a file"
+    },
+    "import": {
+      "title": "Import Settings",
+      "description": "Load settings from a file"
+    }
+  },
+  "account": {
+    "title": "Account",
+    "logout": "Logout",
+    "reset": "Reset App"
+  },
+  "resetPin": {
+    "title": "Confirm Reset",
+    "message": "To reset the app, please enter this PIN: {{pin}}\nThis will delete all your data!",
+    "enterPin": "Enter PIN",
+    "enterPinMessage": "Please enter the PIN shown above",
+    "wrongPin": "Wrong PIN. Reset cancelled."
+  },
+  "topic": {
+    "title": "Topic",
+    "new": "New Topic",
+    "edit": "Edit Topic",
+    "delete": "Delete Topic"
+  },
+  "noLLMManager": "LLM manager not available"
+} 

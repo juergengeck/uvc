@@ -1,0 +1,222 @@
+--- a/one.core/src/system/esp32/esp32-quicvc-project/main/main.c
++++ b/one.core/src/system/esp32/esp32-quicvc-project/main/main.c
+@@ -104,6 +104,11 @@ static char cached_owner_id[65] = {0}; // 64 chars + null terminator
+ static quicvc_credential_data_t cached_credential = {0};
+ 
+ // LED control variables
+-static volatile bool blue_led_state = false; // Current blue LED state (false = off, true = on)
++typedef enum {
++    LED_STATE_OFF = 0,
++    LED_STATE_ON = 1,
++    LED_STATE_BLINK = 2
++} led_state_t;
++
++static volatile led_state_t blue_led_state = LED_STATE_OFF; // Current blue LED state
+ static volatile bool led_manual_control = false; // Flag to indicate manual LED control is active
+ static volatile uint64_t led_manual_control_time = 0; // Timestamp when manual control was last used
+@@ -110,6 +115,9 @@ static volatile bool led_blink_event = false; // Event flag to trigger LED blink
+ static volatile uint64_t led_last_blink_time = 0; // Last time LED was blinked
+ 
++// Blinking control variables
++static volatile bool blink_phase = false; // Current phase of blink (false = off phase, true = on phase)
++static volatile uint64_t last_blink_toggle = 0; // Last time blink was toggled
++#define BLINK_INTERVAL_MS 500 // Blink interval in milliseconds
++
+ #ifdef CONFIG_IDF_TARGET_ESP32C3
+ #define BLUE_LED_GPIO_PIN GPIO_NUM_8 // Blue LED on GPIO 8 (ESP32-C3 built-in LED)
+@@ -1040,18 +1048,28 @@ esp_err_t handle_led_control_service(char *payload, int payload_len, struct sock
+     // Execute LED command
+     bool success = false;
+     if (strcmp(cmd_str, "blue_on") == 0) {
+-        blue_led_state = true;
++        blue_led_state = LED_STATE_ON;
+         gpio_set_level(BLUE_LED_GPIO_PIN, 1);
+         ESP_LOGI(TAG, "🔵 Blue LED turned ON%s", is_manual_command ? " (manual mode)" : "");
+         success = true;
+     } else if (strcmp(cmd_str, "blue_off") == 0) {
+-        blue_led_state = false;
++        blue_led_state = LED_STATE_OFF;
+         gpio_set_level(BLUE_LED_GPIO_PIN, 0);
+         ESP_LOGI(TAG, "🔵 Blue LED turned OFF%s", is_manual_command ? " (manual mode)" : "");
+         success = true;
++    } else if (strcmp(cmd_str, "blue_blink") == 0) {
++        blue_led_state = LED_STATE_BLINK;
++        blink_phase = false;
++        last_blink_toggle = esp_timer_get_time() / 1000;
++        ESP_LOGI(TAG, "🔵 Blue LED set to BLINK%s", is_manual_command ? " (manual mode)" : "");
++        success = true;
+     } else if (strcmp(cmd_str, "blue_auto") == 0) {
+         // Re-enable automatic blinking
+         led_manual_control = false;
++        // Reset to off when going back to auto
++        blue_led_state = LED_STATE_OFF;
++        gpio_set_level(BLUE_LED_GPIO_PIN, 0);
+         ESP_LOGI(TAG, "🔄 Blue LED automatic mode enabled");
+         success = true;
+     } else if (strcmp(cmd_str, "status") == 0) {
+-        ESP_LOGI(TAG, "📊 LED Status requested - Blue: %s, Manual: %s", 
+-                 blue_led_state ? "ON" : "OFF",
++        const char *state_str = (blue_led_state == LED_STATE_ON) ? "ON" : 
++                               (blue_led_state == LED_STATE_BLINK) ? "BLINK" : "OFF";
++        ESP_LOGI(TAG, "📊 LED Status requested - Blue: %s, Manual: %s", 
++                 state_str,
+                  led_manual_control ? "YES" : "NO");
+         success = true;
+         // Don't update manual control for status requests
+@@ -1078,11 +1096,17 @@ esp_err_t handle_led_control_service(char *payload, int payload_len, struct sock
+     }
+     
++    // Get LED state string
++    const char *led_state_str = (blue_led_state == LED_STATE_ON) ? "on" : 
++                                (blue_led_state == LED_STATE_BLINK) ? "blink" : "off";
++    
+     // Prepare LED status response JSON
+     char response_json[512];
+     if (strlen(request_id) > 0) {
+         // Include requestId in response
+         snprintf(response_json, sizeof(response_json),
+                  "{\"type\":\"led_status\",\"requestId\":\"%s\",\"status\":\"success\",\"blue_led\":\"%s\",\"manual_control\":%s,\"device_id\":\"%s\"}",
+                  request_id,
+-                 blue_led_state ? "on" : "off", 
++                 led_state_str, 
+                  led_manual_control ? "true" : "false",
+                  device_id);
+     } else {
+         // No requestId provided
+         snprintf(response_json, sizeof(response_json),
+                  "{\"type\":\"led_status\",\"status\":\"success\",\"blue_led\":\"%s\",\"manual_control\":%s,\"device_id\":\"%s\"}",
+-                 blue_led_state ? "on" : "off", 
++                 led_state_str, 
+                  led_manual_control ? "true" : "false",
+                  device_id);
+     }
+@@ -1164,7 +1188,10 @@ esp_err_t handle_heartbeat_service(char *payload, int payload_len, struct sockad
+     EventBits_t bits = xEventGroupGetBits(wifi_event_group);
+     bool wifi_conn = (bits & WIFI_CONNECTED_BIT) != 0;
+     cJSON_AddBoolToObject(status, "wifi_connected", wifi_conn);
+-    cJSON_AddBoolToObject(status, "blue_led", blue_led_state);
++    
++    // Add LED state as string
++    const char *led_state_str = (blue_led_state == LED_STATE_ON) ? "on" : 
++                                (blue_led_state == LED_STATE_BLINK) ? "blink" : "off";
++    cJSON_AddStringToObject(status, "blue_led", led_state_str);
+     cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
+     
+     cJSON_AddItemToObject(heartbeat, "device_status", status);
+@@ -1267,7 +1294,11 @@ esp_err_t handle_heartbeat_service(char *payload, int payload_len, struct sockad
+     // Add device status
+     cJSON_AddBoolToObject(response, "owned", true);
+     cJSON_AddStringToObject(response, "ownerId", owner_id);
+-    cJSON_AddBoolToObject(response, "blueLed", blue_led_state);
++    
++    // Add LED state as string
++    const char *led_state_str = (blue_led_state == LED_STATE_ON) ? "on" : 
++                                (blue_led_state == LED_STATE_BLINK) ? "blink" : "off";
++    cJSON_AddStringToObject(response, "blueLed", led_state_str);
+     
+     char *response_str = cJSON_PrintUnformatted(response);
+     if (response_str == NULL) {
+@@ -1877,7 +1908,7 @@ void led_task(void *pvParameters)
+     gpio_config(&io_conf);
+     
+     // Start with LED off
+-    blue_led_state = false;
++    blue_led_state = LED_STATE_OFF;
+     gpio_set_level(BLUE_LED_GPIO_PIN, 0);
+     
+     while (1) {
+@@ -1890,7 +1921,7 @@ void led_task(void *pvParameters)
+         if (led_manual_control) {
+             if ((current_time - led_manual_control_time) >= LED_MANUAL_CONTROL_TIMEOUT_MS) {
+                 ESP_LOGI(TAG, "LED manual control timeout - resuming event-driven mode");
+                 led_manual_control = false;
+-                blue_led_state = false;
++                blue_led_state = LED_STATE_OFF;
+                 gpio_set_level(BLUE_LED_GPIO_PIN, 0); // Turn off LED
+                 
+                 // Broadcast LED status update to notify connected clients
+                 broadcast_led_status_update();
+             }
+-            // Skip automatic control if in manual mode
+-            vTaskDelay(100 / portTICK_PERIOD_MS);
+-            continue;
++            
++            // Handle blinking even in manual mode if blink state is set
++            if (blue_led_state == LED_STATE_BLINK) {
++                if ((current_time - last_blink_toggle) >= BLINK_INTERVAL_MS) {
++                    blink_phase = !blink_phase;
++                    gpio_set_level(BLUE_LED_GPIO_PIN, blink_phase ? 1 : 0);
++                    last_blink_toggle = current_time;
++                }
++            }
++        } else {
++            // Event-driven LED control (automatic mode)
++            if (led_blink_event) {
++                ESP_LOGI(TAG, "LED event detected! Blinking...");
++                led_blink_event = false; // Clear the event
++                led_last_blink_time = current_time;
++                
++                // Single blink pattern: ON for 200ms
++                gpio_set_level(BLUE_LED_GPIO_PIN, 1);
++                ESP_LOGI(TAG, "🔵 LED ON (event)");
++                vTaskDelay(200 / portTICK_PERIOD_MS);
++                
++                // Then OFF
++                gpio_set_level(BLUE_LED_GPIO_PIN, 0);
++                ESP_LOGI(TAG, "🔵 LED OFF");
++                
++                // Keep state as off after event blink
++                blue_led_state = LED_STATE_OFF;
++            }
+         }
+         
+-        // Event-driven LED control
+-        if (led_blink_event) {
+-            ESP_LOGI(TAG, "LED event detected! Blinking...");
+-            led_blink_event = false; // Clear the event
+-            led_last_blink_time = current_time;
+-            
+-            // Blink pattern: ON for 200ms
+-            blue_led_state = true;
+-            gpio_set_level(BLUE_LED_GPIO_PIN, 1);
+-            ESP_LOGI(TAG, "🔵 LED ON (event)");
+-            vTaskDelay(200 / portTICK_PERIOD_MS);
+-            
+-            // Then OFF
+-            blue_led_state = false;
+-            gpio_set_level(BLUE_LED_GPIO_PIN, 0);
+-            ESP_LOGI(TAG, "🔵 LED OFF");
+-        } else {
+-            // No event, just wait
+-            vTaskDelay(50 / portTICK_PERIOD_MS);
+-        }
++        // Short delay to prevent CPU hogging
++        vTaskDelay(50 / portTICK_PERIOD_MS);
+     }
+ }
+ 
+@@ -1976,7 +2009,7 @@ void update_device_state(void)
+     current_device_state.discovery_active = (discovery_event != DISCOVERY_EVENT_NONE) || discovery_in_progress;
+     
+     // Set LED state
+-    current_device_state.led_state = blue_led_state;
++    current_device_state.led_state = (blue_led_state != LED_STATE_OFF);
+     
+     // Calculate uptime
+     current_device_state.uptime_seconds = (uint32_t)(esp_timer_get_time() / 1000000);
+@@ -2162,9 +2195,13 @@ esp_err_t broadcast_led_status_update(void)
+         return ESP_FAIL;
+     }
+     
++    // Get LED state string
++    const char *led_state_str = (blue_led_state == LED_STATE_ON) ? "on" : 
++                                (blue_led_state == LED_STATE_BLINK) ? "blink" : "off";
++    
+     // Create LED status broadcast JSON
+     char response_json[256];
+     snprintf(response_json, sizeof(response_json),
+              "{\"type\":\"led_status\",\"status\":\"auto_resume\",\"blue_led\":\"%s\",\"device_id\":\"%s\"}",
+-             blue_led_state ? "on" : "off", device_id);
++             led_state_str, device_id);
+     
+     // Create unified service packet: [service_type_byte][json_payload]

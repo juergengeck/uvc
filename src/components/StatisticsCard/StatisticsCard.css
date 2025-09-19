@@ -1,0 +1,73 @@
+.statistics-section {
+  margin: 24px 0;
+}
+
+.section-title {
+  color: #b3005d;
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.statistics-card {
+  background-color: #e8f1ff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.statistics-header {
+  margin-bottom: 16px;
+}
+
+.person-icon {
+  color: #004397;
+  font-size: 32px;
+}
+
+.statistics-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.statistic-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.statistic-label {
+  color: #004397;
+  font-size: 16px;
+}
+
+.statistic-value {
+  color: #004397;
+  font-weight: 500;
+}
+
+.details-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: #004397;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 8px;
+}
+
+.details-button:hover {
+  background-color: rgba(0, 67, 151, 0.05);
+}
+
+.chevron-icon {
+  color: #004397;
+} 

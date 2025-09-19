@@ -1,0 +1,58 @@
+{
+  "devices": {
+    "title": "Liste des appareils",
+    "discoveryActive": "Découverte active",
+    "discoveryInactive": "Découverte inactive",
+    "startingDiscovery": "Démarrage de la découverte...",
+    "stoppingDiscovery": "Arrêt de la découverte...",
+    "searchPlaceholder": "Rechercher des appareils",
+    "allDevices": "Tous les appareils",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "neverSeen": "Jamais",
+    "lastSeen": "Vu pour la dernière fois",
+    "noDevicesFound": "Aucun appareil trouvé",
+    "noMatchingDevices": "Aucun appareil ne correspond à votre recherche",
+    "discoveringDevices": "Recherche d'appareils...",
+    "enableDiscovery": "Activer la découverte",
+    "error": {
+      "title": "Erreur de l'appareil",
+      "toggleEnabled": "Impossible de changer l'état de l'appareil",
+      "remove": "Impossible de supprimer l'appareil",
+      "toggleDiscovery": "Impossible de basculer la découverte",
+      "ledToggleFailed": "Impossible de basculer la LED",
+      "ownershipChange": "Impossible de modifier la propriété",
+      "deviceNoResponse": "L'appareil ne répond pas",
+      "authRetryFailed": "Échec de la nouvelle tentative d'authentification"
+    },
+    "remove": {
+      "title": "Supprimer l'appareil",
+      "confirm": "Êtes-vous sûr de vouloir supprimer {{name}} ?"
+    },
+    "connect": {
+      "title": "Se connecter à l'appareil",
+      "inProgress": "Connexion à {{name}}..."
+    },
+    "details": {
+      "title": "Détails de l'appareil"
+    },
+    "credential": {
+      "title": "Authentifier l'appareil",
+      "confirm": "Envoyer les informations d'identification à {{name}} ?"
+    },
+    "owner": "Propriétaire",
+    "type": "Type",
+    "removeOwnership": {
+      "title": "Retirer la propriété",
+      "confirm": "Retirer la propriété de {{name}} ?",
+      "success": "Propriété retirée. L'appareil va redémarrer."
+    },
+    "success": {
+      "title": "Succès"
+    },
+    "authentication": {
+      "title": "Authentification",
+      "retrying": "Nouvelle tentative d'authentification..."
+    }
+  }
+}

@@ -1,0 +1,68 @@
+# Task ID: 12
+# Title: Fix CommServer Invite and Connection Management
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Debug and fix CommServer-based invite system and connection management in the mobile app, using one.leute at edda.one as reference peer.
+# Details:
+PRIORITY FOCUS: Fix CommServer (wss://comm10.dev.refinio.one) connection management for mobile app. Use one.leute running at edda.one as working reference peer to test against.
+
+Based on comprehensive analysis vs one.leute patterns, key issues identified:
+
+1. INITIALIZATION SEQUENCE ISSUE: Mobile app defers ConnectionsModel creation until after login (line 484) vs one.leute immediate creation in constructor. This may cause timing issues with pairing event handlers.
+
+2. COMPLEX PAIRING LOGIC: InviteManager/NetworkSettingsService have complex multi-layer abstractions vs one.leute direct approach. Evidence of connection state tracking inconsistencies.
+
+3. EVENT HANDLER SYNCHRONIZATION: Mobile app's complex initialization sequence may not properly sync event handlers between ConnectionsModel and UI services.
+
+4. CONNECTION STATE MANAGEMENT: NetworkSettingsService shows debugging code indicating connection state issues between ConnectionsModel.onlineState and UI state tracking.
+
+# Test Strategy:
+Test connection from mobile app to one.leute at edda.one, verify invite flow works, ensure proper WebSocket state management, and validate message exchange between mobile and web clients.
+
+# Subtasks:
+## 12.1. Fix ConnectionsModel Initialization Sequence [pending]
+### Dependencies: None
+### Description: Align mobile app ConnectionsModel creation timing with one.leute pattern - create immediately in constructor instead of deferring until after login.
+### Details:
+ISSUE: Mobile app defers ConnectionsModel creation to line 484 (after login) vs one.leute immediate creation in constructor line ~150.
+
+FIX: Move ConnectionsModel creation to AppModel constructor like one.leute, ensure proper initialization sequence: LeuteModel → ChannelManager → ConnectionsModel.init(blacklistModel).
+
+Reference: one.leute/src/model/Model.ts lines 150-250 for correct pattern.
+
+## 12.2. Simplify InviteManager/NetworkSettingsService Integration [pending]
+### Dependencies: None
+### Description: Streamline pairing flow by removing unnecessary abstractions and aligning with one.leute direct approach.
+### Details:
+ISSUE: Mobile app has complex multi-layer pairing logic (InviteManager → NetworkSettingsService → ConnectionsModel) vs one.leute direct ConnectionsModel.pairing usage.
+
+FIX: Simplify to use ConnectionsModel.pairing directly like one.leute, remove unnecessary wrapper layers, ensure state synchronization.
+
+Reference: one.leute direct usage patterns for pairing invitations.
+
+## 12.3. Fix Connection State Synchronization [pending]
+### Dependencies: None
+### Description: Resolve connection state tracking inconsistencies between ConnectionsModel and UI services.
+### Details:
+ISSUE: NetworkSettingsService shows evidence of connection state mismatches - ConnectionsModel.onlineState vs UI state tracking inconsistencies.
+
+FIX: Implement proper event propagation from ConnectionsModel to UI services, ensure state synchronization, remove debugging code indicating state issues.
+
+Reference: one.leute connection state management patterns.
+
+## 12.4. Test Connection to edda.one Reference Peer [pending]
+### Dependencies: None
+### Description: Validate CommServer connection functionality by connecting mobile app to working one.leute instance at edda.one.
+### Details:
+VALIDATION: Use one.leute running at edda.one as reference peer to test mobile app CommServer connections.
+
+TEST PLAN:
+1. Create invitation from mobile app
+2. Test invitation acceptance from edda.one
+3. Verify bidirectional messaging
+4. Validate connection persistence
+5. Test connection recovery scenarios
+
+Success criteria: Stable CommServer-based communication between mobile app and one.leute web instance.
+

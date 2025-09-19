@@ -1,0 +1,11 @@
+# Task ID: 11
+# Title: Reimplement CHUM Protocol Entry
+# Status: pending
+# Dependencies: 10
+# Priority: high
+# Description: Initiate the CHUM protocol upon new connection establishment.
+# Details:
+Create a new, Expo-compatible entry point for the `chum-sync` protocol. Ensure it does not rely on unsupported features like dynamic `eval` or `new Function()`.
+
+# Test Strategy:
+Unit and integration tests to verify that the CHUM protocol initiates correctly without using disallowed JavaScript features.

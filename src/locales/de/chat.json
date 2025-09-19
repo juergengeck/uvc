@@ -1,0 +1,47 @@
+{
+  "title": "Chat",
+  "newTopic": "Neuer Chat",
+  "topicName": "Chat-Name",
+  "noTopics": "Noch keine Chats",
+  "participantCount": "{{count}} Teilnehmer",
+  "participantCount_one": "{{count}} Teilnehmer",
+  "participants": "Teilnehmer",
+  "loading": "Chats werden geladen...",
+  "groupInfo": "Gruppeninfo",
+  "contactInfo": "Kontaktinfo",
+  "conversationDetails": "Konversationsdetails",
+  "addParticipant": "Teilnehmer hinzufügen",
+  "mediaDocsLinks": "Medien, Dokumente & Links",
+  "notifications": "Benachrichtigungen",
+  "notificationsOn": "Ein",
+  "encryption": "Verschlüsselung",
+  "messagesEncrypted": "Nachrichten sind Ende-zu-Ende verschlüsselt",
+  "leaveGroup": "Gruppe verlassen",
+  "selectContact": "Kontakt auswählen",
+  "createGroupChat": "Gruppenchat erstellen",
+  "selectedParticipants": "Ausgewählte Teilnehmer",
+  "selectContacts": "Kontakte auswählen",
+  "create": "Erstellen",
+  "you": "Du",
+  "currentUser": "Aktueller Benutzer",
+  "error": {
+    "failed": "Fehler beim Laden der Chats",
+    "unauthorized": "Bitte melden Sie sich an, um den Chat zu nutzen",
+    "modelsNotAvailable": "Erforderliche Modelle nicht verfügbar"
+  },
+  "input": {
+    "placeholder": "Nachricht eingeben...",
+    "send": "Senden"
+  },
+  "ai": {
+    "status": {
+      "connected": "KI verbunden",
+      "connecting": "KI wird verbunden...",
+      "disconnected": "KI nicht verbunden"
+    },
+    "models": {
+      "local": "Lokale KI",
+      "cloud": "Cloud KI"
+    }
+  }
+} 

@@ -1,0 +1,50 @@
+{
+  "title": "Aufgaben",
+  "noTasks": "Keine Aufgaben verfügbar",
+  "loading": "Aufgaben werden geladen...",
+  "error": "Fehler beim Laden der Aufgaben",
+  "create": {
+    "title": "Aufgabe erstellen",
+    "button": "Neue Aufgabe"
+  },
+  "edit": {
+    "title": "Aufgabe bearbeiten",
+    "button": "Bearbeiten"
+  },
+  "delete": {
+    "title": "Aufgabe löschen",
+    "button": "Löschen",
+    "confirm": "Möchten Sie diese Aufgabe wirklich löschen?",
+    "success": "Aufgabe erfolgreich gelöscht"
+  },
+  "fields": {
+    "title": {
+      "label": "Titel",
+      "placeholder": "Aufgabentitel eingeben"
+    },
+    "description": {
+      "label": "Beschreibung",
+      "placeholder": "Aufgabenbeschreibung eingeben"
+    },
+    "dueDate": {
+      "label": "Fälligkeitsdatum",
+      "placeholder": "Fälligkeitsdatum auswählen"
+    },
+    "priority": {
+      "label": "Priorität",
+      "options": {
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "high": "Hoch"
+      }
+    },
+    "status": {
+      "label": "Status",
+      "options": {
+        "pending": "Ausstehend",
+        "inProgress": "In Bearbeitung",
+        "completed": "Abgeschlossen"
+      }
+    }
+  }
+} 

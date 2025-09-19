@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digionko Questionnaire Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3 { color: #2c3e50; }
+        code {
+            background: #f5f7f9;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+        }
+        pre {
+            background: #f5f7f9;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .warning { color: #e74c3c; }
+        .note { 
+            background: #f1f8ff;
+            padding: 15px;
+            border-left: 4px solid #2196f3;
+            margin: 20px 0;
+        }
+        .difference {
+            background: #fff8dc;
+            padding: 15px;
+            border-left: 4px solid #ffd700;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Digionko Questionnaire Documentation</h1>
+    
+    <h2>Overview</h2>
+    <p>
+        The Digionko questionnaire system is a React Native/Expo implementation that follows the patterns
+        established in one.baypass. It provides a mobile-optimized interface for completing questionnaires
+        while maintaining compatibility with the one.models data structures.
+    </p>
+
+    <div class="difference">
+        <strong>Key Implementation Features:</strong>
+        <ul>
+            <li>Consistent naming scheme for questionnaires (e.g., BayPassBasisfragebogenDE)</li>
+            <li>Direct titles in FHIR model with i18n support through UI layer</li>
+            <li>Common questionnaire types identified (ux, biosamples)</li>
+            <li>Simplified translation key structure</li>
+            <li>Mobile-optimized UI with touch-friendly controls</li>
+        </ul>
+    </div>
+
+    <h2>Translation System</h2>
+    
+    <h3>Key Structure</h3>
+    <pre>
+// Common questionnaire types (ux, biosamples)
+questionnaire.studies.common.[type].title
+questionnaire.studies.common.[type].description
+
+// Study-specific questionnaires
+questionnaire.studies.[study].questionnaires.[type].title
+questionnaire.studies.[study].questionnaires.[type].description</pre>
+
+    <h3>Fallback Chain</h3>
+    <ol>
+        <li>Translation key (if available)</li>
+        <li>Direct title from FHIR model</li>
+        <li>Questionnaire name</li>
+        <li>Default title</li>
+    </ol>
+
+    <h2>FHIR Model Integration</h2>
+    
+    <h3>Questionnaire Definition</h3>
+    <pre>
+export const BayPassBasisfragebogenDE: Questionnaire = {
+    resourceType: 'Questionnaire',
+    language: 'de',
+    url: 'http://refinio.one/questionnaire/BayPassBasisfragebogen',
+    name: 'baypass_basisfragebogen',
+    title: 'BayPass Basisfragebogen',
+    status: 'active',
+    item: [...]
+};</pre>
+
+    <h3>Required Properties</h3>
+    <ul>
+        <li><code>resourceType</code>: Always 'Questionnaire'</li>
+        <li><code>language</code>: Language code (e.g., 'de')</li>
+        <li><code>url</code>: Unique identifier</li>
+        <li><code>name</code>: Internal reference (used for translation keys)</li>
+        <li><code>title</code>: Direct title in model language</li>
+        <li><code>status</code>: Current status</li>
+        <li><code>item</code>: Question definitions</li>
+    </ul>
+
+    <h2>UI Components</h2>
+
+    <h3>QuestionnaireListScreen</h3>
+    <ul>
+        <li>Shows questionnaires grouped by study</li>
+        <li>Handles translation key resolution</li>
+        <li>Provides consistent layout</li>
+        <li>Debug logging for translation keys</li>
+    </ul>
+
+    <h3>QuestionnaireStartTemplate</h3>
+    <ul>
+        <li>Uses direct title from model</li>
+        <li>Supports custom content</li>
+        <li>Handles navigation</li>
+    </ul>
+
+    <h3>QuestionComponent</h3>
+    <ul>
+        <li>Unified question handler</li>
+        <li>Mobile-optimized controls</li>
+        <li>Validation support</li>
+    </ul>
+
+    <div class="note">
+        <strong>Best Practices:</strong>
+        <ul>
+            <li>Use consistent naming scheme for questionnaires</li>
+            <li>Include direct titles in model language</li>
+            <li>Follow FHIR model requirements</li>
+            <li>Document question types</li>
+            <li>Use simplified translation key structure</li>
+            <li>Group common questionnaires</li>
+            <li>Provide fallback titles</li>
+            <li>Add debug logging</li>
+            <li>Follow mobile UX patterns</li>
+            <li>Handle all required states</li>
+            <li>Support accessibility</li>
+            <li>Optimize performance</li>
+        </ul>
+    </div>
+
+    <h2>User Journeys</h2>
+
+    <h3>1. Starting a Questionnaire</h3>
+    <ol>
+        <li>User navigates to a questionnaire via URL or deep link</li>
+        <li>System loads questionnaire data from the model</li>
+        <li>User sees the start screen with:
+            <ul>
+                <li>Questionnaire title</li>
+                <li>Document icon</li>
+                <li>Start button</li>
+                <li>Optional custom content (via children prop)</li>
+                <li>Optional additional buttons (via additionalButtons prop)</li>
+            </ul>
+        </li>
+        <li>User taps "Start" to begin</li>
+    </ol>
+
+    <h3>2. Completing Questions</h3>
+    <ol>
+        <li>Questions are presented one at a time</li>
+        <li>Progress bar shows completion status</li>
+        <li>Each question can be one of the following types:
+            <ul>
+                <li>Text input (single/multiline) - Native TextInput with keyboard handling</li>
+                <li>Integer input (with numeric keyboard) - Specialized numeric input</li>
+                <li>Choice selection (radio buttons) - Touch-optimized with haptic feedback</li>
+                <li>Slider (for numeric ranges) - Native slider with value display</li>
+                <li>Display (informational text) - Formatted text display</li>
+            </ul>
+        </li>
+        <li>System automatically advances to next question when current question is answered</li>
+        <li>Back button in header allows returning to previous screen</li>
+    </ol>
+
+    <h3>3. Validation & Submission</h3>
+    <ol>
+        <li>Required questions are marked with an asterisk</li>
+        <li>Numeric inputs validate for proper number format</li>
+        <li>System prevents submission if required questions are unanswered</li>
+        <li>On completion:
+            <ul>
+                <li>Response is marked as 'completed'</li>
+                <li>Data is submitted to the model</li>
+                <li>Optional callback is triggered</li>
+                <li>User is returned to previous screen</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Implementation Details</h2>
+
+    <h3>Component Structure</h3>
+    <pre>
+QuestionnaireScreen (main container)
+├── QuestionnaireStartTemplate (initial view)
+│   ├── Additional buttons support
+│   └── QuestionnaireStartBase (shared structure)
+│       └── Individual questionnaire starts
+│           ├── DegsStart
+│           ├── IpaqStart
+│           ├── BasisFragebogenStart
+│           ├── BioprobenabnahmeStart
+│           ├── UsabilityStart
+│           ├── VorsorgeStart
+│           ├── BefundeStart
+│           ├── BoadiceaStart
+│           ├── MigrationshintergrundStart
+│           ├── SitemanStart
+│           ├── UxStart
+│           ├── MedasStart
+│           └── MikrobiomStart
+└── QuestionnaireForm (questions view)
+    └── QuestionComponent (unified question handler)
+        ├── Text input
+        ├── Integer input
+        ├── Choice selection
+        ├── Slider
+        └── Display text</pre>
+
+    <div class="note">
+        <strong>Mobile Optimization:</strong>
+        <ul>
+            <li>Touch targets are at least 44x44 points for optimal touch interaction</li>
+            <li>Haptic feedback provides physical response to interactions</li>
+            <li>Keyboard handling optimized for mobile input</li>
+            <li>Native form controls for platform consistency</li>
+        </ul>
+    </div>
+
+    <h2>Questionnaire Types</h2>
+    
+    <h3>DEGS (Deutsche Erwachsenen Gesundheits-Studie)</h3>
+    <ul>
+        <li>General health assessment questionnaire</li>
+        <li>Multiple sections covering different health aspects</li>
+        <li>Standardized format following German health study guidelines</li>
+    </ul>
+
+    <h3>IPAQ (International Physical Activity Questionnaire)</h3>
+    <ul>
+        <li>Physical activity assessment</li>
+        <li>Measures activity levels over the last 7 days</li>
+        <li>Includes various activity types and intensities</li>
+    </ul>
+
+    <h3>Other Questionnaires</h3>
+    <ul>
+        <li>Basisfragebogen - Basic demographic and health information</li>
+        <li>Bioprobenabnahme - Biological sample collection information</li>
+        <li>Usability - System usability assessment</li>
+        <li>Vorsorge - Preventive care questionnaire</li>
+        <li>Befunde - Medical findings questionnaire</li>
+        <li>Boadicea - Breast cancer risk assessment</li>
+        <li>Migrationshintergrund - Migration background assessment</li>
+        <li>Siteman - Site-specific assessment</li>
+        <li>UX - User experience feedback</li>
+        <li>Medas - Mediterranean diet assessment</li>
+        <li>Mikrobiom - Microbiome study questionnaire</li>
+    </ul>
+
+    <div class="difference">
+        <strong>Questionnaire Implementation Differences:</strong>
+        <ul>
+            <li>Unified base component (QuestionnaireStartBase) for consistent structure</li>
+            <li>Translation key-based content management</li>
+            <li>Support for additional content and buttons per questionnaire</li>
+            <li>Mobile-optimized layout and styling</li>
+        </ul>
+    </div>
+
+    <h3>Key Features</h3>
+    <ul>
+        <li>Follows one.models type system for data structures</li>
+        <li>Mobile-optimized UI with touch-friendly controls</li>
+        <li>Automatic keyboard handling</li>
+        <li>Progress tracking</li>
+        <li>Error handling and validation</li>
+        <li>i18n support</li>
+        <li>Deep link support</li>
+        <li>Haptic feedback</li>
+    </ul>
+
+    <h3>Data Flow</h3>
+    <ol>
+        <li>Model initialization via useModelState</li>
+        <li>Questionnaire loading via model.questionnaireByName</li>
+        <li>Response state management in QuestionnaireScreen</li>
+        <li>Answer updates via QuestionnaireForm to QuestionComponent</li>
+        <li>Final submission through useQuestionnaire hook</li>
+    </ol>
+
+    <div class="note">
+        <strong>Compatibility Note:</strong> This implementation maintains data structure compatibility
+        with one.baypass while providing a native mobile experience. All questionnaire responses can
+        be processed by the same backend systems.
+    </div>
+
+    <h2>Validation Rules</h2>
+    <ul>
+        <li>Required fields must be completed before submission</li>
+        <li>Integer inputs must contain valid numbers</li>
+        <li>Conditional questions (enableWhen) are properly hidden/shown</li>
+        <li>Progress calculation accounts for only visible questions</li>
+    </ul>
+
+    <h2>Error Handling</h2>
+    <ul>
+        <li>Model initialization errors</li>
+        <li>Questionnaire loading failures</li>
+        <li>Submission errors</li>
+        <li>Validation errors</li>
+        <li>Network connectivity issues</li>
+    </ul>
+
+    <h2>Accessibility</h2>
+    <ul>
+        <li>Screen reader support for all interactive elements</li>
+        <li>Proper keyboard navigation</li>
+        <li>Color contrast compliance</li>
+        <li>Touch target sizing (minimum 44x44 points)</li>
+        <li>Haptic feedback for physical response</li>
+    </ul>
+
+    <div class="note">
+        <strong>Implementation Note:</strong> All components use React Native's built-in accessibility
+        props and follow platform-specific guidelines for touch interaction.
+    </div>
+
+    <div class="difference">
+        <strong>Mobile-Specific Enhancements:</strong>
+        <ul>
+            <li>Haptic feedback on interactions</li>
+            <li>Native keyboard types for different inputs</li>
+            <li>Touch-optimized controls</li>
+            <li>Platform-specific styling</li>
+            <li>Simplified navigation for mobile use</li>
+        </ul>
+    </div>
+</body>
+</html> 

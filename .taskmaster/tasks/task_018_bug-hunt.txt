@@ -1,0 +1,37 @@
+# Task ID: 18
+# Title: Fix SharedArrayBuffer polyfill to work with one.models/one.core in React Native
+# Status: done
+# Dependencies: 4, 17
+# Priority: high
+# Description: Ensure the SharedArrayBuffer polyfill works correctly within the one.models/one.core context in React Native.
+# Details:
+1. Analyze the current implementation of the SharedArrayBuffer polyfill in index.js.
+2. Identify why the polyfill fails to reach the one.core NetworkPlugin context during runtime.
+3. Modify the polyfill to ensure it is properly applied across all execution contexts, including those within node_modules dependencies.
+4. Test the polyfill's behavior in various scenarios to confirm its reliability and compatibility with React Native environments.
+<info added on 2025-07-04T22:19:30.636Z>
+INVESTIGATION FINDINGS - SharedArrayBuffer Polyfill Scope Issue:
+
+Root Cause Analysis:
+1. No Direct References: SharedArrayBuffer is not directly referenced in one.core source code.
+2. Runtime Error: The error occurs at runtime in NetworkPlugin.onMsgHandler.
+3. Polyfill Scope: Current polyfill in index.js only affects the main thread global scope.
+4. Module Context: one.core modules may execute in different contexts where polyfill isn't applied.
+
+Potential Causes:
+- Feature Detection: Some dependency checking for SharedArrayBuffer availability.
+- Dynamic Code: Runtime code generation that references SharedArrayBuffer.
+- Worker Context: Code executing in worker threads without polyfill.
+- Hermes Engine: React Native's Hermes engine specific behavior.
+
+Solution Strategy:
+1. Move polyfill application earlier in startup sequence to ensure it is available across all contexts.
+2. Create a patch for one.core to include the polyfill internally, ensuring consistent availability within its modules.
+3. Test the polyfill in different execution contexts, including main thread and worker threads, to confirm comprehensive coverage.
+4. Verify NetworkPlugin functionality after applying the fix to ensure no runtime errors persist.
+</info added on 2025-07-04T22:19:30.636Z>
+
+# Test Strategy:
+1. Write unit tests for the SharedArrayBuffer polyfill to verify that it correctly initializes in different execution contexts.
+2. Integrate the modified polyfill into a test environment mimicking one.models/one.core usage.
+3. Perform end-to-end testing by simulating network connections and data exchanges to ensure no 'ReferenceError: SharedArrayBuffer is not defined' occurs.

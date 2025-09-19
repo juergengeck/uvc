@@ -1,0 +1,25 @@
+{
+  "title": "Messages",
+  "topics": {
+    "title": "Topics",
+    "empty": "No topics yet",
+    "add": "Add Topic",
+    "participantCount_one": "{{count}} participant",
+    "participantCount_other": "{{count}} participants",
+    "menu": {
+      "signatures": "Signatures"
+    }
+  },
+  "signatures": {
+    "title": "Message Signatures",
+    "loading": "Loading signatures...",
+    "noSignatures": "No signatures found",
+    "messageNotFound": "Message not found",
+    "loadError": "Failed to load signatures"
+  },
+  "empty": "No messages yet",
+  "loading": "Loading messages...",
+  "generating": "Generating response...",
+  "creatingMessage": "Creating Message",
+  "error": "Failed to load messages"
+} 

@@ -1,0 +1,65 @@
+{
+  "title": "Health Data",
+  "appleHealth": {
+    "title": "Apple Health",
+    "enable": "Enable Apple Health",
+    "sync": "Sync health data from Apple Health",
+    "permissions": "Permissions",
+    "permissionsCount": "{{count}} of {{total}} enabled"
+  },
+  "devices": {
+    "title": "Health Devices",
+    "addNew": "Add New Device",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "battery": "Battery: {{level}}%",
+    "noDevices": "No devices connected"
+  },
+  "sync": {
+    "title": "Sync Settings",
+    "autoSync": "Auto Sync",
+    "autoSyncDescription": "Automatically sync health data",
+    "interval": "Sync Interval",
+    "hourly": "hourly",
+    "daily": "daily",
+    "weekly": "weekly",
+    "manual": "manual",
+    "syncNow": "Sync Now",
+    "syncing": "Syncing...",
+    "lastSync": "Last sync: {{time}}"
+  },
+  "dataManagement": {
+    "title": "Data Management",
+    "export": "Export Health Data",
+    "exportDescription": "Export your health data as FHIR",
+    "privacy": "Privacy Settings",
+    "privacyDescription": "Control health data sharing"
+  },
+  "permissions": {
+    "title": "Health Permissions",
+    "grantAll": "Grant All",
+    "denyAll": "Deny All",
+    "vitals": "Vitals",
+    "activity": "Activity",
+    "body": "Body Measurements",
+    "nutrition": "Nutrition",
+    "sleep": "Sleep",
+    "heartRate": "Heart Rate",
+    "steps": "Steps",
+    "bloodOxygen": "Blood Oxygen",
+    "sleepAnalysis": "Sleep Analysis",
+    "bodyWeight": "Body Weight"
+  },
+  "success": {
+    "permissionsGranted": "Health permissions granted successfully",
+    "syncComplete": "Sync completed successfully",
+    "deviceConnected": "Device connected successfully",
+    "dataExported": "Health data exported successfully"
+  },
+  "error": {
+    "permissionsFailed": "Failed to grant permissions",
+    "syncFailed": "Sync failed",
+    "deviceConnectionFailed": "Failed to connect device",
+    "exportFailed": "Failed to export health data"
+  }
+}
