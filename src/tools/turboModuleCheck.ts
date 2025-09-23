@@ -14,7 +14,7 @@ export function turboModuleCheck() {
   console.log('\n2. Trying package import:');
   try {
     // This should trigger the TurboModule loading
-    const UDPDirectModule = require('@lama/react-native-udp-direct').default;
+    const UDPDirectModule = require('react-native-udp-direct').default;
     console.log('Package import successful');
     console.log('Module type:', typeof UDPDirectModule);
     

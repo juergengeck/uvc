@@ -82,13 +82,15 @@
       "expo-router",
       "./plugins/withUVCConfig",
       "./plugins/withBLEPermissions",
+      "./plugins/withUDPModuleFix",
       [
         "expo-build-properties",
         {
           "ios": {
             "deploymentTarget": "15.1",
             "enableBitcode": false,
-            "newArchitectureEnabled": true
+            "newArchitectureEnabled": true,
+            "useFrameworks": "static"
           },
           "android": {
             "compileSdkVersion": 34,

@@ -14,7 +14,7 @@ Pod::Spec.new do |s|
   s.source       = { :git => "https://github.com/lama-app/react-native-udp-direct.git", :tag => "#{s.version}" }
 
   s.source_files = "ios/**/*.{h,m,mm,swift,cpp}"
-  s.exclude_files = "ios/build/**/*", "ios/js/**/*"
+  s.exclude_files = "ios/build/**/*", "ios/js/**/*", "ios/lamareactnativeudpdirect/**/*"
 
   s.dependency "React-Core"
   s.dependency "React-RCTNetwork"

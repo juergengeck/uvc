@@ -3,7 +3,7 @@
  */
 
 import { NativeModules } from 'react-native';
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 
 export function simpleUDPCheck() {
   console.log('=== SIMPLE UDP MODULE CHECK ===');
@@ -63,8 +63,8 @@ export function simpleUDPCheck() {
   // Try dynamic import of the package
   console.log('\n4. Checking package availability:');
   try {
-    const hasPackage = require.resolve('@lama/react-native-udp-direct');
-    console.log('Package @lama/react-native-udp-direct found at:', hasPackage);
+    const hasPackage = require.resolve('react-native-udp-direct');
+    console.log('Package react-native-udp-direct found at:', hasPackage);
   } catch (e) {
     console.log('Package not found:', (e as Error).message);
   }

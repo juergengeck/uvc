@@ -3,7 +3,7 @@
  */
 
 import { NativeModules, NativeEventEmitter } from 'react-native';
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 
 export function checkModuleLoad() {
   console.log('=== MODULE LOAD CHECK ===');
@@ -11,7 +11,7 @@ export function checkModuleLoad() {
   // Check what we get from the package
   console.log('\n1. Direct package import:');
   try {
-    const pkg = require('@lama/react-native-udp-direct');
+    const pkg = require('react-native-udp-direct');
     console.log('Package exports:', Object.keys(pkg));
     console.log('Default export:', pkg.default);
     console.log('Default export type:', typeof pkg.default);

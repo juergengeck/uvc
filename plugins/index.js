@@ -18,7 +18,7 @@ const withRCTDeprecationPod = require('./withRCTDeprecationPod');
 // React Native integration plugins
 const withLlamaRn = require('./withLlamaRn'); 
 const withLlamaRnFabricBuildSettings = require('./withLlamaRnFabricBuildSettings');
-const withPodfileFixForFrameworkIssues = require('./withPodfileFixForFrameworkIssues');
+const withSaferPodfileMods = require('./withSaferPodfileMods');
 const withFollyCoroutinesFix = require('./withFollyCoroutinesFix');
 
 // Import external plugins that haven't been moved yet
@@ -39,7 +39,7 @@ module.exports = {
   // React Native integration plugins  
   withLlamaRn,
   withLlamaRnFabricBuildSettings,
-  withPodfileFixForFrameworkIssues,
+  withSaferPodfileMods,
   withFollyCoroutinesFix,
   
   // Legacy plugins (still need to be moved)

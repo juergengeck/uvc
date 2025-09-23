@@ -41,7 +41,7 @@
 
 import { NativeModules, Platform } from 'react-native';
 import Debug from 'debug';
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 
 // Set up debug logging
 const debug = Debug('one:network:directbuffer');

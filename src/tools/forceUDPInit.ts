@@ -2,7 +2,7 @@
  * Force UDP module initialization
  */
 
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 
 export function forceUDPInit() {
   console.log('=== FORCING UDP MODULE INIT ===');

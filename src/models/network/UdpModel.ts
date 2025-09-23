@@ -10,7 +10,7 @@ import Debug from 'debug';
 import { createError } from '@refinio/one.core/lib/errors.js';
 
 // Import the TurboModule via the package index
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 
 // Event types for the new RCTEventEmitter architecture
 export type UdpMessageEvent = {

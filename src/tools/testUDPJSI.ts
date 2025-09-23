@@ -36,7 +36,7 @@ export function testUDPJSI() {
   
   // Try to import and check JSI wrapper
   try {
-    const { isJSIAvailable } = require('@lama/react-native-udp-direct');
+    const { isJSIAvailable } = require('react-native-udp-direct');
     if (isJSIAvailable()) {
       console.log('[UDP JSI Test] ✅ JSI wrapper reports JSI is available');
     } else {

@@ -3,7 +3,7 @@
  */
 
 import { NativeModules, TurboModuleRegistry } from 'react-native';
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 
 export function forceLoadUDPModule() {
   console.log('=== FORCE LOADING UDP MODULE ===');
@@ -50,7 +50,7 @@ export function forceLoadUDPModule() {
   // Try the package import
   console.log('\n4. Trying package import...');
   try {
-    const UDPDirectModuleLocal = require('@lama/react-native-udp-direct').default;
+    const UDPDirectModuleLocal = require('react-native-udp-direct').default;
     console.log('Package import result:', UDPDirectModuleLocal);
     if (UDPDirectModuleLocal) {
       console.log('Package module type:', typeof UDPDirectModuleLocal);

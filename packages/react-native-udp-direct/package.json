@@ -1,6 +1,6 @@
 {
-  "name": "@lama/react-native-udp-direct",
-  "version": "1.4.2",
+  "name": "react-native-udp-direct",
+  "version": "1.4.5",
   "description": "High-performance UDP socket module for React Native with zero-copy buffer support",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
@@ -102,7 +102,5 @@
       ]
     ]
   },
-  "dependencies": {
-    "@lama/react-native-udp-direct": "file:lama-react-native-udp-direct-1.4.2.tgz"
-  }
+  "dependencies": {}
 }

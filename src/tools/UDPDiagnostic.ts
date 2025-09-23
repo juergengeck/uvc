@@ -5,7 +5,7 @@
  * It creates a focused socket on the ESP32 discovery port and logs all activity.
  */
 
-import UDPDirectModule from '@lama/react-native-udp-direct';
+import UDPDirectModule from 'react-native-udp-direct';
 import { DeviceEventEmitter } from 'react-native';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
 import Debug from 'debug';
