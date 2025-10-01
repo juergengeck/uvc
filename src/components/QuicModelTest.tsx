@@ -7,7 +7,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { Button, Divider } from 'react-native-paper';
+import { Button, Divider, useTheme } from 'react-native-paper';
 import { QuicModel } from '../models/network/QuicModel';
 
 interface TestLogEntry {
@@ -20,6 +20,7 @@ interface TestLogEntry {
  * QuicModelTest component for testing QuicModel functionality
  */
 export const QuicModelTest: React.FC = () => {
+  const theme = useTheme();
   const [logs, setLogs] = useState<TestLogEntry[]>([]);
   const [isRunningTest, setIsRunningTest] = useState(false);
   const [socket, setSocket] = useState<any>(null);
@@ -83,48 +84,40 @@ export const QuicModelTest: React.FC = () => {
   // Test creating a UDP socket
   const testCreateSocket = async () => {
     setIsRunningTest(true);
-    
+
     try {
       logMessage('Testing UDP socket creation...', 'info');
-      
+
       // Get QuicModel instance
       const quicModel = QuicModel.getInstance();
-      
-      // Get UdpModel
-      const udpModel = quicModel.getUdpModel();
-      if (!udpModel) {
-        throw new Error('UdpModel not available');
-      }
-      
-      logMessage('UdpModel available', 'success');
-      
-      // Create a socket
-      const testSocket = await udpModel.createSocket({
+
+      // Create a socket directly through QuicModel
+      const testSocket = await quicModel.createUdpSocket({
         type: 'udp4',
         reuseAddr: true,
         broadcast: true,
         debug: true,
         debugLabel: 'quick-test-socket'
       });
-      
+
       if (!testSocket) {
         throw new Error('Failed to create UDP socket');
       }
-      
+
       logMessage(`UDP socket created successfully (ID: ${testSocket.id})`, 'success');
       setSocket(testSocket);
-      
+
       // Setup message handler
       testSocket.on('message', (msg: any, rinfo: any) => {
         const dataStr = msg.toString('utf8');
         logMessage(`📦 RECEIVED: ${dataStr.length > 100 ? dataStr.substring(0, 100) + '...' : dataStr}`, 'info');
         logMessage(`From: ${rinfo.address}:${rinfo.port}`, 'info');
       });
-      
+
       testSocket.on('error', (err: any) => {
         logMessage(`Socket error: ${err}`, 'error');
       });
-      
+
       logMessage('UDP socket created and event handlers attached', 'success');
     } catch (error) {
       logMessage(`Error creating UDP socket: ${error instanceof Error ? error.message : String(error)}`, 'error');

@@ -1,10 +1,15 @@
 /**
  * ChannelManager Singleton Implementation
- * 
+ *
  * This file provides a singleton instance of ChannelManager to ensure that
  * only one instance is used throughout the application, preventing cache-storage
  * synchronization issues and inconsistencies.
  */
+
+// CRITICAL: Use static imports to avoid runtime bundling delays
+import ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
+import { objectEvents } from '@refinio/one.models/lib/misc/ObjectEventDispatcher';
+import { onVersionedObj } from '@refinio/one.core/lib/storage-versioned-objects';
 
 // Simple singleton for ChannelManager
 let channelManagerInstance: any = null;
@@ -14,34 +19,9 @@ export function createChannelManager(leuteModel: any): any {
   if (channelManagerInstance) {
     return channelManagerInstance;
   }
-  
-  // Require the module and use the **default** export - destructuring will return undefined
-  // when the module uses `export default`. So access .default explicitly.
-  const ChannelManagerModule = require('@refinio/one.models/lib/models/ChannelManager.js');
-  const OriginalChannelManager = ChannelManagerModule.default || ChannelManagerModule;
 
-  // If not patched yet, replace constructor with singleton proxy
-  if (!(OriginalChannelManager as any).__lamaSingletonPatched) {
-    const PatchedChannelManager: any = function (...args: any[]) {
-      if (channelManagerInstance) return channelManagerInstance;
-      // @ts-ignore
-      channelManagerInstance = new (OriginalChannelManager as any)(...args);
-      return channelManagerInstance;
-    };
-    PatchedChannelManager.prototype = OriginalChannelManager.prototype;
-    Object.setPrototypeOf(PatchedChannelManager, OriginalChannelManager);
-    (PatchedChannelManager as any).__lamaSingletonPatched = true;
-
-    // Override default export so *future* imports get the patched constructor
-    if (ChannelManagerModule.default) {
-      ChannelManagerModule.default = PatchedChannelManager;
-    } else {
-      module.exports = PatchedChannelManager;
-    }
-  }
-
-  // Now create (or retrieve) the instance
-  channelManagerInstance = channelManagerInstance || new OriginalChannelManager(leuteModel);
+  // Use the statically imported ChannelManager
+  channelManagerInstance = new ChannelManager(leuteModel);
   return channelManagerInstance;
 }
 
@@ -62,9 +42,8 @@ export async function initializeChannelManager(): Promise<void> {
   }
   
   console.log('[ChannelManagerSingleton] 🔧 Initializing ChannelManager with ObjectEventDispatcher...');
-  
-  // CRITICAL: Verify ObjectEventDispatcher is available before ChannelManager.init()
-  const { objectEvents } = await import('@refinio/one.models/lib/misc/ObjectEventDispatcher');
+
+  // Use the statically imported objectEvents
   console.log('[ChannelManagerSingleton] 🔍 ObjectEventDispatcher available:', !!objectEvents);
   console.log('[ChannelManagerSingleton] 🔍 ObjectEventDispatcher initialized:', !!(objectEvents as any).isInitialized);
   
@@ -78,7 +57,7 @@ export async function initializeChannelManager(): Promise<void> {
   
   // CRITICAL: Test that the event registration chain is working
   try {
-    const { onVersionedObj } = await import('@refinio/one.core/lib/storage-versioned-objects');
+    // Use the statically imported onVersionedObj
     console.log('[ChannelManagerSingleton] 🔍 Testing storage event registration...');
     console.log('[ChannelManagerSingleton] 🔍 onVersionedObj available:', !!onVersionedObj);
     console.log('[ChannelManagerSingleton] 🔍 onVersionedObj listeners count:', (onVersionedObj as any)?.listeners?.length || 'unknown');

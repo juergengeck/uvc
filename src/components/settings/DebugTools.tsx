@@ -14,26 +14,28 @@ import { useTheme } from '@src/providers/app/AppTheme';
 export function DebugTools() {
   const router = useRouter();
   const { theme } = useTheme();
-  
+
   const debugItems = [
-    {
-      title: 'ESP32 System Tests',
-      description: 'Run comprehensive tests for ESP32 and networking',
-      icon: 'test-tube',
-      route: '/(screens)/test-runner',
-    },
-    {
-      title: 'UDP Diagnostics',
-      description: 'Test UDP socket functionality',
-      icon: 'lan',
-      route: '/(screens)/udp-diagnostic',
-    },
+    // Network Testing
     {
       title: 'Network Diagnostics',
-      description: 'Network connection and discovery diagnostics',
+      description: 'Test connections and monitor network activity',
       icon: 'network-strength-4',
       route: '/(screens)/network/diagnostics',
     },
+    {
+      title: 'QUICVC Test',
+      description: 'Test QUIC with Verifiable Credentials',
+      icon: 'rocket',
+      route: '/(screens)/network/quicvc-test',
+    },
+    {
+      title: 'QUIC Model Test',
+      description: 'Test QUIC transport and UDP sockets',
+      icon: 'flash',
+      route: '/(screens)/quic-test',
+    },
+    // Device Management
     {
       title: 'Device Discovery',
       description: 'Manage ESP32 devices and credentials',
@@ -41,10 +43,17 @@ export function DebugTools() {
       route: '/(screens)/device-list',
     },
     {
-      title: 'QUIC Test',
-      description: 'Test QUIC transport functionality',
-      icon: 'flash',
-      route: '/(screens)/quic-test',
+      title: 'UDP Diagnostics',
+      description: 'Low-level UDP socket testing',
+      icon: 'lan',
+      route: '/(screens)/udp-diagnostic',
+    },
+    // System Tests
+    {
+      title: 'ESP32 System Tests',
+      description: 'Run comprehensive ESP32 tests',
+      icon: 'test-tube',
+      route: '/(screens)/test-runner',
     },
   ];
   

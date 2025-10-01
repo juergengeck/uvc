@@ -1,9 +1,9 @@
 import { debugCriticalModules } from '../utils/nativeModuleDebug';
 import { initializeQuicTransport } from '../models/network/setup';
 import { Platform } from 'react-native';
-import { init as initCryptoHelpers } from '@refinio/one.core/lib/system/expo/crypto-helpers';
 import { UdpModel } from '../models/network/UdpModel';
 import { RefactoredBTLEService } from '../services/RefactoredBTLEService';
+import { ensureCryptoReady } from '../initialization/cryptoOptimization';
 
 /**
  * Initialize platform services in the correct order:
@@ -13,6 +13,7 @@ import { RefactoredBTLEService } from '../services/RefactoredBTLEService';
  * 4. QUIC (uses UDP as transport)
  */
 export async function initializePlatform(): Promise<void> {
+  const platformStartTime = Date.now();
   console.log('[Platform] Initializing for', Platform.OS);
   
   // Debug modules in dev
@@ -30,23 +31,25 @@ export async function initializePlatform(): Promise<void> {
     }
   }
   
-  // 1. Crypto helpers (includes PRNG)
-  console.log('[Platform] Initializing crypto...');
+  // 1. Ensure crypto is ready (should already be pre-initialized)
+  console.log('[Platform] Ensuring crypto is ready...');
   try {
-    await initCryptoHelpers();
-    console.log('[Platform] ✅ Crypto initialized');
+    const cryptoStartTime = Date.now();
+    await ensureCryptoReady();
+    console.log(`[Platform] ✅ Crypto ready (${Date.now() - cryptoStartTime}ms)`);
   } catch (error) {
-    console.error('[Platform] ❌ Crypto init failed:', error);
+    console.error('[Platform] ❌ Crypto not ready:', error);
     throw error;
   }
   
   // 2. UDP transport
   console.log('[Platform] Initializing UDP...');
   try {
+    const udpStartTime = Date.now();
     const udpModel = UdpModel.getInstance();
     if (!udpModel.isInitialized()) {
       await udpModel.init();
-      console.log('[Platform] ✅ UDP initialized');
+      console.log(`[Platform] ✅ UDP initialized (${Date.now() - udpStartTime}ms)`);
     } else {
       console.log('[Platform] UDP already initialized');
     }
@@ -92,7 +95,9 @@ export async function initializePlatform(): Promise<void> {
   
   // 4. QUIC (uses UDP)
   console.log('[Platform] Initializing QUIC...');
+  const quicStartTime = Date.now();
   await initializeQuicTransport();
+  console.log(`[Platform] QUIC initialized (${Date.now() - quicStartTime}ms)`);
   
-  console.log('[Platform] ✅ Platform initialization complete');
+  console.log(`[Platform] ✅ Platform initialization complete (total: ${Date.now() - platformStartTime}ms)`);
 }

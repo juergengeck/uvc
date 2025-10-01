@@ -583,12 +583,12 @@ export class UdpModel {
             onMessage: (event: any) => {
               // Wrap in try-catch for iOS 26 beta compatibility
               try {
-                console.log(`[UdpModel] JSI onMessage triggered for socket ${socketId} from ${event.address}:${event.port}`);
+                // console.log(`[UdpModel] JSI onMessage triggered for socket ${socketId} from ${event.address}:${event.port}`);
                 debug(`JSI onMessage for socket ${socketId}`);
                 
                 // Check if event.data is an ArrayBuffer
                 if (event.data instanceof ArrayBuffer) {
-                  console.log(`[UdpModel] Received ArrayBuffer of size ${event.data.byteLength}`);
+                  // console.log(`[UdpModel] Received ArrayBuffer of size ${event.data.byteLength}`);
                   const dataBuffer = new Uint8Array(event.data);
                   
                   // Defer emit to next tick to avoid potential iOS 18.5+ threading issues
@@ -600,7 +600,7 @@ export class UdpModel {
                         family: 'IPv4',
                         size: dataBuffer.length 
                       });
-                      console.log(`[UdpModel] Message event emitted successfully`);
+                      // console.log(`[UdpModel] Message event emitted successfully`);
                     } catch (emitError) {
                       console.error(`[UdpModel] Error emitting message event:`, emitError);
                     }

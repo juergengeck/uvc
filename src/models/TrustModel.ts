@@ -17,8 +17,6 @@ import type { Person } from '@refinio/one.core/lib/recipes.js';
 import { getDefaultKeys, createCryptoApiFromDefaultKeys } from '@refinio/one.core/lib/keychain/keychain.js';
 import { getObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel';
-import * as tweetnacl from 'tweetnacl';
-import { SettingsStore } from '@refinio/one.core/lib/system/settings-store.js';
 
 /**
  * Device credentials for secure communication
@@ -144,14 +142,25 @@ export class TrustModel implements Model {
         if (!this.deviceCredentials) {
             throw new Error('Device credentials not initialized');
         }
-        
+
+        // Get crypto API for signing operations
+        const cryptoApi = await this.getCryptoApi(this.deviceCredentials.deviceId);
+
         if (targetSystem && typeof targetSystem.setOwnIdentity === 'function') {
-            console.log('[TrustModel] Setting device identity for external system');
+            console.log('[TrustModel] Setting device identity for external system (with crypto API)');
+
+            // Pass empty string for secret key since we're using crypto API
+            // The target system should be refactored to use the crypto API for signing
             await targetSystem.setOwnIdentity(
                 this.deviceCredentials.deviceId,
-                this.deviceCredentials.secretKey,
+                '', // No raw secret key - use crypto API
                 this.deviceCredentials.publicKey
             );
+
+            // Also provide the crypto API if the target system supports it
+            if (typeof targetSystem.setCryptoApi === 'function') {
+                await targetSystem.setCryptoApi(cryptoApi);
+            }
         } else {
             throw new Error('Target system does not support setOwnIdentity method');
         }
@@ -240,107 +249,36 @@ export class TrustModel implements Model {
     
     /**
      * Get device credentials from one.core's secure keychain
-     * Uses secure crypto API without exposing private keys to JavaScript
+     * Returns public key only - private key operations use crypto API
      */
     private async getDeviceCredentialsFromKeychain(personId: SHA256IdHash<Person>): Promise<{ secretKey: string, publicKey: string }> {
-        try {
-            console.log('[TrustModel] Getting device credentials from secure keychain');
-            
-            // Check if default keys exist first
-            // CORRECTED: Use PairingManager pattern - get instance first, then keys for that instance
-            const { getLocalInstanceOfPerson } = await import('@refinio/one.models/lib/misc/instance');
-            const { getObject } = await import('@refinio/one.core/lib/storage-unversioned-objects.js');
-            
-            console.log('🔑 [KEY_DEBUG] TrustModel.checkIdentityKeys() - PersonId:', personId);
-            
-            const defaultInstance = await getLocalInstanceOfPerson(personId);
-            console.log('🔑 [KEY_DEBUG] TrustModel.checkIdentityKeys() - DefaultInstance:', defaultInstance);
-            
-            const keysHash = await getDefaultKeys(defaultInstance);
-            console.log('🔑 [KEY_DEBUG] TrustModel.checkIdentityKeys() - KeysHash:', keysHash);
-            
-            const keys = await getObject(keysHash);
-            console.log('🔑 [KEY_DEBUG] TrustModel.checkIdentityKeys() - PublicKey:', keys.publicKey);
-            if (!keysHash) {
-                console.log('[TrustModel] No default keys found in keychain, will generate device-specific keys');
-                throw new Error('No default keys found in keychain for person');
-            }
-            
-            // Try to create crypto API to verify keys exist and are accessible
-            const { createCryptoApiFromDefaultKeys } = await import('@refinio/one.core/lib/keychain/keychain.js');
-            const cryptoApi = await createCryptoApiFromDefaultKeys(personId);
-            if (!cryptoApi) {
-                console.log('[TrustModel] Could not create secure crypto API, will generate device-specific keys');
-                throw new Error('Could not create secure crypto API from default keys');
-            }
-            
-            // Get the public keys from the Keys object
-            const keyObject = await getObject(keysHash);
-            if (!keyObject || !keyObject.publicSignKey) {
-                console.log('[TrustModel] Could not retrieve public keys from keychain, will generate device-specific keys');
-                throw new Error('Could not retrieve public keys from keychain');
-            }
-            
-            // For device discovery, we need the raw key material, but we should avoid this
-            // Instead, let's generate device-specific keys that don't expose the master keys
-            console.log('[TrustModel] Master keys exist but generating device-specific keys for security');
-            throw new Error('Using device-specific keys instead of master keys for security');
-            
-        } catch (error) {
-            console.log('[TrustModel] Using keychain keys failed, generating device-specific keys:', error instanceof Error ? error.message : String(error));
-            
-            // This is the secure path - generate device-specific keys instead of exposing master keys
-            return await this.generateSecureDeviceCredentials(personId);
+        console.log('[TrustModel] Getting device credentials from secure keychain');
+
+        // Get the public key from keychain
+        const { getLocalInstanceOfPerson } = await import('@refinio/one.models/lib/misc/instance');
+        const { getObject } = await import('@refinio/one.core/lib/storage-unversioned-objects.js');
+
+        const defaultInstance = await getLocalInstanceOfPerson(personId);
+        const keysHash = await getDefaultKeys(defaultInstance);
+
+        if (!keysHash) {
+            throw new Error('No default keys found in keychain for person');
         }
+
+        const keyObject = await getObject(keysHash);
+        if (!keyObject || !keyObject.publicSignKey) {
+            throw new Error('Could not retrieve public keys from keychain');
+        }
+
+        // Return empty string for secretKey (not used) and the public key
+        // The secret key operations will use the crypto API directly
+        console.log('[TrustModel] Using keychain public key, private operations via crypto API');
+        return {
+            secretKey: '', // Not exposed - use crypto API for signing
+            publicKey: keyObject.publicSignKey
+        };
     }
     
-    /**
-     * Generate secure device credentials using tweetnacl
-     * This is for device-specific keys when keychain keys aren't available
-     */
-    private async generateSecureDeviceCredentials(personId: SHA256IdHash<Person>): Promise<{ secretKey: string, publicKey: string }> {
-        console.log('[TrustModel] Generating device-specific credentials for:', personId.slice(0, 16) + '...');
-        
-        // Check for existing keys first
-        const deviceKeyId = `device_keys_${personId}`;
-        const storedKeys = await SettingsStore.getItem(deviceKeyId) as string | undefined;
-        
-        if (storedKeys) {
-            try {
-                const parsedKeys = JSON.parse(storedKeys);
-                return {
-                    secretKey: parsedKeys.secretKey,
-                    publicKey: parsedKeys.publicKey
-                };
-            } catch {
-                // Corrupted, regenerate
-                await SettingsStore.removeItem(deviceKeyId);
-            }
-        }
-        
-        // Generate new keys using tweetnacl
-        console.log('[TrustModel] Generating new keypair using tweetnacl');
-        const keyPair = tweetnacl.sign.keyPair();
-        
-        // Convert to hex strings
-        const secretKey = uint8ArrayToHex(keyPair.secretKey);
-        const publicKey = uint8ArrayToHex(keyPair.publicKey);
-        
-        console.log('[TrustModel] Generated keys - Secret:', secretKey.length, 'Public:', publicKey.length);
-        
-        // Store for future use
-        const keysToStore = {
-            secretKey,
-            publicKey,
-            generated: new Date().toISOString(),
-            personId: personId
-        };
-        
-        await SettingsStore.setItem(deviceKeyId, JSON.stringify(keysToStore));
-        console.log('[TrustModel] Stored new device credentials');
-        
-        return { secretKey, publicKey };
-    }
     
     /**
      * Load trust database from persistent storage
@@ -413,15 +351,4 @@ export class TrustModel implements Model {
         
         return await createCryptoApiFromDefaultKeys(personId);
     }
-}
-
-// Note: Removed base64ToHex function as we no longer expose raw private keys for security
-
-/**
- * Convert Uint8Array to hex string
- */
-function uint8ArrayToHex(uint8Array: Uint8Array): string {
-    return Array.from(uint8Array)
-        .map(byte => byte.toString(16).padStart(2, '0'))
-        .join('');
 } 

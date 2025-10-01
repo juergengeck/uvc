@@ -203,7 +203,7 @@ export function useTopics(
   const [topics, setTopics] = useState<TopicListItem[]>([]);
   const oneContext = useModel();
   const model = oneContext?.model;
-  const { isReady } = useModelState(model, 'AppModel');
+  const { isReady } = useModelState(model as any, 'AppModel');
 
   useEffect(() => {
     // Skip if dependencies aren't ready

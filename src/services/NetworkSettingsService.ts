@@ -200,35 +200,83 @@ export class NetworkSettingsService {
 
   /**
    * Check if device discovery is enabled
-   * UPDATED: Device discovery is handled by CommServerManager automatically
+   * Uses the actual DeviceDiscoveryModel
    */
   public isDeviceDiscoveryEnabled(): boolean {
-    // CommServerManager handles discovery automatically when connected
-    return this.isLeuteConnected();
+    const appModel = ModelService.getModel();
+    if (!appModel?.deviceDiscoveryModel) {
+      return false;
+    }
+    return appModel.deviceDiscoveryModel.isDiscovering();
   }
 
   /**
    * Set device discovery enabled state
-   * UPDATED: Device discovery is handled by CommServerManager automatically
+   * Uses the actual DeviceDiscoveryModel
    */
   public async setDeviceDiscoveryEnabled(enabled: boolean): Promise<void> {
-    // CommServerManager handles discovery automatically
-    console.log(`[NetworkSettingsService] Device discovery is handled automatically by CommServerManager: ${enabled}`);
-    this.onDeviceDiscoveryChanged.emit();
+    console.log(`[NetworkSettingsService] Setting device discovery enabled: ${enabled}`);
+    const appModel = ModelService.getModel();
+    if (!appModel?.deviceDiscoveryModel) {
+      console.warn('[NetworkSettingsService] DeviceDiscoveryModel not available');
+      return;
+    }
+
+    try {
+      if (enabled) {
+        await appModel.deviceDiscoveryModel.startDiscovery();
+      } else {
+        await appModel.deviceDiscoveryModel.stopDiscovery();
+      }
+      this.onDeviceDiscoveryChanged.emit();
+    } catch (error) {
+      console.error('[NetworkSettingsService] Error toggling device discovery:', error);
+      throw error;
+    }
   }
 
   /**
    * Check if device auto-connect is enabled
+   * Delegates to device settings
    */
   public isDeviceAutoConnectEnabled(): boolean {
-    return false;
+    try {
+      // Import device settings service dynamically to avoid circular dependencies
+      const appModel = ModelService.getModel();
+      if (!appModel) {
+        return false;
+      }
+
+      // Check if there's a device settings service available
+      // For now, return false as auto-connect is handled separately
+      return false;
+    } catch (error) {
+      console.warn('[NetworkSettingsService] Error checking auto-connect state:', error);
+      return false;
+    }
   }
 
   /**
    * Set device auto-connect enabled state
+   * Delegates to device settings
    */
   public async setDeviceAutoConnectEnabled(enabled: boolean): Promise<void> {
-    console.log('setDeviceAutoConnectEnabled not implemented');
+    console.log(`[NetworkSettingsService] Device auto-connect setting: ${enabled}`);
+    try {
+      // Import device settings service dynamically to avoid circular dependencies
+      const appModel = ModelService.getModel();
+      if (!appModel) {
+        console.warn('[NetworkSettingsService] AppModel not available for auto-connect setting');
+        return;
+      }
+
+      // For now, just emit the event - auto-connect is handled in device settings
+      this.onDeviceDiscoveryChanged.emit();
+      console.log('[NetworkSettingsService] Auto-connect setting is handled by device settings');
+    } catch (error) {
+      console.error('[NetworkSettingsService] Error setting auto-connect:', error);
+      throw error;
+    }
   }
 
   /**

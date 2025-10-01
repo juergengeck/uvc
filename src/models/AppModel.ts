@@ -9,7 +9,7 @@ import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 
 // Core model imports with correct paths and default import syntax
 import LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
-import type GroupModel from '@refinio/one.models/lib/models/Leute/GroupModel';
+import GroupModel from '@refinio/one.models/lib/models/Leute/GroupModel';
 import ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
 import TopicModel from '@refinio/one.models/lib/models/Chat/TopicModel.js';
 import JournalModel from '@refinio/one.models/lib/models/JournalModel';
@@ -141,91 +141,80 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
      * Initialize the model
      */
     public async init(): Promise<void> {
-        console.log('🔥🔥🔥 [AppModel.init()] METHOD CALLED 🔥🔥🔥');
-        console.log('[AppModel] Current state at start:', this.currentState);
-        
+        const initStartTime = Date.now();
+        console.log('[AppModel] Starting init...');
+
         // First transition: Uninitialised -> Initialising
-        console.log('[AppModel] Triggering first init event: Uninitialised -> Initialising');
         this.triggerEvent('init');
-        
+
         try {
-            // ChannelManager is now initialized in `initModel` before AppModel is created.
-            // No need to initialize it here again.
-            console.log('[AppModel] 1. ChannelManager already initialized, skipping.');
+            // ChannelManager already initialized in initModel
             
             // Initialize SettingsModel
-            console.log('[AppModel] 2. Initializing SettingsModel...');
+            const settingsStartTime = Date.now();
             this._settingsModel = new SettingsModel('lama');
             await this._settingsModel.init();
-            console.log('[AppModel] ✅ SettingsModel initialized.');
+            console.log(`[PERF] SettingsModel.init: ${Date.now() - settingsStartTime}ms`);
             
-            // Skip LLMManager and AIAssistantModel here - they'll be created in initModel after LeuteModel is ready
-            console.log('[AppModel] 3. Skipping LLMManager/AIAssistantModel - will be created after LeuteModel is ready');
+            // LLMManager and AIAssistantModel will be created in initModel after LeuteModel is ready
             
             // Initialize TopicModel and JournalModel
-            console.log('[AppModel] 4. Initializing TopicModel...');
+            const topicStartTime = Date.now();
             await this.topicModel.init();
-            console.log('[AppModel] ✅ TopicModel initialized.');
-            
-            console.log('[AppModel] 5. Initializing JournalModel...');
+            console.log(`[PERF] TopicModel.init: ${Date.now() - topicStartTime}ms`);
+
+            const journalStartTime = Date.now();
             await this.journalModel.init();
-            console.log('[AppModel] ✅ JournalModel initialized.');
+            console.log(`[PERF] JournalModel.init: ${Date.now() - journalStartTime}ms`);
             
-            // TransportManager is now initialized before AppModel is created.
-            // No need to initialize it here again.
-            console.log('[AppModel] 6. TransportManager already initialized, skipping.');
+            // TransportManager already initialized
+            // Networking will be started later in initModel() AFTER LeuteAccessRightsManager is ready
             
-            // NOTE: Networking will be started later in initModel() AFTER LeuteAccessRightsManager is ready
-            // Starting it here would be too early and cause CHUM sync to fail
-            console.log('[AppModel] 6.1. Networking will be started after access rights are initialized.');
-            
-            // Create everyone group for legacy compatibility
-            console.log('[AppModel] 7. Creating Everyone group...');
-            const { default: GroupModel } = await import('@refinio/one.models/lib/models/Leute/GroupModel');
+            // Create everyone group for legacy compatibility (using static import)
+            const groupStartTime = Date.now();
             this.everyoneGroup = await GroupModel.constructFromLatestProfileVersionByGroupName('everyone');
-            console.log('[AppModel] ✅ Everyone group created.');
+            console.log(`[PERF] Everyone group creation: ${Date.now() - groupStartTime}ms`);
             
-            // Create and initialize InviteManager (after TransportManager is ready)
-            console.log('[AppModel] 8. Creating and initializing InviteManager...');
+            // Create and initialize InviteManager
+            const inviteStartTime = Date.now();
             this.inviteManager = new InviteManager(this.leuteModel, this.transportManager);
             await this.inviteManager.init();
-            console.log('[AppModel] ✅ InviteManager created and initialized.');
+            console.log(`[PERF] InviteManager.init: ${Date.now() - inviteStartTime}ms`);
 
-            // DeviceDiscoveryModel will be initialized later by the initialization code in index.ts
-            console.log('[AppModel] 9. DeviceDiscoveryModel will be initialized by main init sequence...');
-            
-            // Initialize DeviceModel (needs to be after DeviceDiscoveryModel)
-            console.log('[AppModel] 10. Initializing DeviceModel...');
+            // Initialize DeviceModel
+            const deviceStartTime = Date.now();
             this.deviceModel = await DeviceModel.ensureInitialized(this.leuteModel);
-            console.log('[AppModel] ✅ DeviceModel initialized.');
-            
-            // Initialize OrganisationModel - REQUIRED
-            console.log('[AppModel] 10.1. Starting OrganisationModel initialization...');
+            console.log(`[PERF] DeviceModel.init: ${Date.now() - deviceStartTime}ms`);
+
+            // Initialize DeviceDiscoveryModel
+            this.deviceDiscoveryModel = DeviceDiscoveryModel.getInstance();
+            // DeviceDiscoveryModel will be fully configured later in initModel() after TrustModel is available
+
+            // Initialize OrganisationModel
+            const orgStartTime = Date.now();
             this.organisationModel = new OrganisationModel(this._channelManager);
-            console.log('[AppModel] 10.2. OrganisationModel instance created, calling init...');
             await this.organisationModel.init();
-            console.log('[AppModel] ✅ OrganisationModel initialized successfully.');
+            console.log(`[PERF] OrganisationModel.init: ${Date.now() - orgStartTime}ms`);
             
             // Create system topics
-            console.log('[AppModel] 11. Creating system topics...');
+            const systemTopicsStartTime = Date.now();
             await this.createSystemTopics();
-            console.log('[AppModel] ✅ System topics created.');
+            console.log(`[PERF] System topics creation: ${Date.now() - systemTopicsStartTime}ms`);
             
             // Setup connection monitoring
+            const chumStartTime = Date.now();
             this.setupChumSyncHandlers();
+            console.log(`[PERF] CHUM sync handlers: ${Date.now() - chumStartTime}ms`);
             
-            console.log('✅ [AppModel] Initialized successfully');
-
             this.isInitialized = true;
-            console.log('[AppModel] ✅ AppModel initialization completed');
-            
+
             // Second transition: Initialising -> Initialised
-            console.log('[AppModel] Triggering second init event: Initialising -> Initialised');
             this.triggerEvent('init');
-            
-            // Emit the onReady event for components waiting for full initialization
-            console.log('[AppModel] Emitting onReady event');
+
+            // Emit the onReady event
             this.onReady.emit();
+
+            console.log(`[PERF] AppModel.init TOTAL: ${Date.now() - initStartTime}ms`);
             
             // Initialize debugging utilities
             try {
@@ -235,20 +224,14 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
               
               // Initialize message transfer debugger
               const { initMessageTransferDebugger } = await import('../utils/messageTransferDebug');
-              initMessageTransferDebugger(this.channelManager);
-              
-              // Run malformed grant check on startup
-              console.log('[AppModel] 🔍 Checking for malformed access grants...');
-              const { checkMalformedAccessGrants } = await import('../utils/checkMalformedAccessGrants');
-              await checkMalformedAccessGrants();
+              initMessageTransferDebugger(this._channelManager);
             } catch (debugError) {
                 console.error('[AppModel] Debug setup failed:', debugError);
             }
             
         } catch (error) {
             console.error('❌ [AppModel] Initialization failed', error);
-            this.triggerEvent('shutdown'); // Initialising -> ShuttingDown
-            this.triggerEvent('shutdown'); // ShuttingDown -> Uninitialised
+            // Stay in Uninitialised state on failure
             throw error;
         }
     }
@@ -273,19 +256,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
 
     public async shutdown(): Promise<void> {
         if (this.currentState === 'Uninitialised' || this.currentState === 'ShuttingDown') {
-            console.log('[AppModel] Already shutdown or shutting down');
             return;
-        }
-        
-        console.log('🛑 [AppModel] Shutting down...');
-        
-        // Transition to ShuttingDown state if we're initialized
-        if (this.currentState === 'Initialised') {
-            try {
-                this.triggerEvent('shutdown');
-            } catch (stateError) {
-                console.warn('[AppModel] State transition error:', stateError);
-            }
         }
         
         // Stop all event listeners first to prevent errors during shutdown
@@ -350,6 +321,27 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             // Continue shutdown even if transport shutdown fails
         }
         
+        // Shutdown DeviceDiscoveryModel if it exists
+        if (this.deviceDiscoveryModel) {
+            console.log('[AppModel] Shutting down DeviceDiscoveryModel...');
+            try {
+                await this.deviceDiscoveryModel.shutdown();
+                this.deviceDiscoveryModel = undefined;
+            } catch (error) {
+                console.error('[AppModel] Error shutting down DeviceDiscoveryModel:', error);
+            }
+        }
+
+        // Shutdown DeviceModel if it exists
+        if (this.deviceModel) {
+            try {
+                await this.deviceModel.shutdown();
+                this.deviceModel = undefined;
+            } catch (error) {
+                console.error('[AppModel] Error shutting down DeviceModel:', error);
+            }
+        }
+
         // Clear all model references
         this.leuteModel = undefined;
         this.channelManager = undefined;
@@ -361,11 +353,14 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
         this.settingsModel = undefined;
         
         // Force state to Uninitialised
-        this.currentState = 'Uninitialised';
-        
-        console.log('✅ [AppModel] Shutdown complete');
-        
-        this.isInitialized = false;
+        // Transition to ShuttingDown state if we're initialized
+        if (this.currentState === 'Initialised') {
+            try {
+                this.triggerEvent('shutdown');
+            } catch (stateError) {
+                console.warn('[AppModel] State transition error:', stateError);
+            }
+        }
     }
 
     /**
@@ -433,22 +428,26 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
 
     // Create system topics (Everyone and Glue topics)
     public async createSystemTopics(): Promise<boolean> {
+        // No state assertion - this is called during init
         try {
             console.log('[AppModel] Creating system topics (Everyone and Glue)...');
             
             // Create Everyone topic
             console.log('[AppModel] Creating Everyone topic...');
+            const everyoneStartTime = Date.now();
             const everyoneTopic = await this.topicModel.createEveryoneTopic();
-            console.log('[AppModel] ✅ Everyone topic created:', everyoneTopic?.id);
+            console.log(`[AppModel] ✅ Everyone topic created: ${everyoneTopic?.id} (${Date.now() - everyoneStartTime}ms)`);
             
             // Create Glue topic
             console.log('[AppModel] Creating Glue topic...');
+            const glueStartTime = Date.now();
             const glueTopic = await this.topicModel.createGlueTopic();
-            console.log('[AppModel] ✅ Glue topic created:', glueTopic?.id);
+            console.log(`[AppModel] ✅ Glue topic created: ${glueTopic?.id} (${Date.now() - glueStartTime}ms)`);
             
             // Create AI Subjects topic for IoM knowledge sharing
             console.log('[AppModel] Creating AI Subjects topic...');
             try {
+                const aiStartTime = Date.now();
                 // Create the AISubjectsChannel as a system topic
                 const subjectsTopicId = 'AISubjectsChannel';
                 const subjectsTopic = await this.topicModel.createGroupTopic(
@@ -456,7 +455,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
                     subjectsTopicId,     // Topic ID
                     null                 // No owner for system topic
                 );
-                console.log('[AppModel] ✅ AI Subjects topic created:', subjectsTopic?.id);
+                console.log(`[AppModel] ✅ AI Subjects topic created: ${subjectsTopic?.id} (${Date.now() - aiStartTime}ms)`);
             } catch (error) {
                 // Topic might already exist
                 console.log('[AppModel] AI Subjects topic may already exist:', error);
@@ -493,12 +492,8 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
         return this._llmManager;
     }
 
-    // Repair contacts and topics (placeholder implementation)
-    public async repairContactsAndTopics(): Promise<void> {
-        console.log('[AppModel] Repairing contacts and topics...');
-        // TODO: Implement actual repair logic
-        console.log('[AppModel] Repair completed (placeholder)');
-    }
+    // REMOVED: repairContactsAndTopics - we don't mitigate, we fix root causes
+    // If data is corrupt, we must fix the problem at the source, not paper over it
 
     // AI Assistant access
     public getAIAssistantModel(): AIAssistantModel | undefined {

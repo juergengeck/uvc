@@ -61,6 +61,7 @@ export interface QuicVCPacketHeader {
     dcid: Uint8Array;    // Destination Connection ID
     scid: Uint8Array;    // Source Connection ID
     packetNumber: bigint;
+    headerLength?: number; // Total header length in bytes (for proper payload extraction)
 }
 
 export interface QuicVCConnection {
@@ -138,6 +139,7 @@ export class QuicVCConnectionManager {
     public readonly onPacketReceived = new OEvent<(deviceId: string, data: Uint8Array) => void>();
     public readonly onError = new OEvent<(deviceId: string, error: Error) => void>();
     public readonly onLEDResponse = new OEvent<(deviceId: string, response: any) => void>();
+    public readonly onDeviceDiscovered = new OEvent<(event: any) => void>();
     
     private constructor(ownPersonId: SHA256IdHash<Person>) {
         this.ownPersonId = ownPersonId;
@@ -244,11 +246,22 @@ export class QuicVCConnectionManager {
      */
     async connect(deviceId: string, address: string, port: number, credential: any): Promise<void> {
         console.log(`[QuicVCConnectionManager] Initiating QUICVC connection to ${deviceId} at ${address}:${port}`);
-        
+
         // Check if we already have a connection to this device
         const existingConnection = this.findConnectionByAddress(address, port);
         if (existingConnection && existingConnection.state === 'established') {
             console.log(`[QuicVCConnectionManager] Already have established connection to ${deviceId} - reusing it`);
+            return;
+        } else if (existingConnection && existingConnection.state === 'initial') {
+            // Reuse the existing connection created by DISCOVERY frame
+            console.log(`[QuicVCConnectionManager] Reusing existing connection in initial state`);
+
+            // Update the connection with our credential
+            existingConnection.localVC = credential;
+            existingConnection.deviceId = deviceId;
+
+            // Send VC_INIT packet now that we have a credential
+            await this.sendInitialPacket(existingConnection);
             return;
         } else if (existingConnection && existingConnection.state !== 'established') {
             console.log(`[QuicVCConnectionManager] Have connection in ${existingConnection.state} state - closing and recreating`);
@@ -342,20 +355,20 @@ export class QuicVCConnectionManager {
      * Handle incoming QUICVC packet
      */
     public async handleQuicVCPacket(data: Uint8Array, rinfo: { address: string, port: number }): Promise<void> {
-        console.log('[QuicVCConnectionManager] handleQuicVCPacket called with', data.length, 'bytes from', rinfo.address + ':' + rinfo.port);
+        // console.log('[QuicVCConnectionManager] handleQuicVCPacket called with', data.length, 'bytes from', rinfo.address + ':' + rinfo.port);
         try {
             // Parse packet header
             const header = this.parsePacketHeader(data);
             if (!header) {
-                console.error('[QuicVCConnectionManager] Invalid packet header');
+                console.warn('[QuicVCConnectionManager] Invalid packet header - ignoring malformed packet');
                 debug('Invalid packet header');
                 return;
             }
-            console.log('[QuicVCConnectionManager] Parsed header:', header);
+            // console.log('[QuicVCConnectionManager] Parsed header:', header);
             
             // Find or create connection
             let connection = this.findConnectionByIds(header.dcid, header.scid);
-            console.log('[QuicVCConnectionManager] Connection lookup by IDs:', connection ? 'found' : 'not found');
+            // console.log('[QuicVCConnectionManager] Connection lookup by IDs:', connection ? 'found' : 'not found');
             
             // For ESP32 responses, also try to find by address/port if not found by IDs
             if (!connection) {
@@ -363,21 +376,29 @@ export class QuicVCConnectionManager {
                 if (connection) {
                     console.log('[QuicVCConnectionManager] Found connection by address/port for ESP32 response');
                 } else {
-                    console.log('[QuicVCConnectionManager] No connection found by address/port either');
+                    // console.log('[QuicVCConnectionManager] No connection found by address/port either');
                     // Log all existing connections for debugging
-                    console.log('[QuicVCConnectionManager] Existing connections:');
+                    // console.log('[QuicVCConnectionManager] Existing connections:');
                     for (const [id, conn] of this.connections) {
-                        console.log(`  - ${id}: ${conn.address}:${conn.port}, deviceId: ${conn.deviceId}, state: ${conn.state}`);
+                        // console.log(`  - ${id}: ${conn.address}:${conn.port}, deviceId: ${conn.deviceId}, state: ${conn.state}`);
                     }
                 }
             }
             
-            console.log('[QuicVCConnectionManager] Final connection lookup result:', connection ? 'found' : 'not found');
+            // console.log('[QuicVCConnectionManager] Final connection lookup result:', connection ? 'found' : 'not found');
             
             if (!connection) {
                 if (header.type === QuicVCPacketType.INITIAL) {
-                    console.log('[QuicVCConnectionManager] Handling new INITIAL connection');
-                    // New incoming connection (server role)
+                    // console.log('[QuicVCConnectionManager] Checking if INITIAL packet is discovery');
+                    // Check if this is a discovery packet before creating connection
+                    const payload = this.extractPayload(data, header);
+                    if (payload.length > 3 && payload[0] === 0x30) { // DISCOVERY frame
+                        // console.log('[QuicVCConnectionManager] Discovery packet detected - handling without connection');
+                        await this.handleInitialPacket(null, data, header, rinfo);
+                        return; // Don't create connection for discovery
+                    }
+                    console.log('[QuicVCConnectionManager] Not a discovery packet - creating new connection');
+                    // New incoming connection (server role) for non-discovery packets
                     connection = await this.handleNewConnection(header, rinfo);
                     console.log('[QuicVCConnectionManager] New connection created:', connection ? 'success' : 'failed');
                 } else if (header.type === QuicVCPacketType.PROTECTED) {
@@ -407,13 +428,25 @@ export class QuicVCConnectionManager {
             
             // Update activity
             connection.lastActivity = Date.now();
-            
+
+            // Log raw packet info for debugging ESP32 response
+            console.log(`[QuicVCConnectionManager] Processing packet type ${header.type} from ${rinfo.address}:${rinfo.port} for connection state: ${connection.state}`);
+            console.log('[QuicVCConnectionManager] Packet header details:', {
+                type: header.type,
+                dcid: Array.from(header.dcid).map(b => b.toString(16).padStart(2, '0')).join(''),
+                scid: Array.from(header.scid).map(b => b.toString(16).padStart(2, '0')).join(''),
+                packetNumber: header.packetNumber?.toString(),
+                dataLength: data.length
+            });
+
             // Process packet based on type
             switch (header.type) {
                 case QuicVCPacketType.INITIAL:
-                    await this.handleInitialPacket(connection, data, header);
+                    await this.handleInitialPacket(connection, data, header, rinfo);
                     break;
                 case QuicVCPacketType.HANDSHAKE:
+                    console.log('[QuicVCConnectionManager] Received HANDSHAKE packet from', connection.deviceId || connection.address);
+                    // ESP32 sends VC_RESPONSE in HANDSHAKE packets
                     await this.handleHandshakePacket(connection, data, header);
                     break;
                 case QuicVCPacketType.PROTECTED:
@@ -457,36 +490,119 @@ export class QuicVCConnectionManager {
             lastActivity: Date.now()
         };
         
-        const connId = this.getConnectionId(connection.dcid);
+        // Store connection by our SCID - ESP32 will use this as DCID in its response
+        const connId = this.getConnectionId(connection.scid);
         this.connections.set(connId, connection);
         
         return connection;
     }
     
     /**
-     * Handle INITIAL packet with VC_INIT frame
+     * Handle INITIAL packet with VC_INIT frame or DISCOVERY frame
      */
-    private async handleInitialPacket(connection: QuicVCConnection, data: Uint8Array, header: QuicVCPacketHeader): Promise<void> {
+    private async handleInitialPacket(connection: QuicVCConnection | null, data: Uint8Array, header: QuicVCPacketHeader, rinfo: { address: string, port: number }): Promise<void> {
         console.log('[QuicVCConnectionManager] Handling INITIAL packet');
         // Extract payload (skip header)
         const payload = this.extractPayload(data, header);
         console.log('[QuicVCConnectionManager] Payload length:', payload.length);
         console.log('[QuicVCConnectionManager] First 20 payload bytes:', Array.from(payload.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-        
+
+        // Check if this is a discovery frame first (no connection needed)
+        if (payload.length > 3 && payload[0] === 0x30) { // Frame type 0x30 = DISCOVERY
+            console.log('[QuicVCConnectionManager] Frame type 0x30 - handling as discovery');
+
+            // If we have an active connection waiting for VC_RESPONSE, don't return early
+            // The ESP32 broadcasts discovery packets while also processing ownership
+            if (connection && connection.state === 'initial') {
+                console.log('[QuicVCConnectionManager] Connection in initial state - not returning, waiting for VC_RESPONSE');
+                await this.handleDiscoveryPacket(payload, header, rinfo);
+                // Continue processing in case there are more frames in this packet
+            } else {
+                console.log('[QuicVCConnectionManager] No active connection - handling discovery and returning');
+                await this.handleDiscoveryPacket(payload, header, rinfo);
+                return; // Don't create or update connection for discovery
+            }
+        }
+
+        // For non-discovery packets, we need a connection
+        if (!connection) {
+            console.error('[QuicVCConnectionManager] No connection for non-discovery INITIAL packet');
+            return;
+        }
+
+        console.log('[QuicVCConnectionManager] Past initial checks, about to check frame type 0x30 again...');
+
         // Try to decode as ESP32 discovery format
-        // ESP32 sends: frame_type(1) + length(2) + JSON
+        // ESP32 sends: frame_type(1) + length(2) + HTML/JSON
         try {
-            if (payload.length > 3 && payload[0] === 0x01) { // Frame type 0x01 = DISCOVERY
+            if (payload.length > 3 && payload[0] === 0x30) { // Frame type 0x30 = DISCOVERY
                 const frameLength = (payload[1] << 8) | payload[2];
                 const jsonStart = 3; // Skip frame header
-                
+
                 if (payload.length >= jsonStart + frameLength) {
-                    const jsonBytes = payload.slice(jsonStart, jsonStart + frameLength);
-                    const jsonString = new TextDecoder().decode(jsonBytes);
-                    console.log('[QuicVCConnectionManager] Discovery JSON:', jsonString);
-                    const discoveryData = JSON.parse(jsonString);
-                    console.log('[QuicVCConnectionManager] Parsed discovery data:', discoveryData);
-                    
+                    const contentBytes = payload.slice(jsonStart, jsonStart + frameLength);
+                    const contentString = new TextDecoder().decode(contentBytes);
+                    // console.log('[QuicVCConnectionManager] Discovery content:', contentString);
+
+                    // Check if it's HTML (ESP32 format) or JSON
+                    if (contentString.startsWith('<!DOCTYPE html>')) {
+                        // Parse HTML microdata for device information
+                        const idMatch = contentString.match(/itemprop="id" content="([^"]+)"/);
+                        const typeMatch = contentString.match(/itemprop="type" content="([^"]+)"/);
+                        const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
+                        const ownershipMatch = contentString.match(/itemprop="ownership" content="([^"]+)"/);
+
+                        if (idMatch) {
+                            const discoveryData = {
+                                id: idMatch[1],
+                                type: typeMatch ? typeMatch[1] : 'unknown',
+                                status: statusMatch ? statusMatch[1] : 'unknown',
+                                ownership: ownershipMatch ? ownershipMatch[1] : 'unknown'
+                            };
+                            console.log('[QuicVCConnectionManager] Parsed discovery data from HTML:', discoveryData);
+
+                            // Store device information in the connection
+                            connection.deviceId = discoveryData.id;
+                            connection.deviceType = discoveryData.type;
+                            connection.isOwned = discoveryData.ownership !== 'unclaimed';
+
+                            // Emit discovery event for DeviceDiscoveryModel
+                            this.onDeviceDiscovered.emit({
+                                type: 'discovery',
+                                deviceInfo: {
+                                    deviceId: discoveryData.id,
+                                    deviceType: discoveryData.type,
+                                    isOwned: discoveryData.ownership !== 'unclaimed',
+                                    ownership: discoveryData.ownership,
+                                    status: discoveryData.status
+                                },
+                                address: rinfo.address,
+                                port: rinfo.port
+                            });
+                        }
+                    } else {
+                        // Try parsing as JSON
+                        try {
+                            const discoveryData = JSON.parse(contentString);
+                            console.log('[QuicVCConnectionManager] Parsed discovery data from JSON:', discoveryData);
+
+                            // Store in connection and emit event
+                            connection.deviceId = discoveryData.id || discoveryData.deviceId;
+                            connection.deviceType = discoveryData.type || discoveryData.deviceType;
+                            connection.isOwned = discoveryData.ownership !== 'unclaimed';
+
+                            // Emit discovery event
+                            this.onDeviceDiscovered.emit({
+                                type: 'discovery',
+                                deviceInfo: discoveryData,
+                                address: rinfo.address,
+                                port: rinfo.port
+                            });
+                        } catch (e) {
+                            console.log('[QuicVCConnectionManager] Discovery content is neither HTML nor JSON');
+                        }
+                    }
+
                     // This is an ESP32 discovery packet, not a QUICVC handshake
                     // The device is broadcasting its availability
                     // We should not try to process this as a VC handshake
@@ -499,30 +615,67 @@ export class QuicVCConnectionManager {
         
         // Parse binary QUIC frames instead of JSON
         const frames = this.parseFrames(payload);
+        console.log('[QuicVCConnectionManager] Parsed frames:', frames.length, 'frames');
         if (frames.length === 0) {
-            console.error('[QuicVCConnectionManager] No frames found in INITIAL packet');
+            console.warn('[QuicVCConnectionManager] No frames found in INITIAL packet');
+            console.warn('[QuicVCConnectionManager] Raw payload (first 50 bytes):', Array.from(payload.slice(0, Math.min(50, payload.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            // Don't return here - the ESP32 might be sending a different format
+            // Try to parse as raw JSON for VC_RESPONSE
+            try {
+                const jsonStr = new TextDecoder().decode(payload);
+                console.log('[QuicVCConnectionManager] Attempting JSON parse of raw payload:', jsonStr.substring(0, 100));
+                const responseData = JSON.parse(jsonStr);
+                if (responseData.status) {
+                    // This looks like a VC_RESPONSE without frame header
+                    console.log('[QuicVCConnectionManager] Found raw VC_RESPONSE without frame header');
+                    await this.handleVCResponseFrame(connection, responseData);
+                    return;
+                }
+            } catch (e) {
+                // Not JSON either
+                console.log('[QuicVCConnectionManager] Payload is not JSON either');
+            }
             return;
         }
-        
-        // Check for VC_INIT frame (client credential presentation)
-        const vcInitFrame = frames.find(frame => frame.type === QuicVCFrameType.VC_INIT);
-        
-        // Check for VC_RESPONSE frame (server credential response - ESP32 sends this in INITIAL packets)
-        const vcResponseFrame = frames.find(frame => frame.type === QuicVCFrameType.VC_RESPONSE);
-        
-        if (vcInitFrame) {
-            // Handle VC_INIT frame (we are acting as server)
-            console.log('[QuicVCConnectionManager] Found VC_INIT frame - handling as server');
-            await this.handleVCInitFrame(connection, vcInitFrame);
-        } else if (vcResponseFrame) {
-            // Handle VC_RESPONSE frame (we are acting as client, ESP32 responded)
-            console.log('[QuicVCConnectionManager] Found VC_RESPONSE frame - handling as client');
-            await this.handleVCResponseFrame(connection, vcResponseFrame);
-        } else {
-            console.error('[QuicVCConnectionManager] No VC_INIT or VC_RESPONSE frame found in INITIAL packet');
-            debug('Expected VC_INIT or VC_RESPONSE frame in INITIAL packet');
+
+        // Process ALL frames - ESP32 might send multiple frames in one packet
+        // Priority: VC_RESPONSE > VC_INIT > DISCOVERY
+        let handledVCResponse = false;
+        let handledVCInit = false;
+
+        for (const frame of frames) {
+            if (frame.type === QuicVCFrameType.VC_RESPONSE && !handledVCResponse) {
+                // Handle VC_RESPONSE frame (server credential response - ESP32 sends this in INITIAL packets)
+                console.log('[QuicVCConnectionManager] Found VC_RESPONSE frame - handling as client');
+                await this.handleVCResponseFrame(connection, frame);
+                handledVCResponse = true;
+            } else if (frame.type === QuicVCFrameType.VC_INIT && !handledVCInit) {
+                // Handle VC_INIT frame (client credential presentation - we are acting as server)
+                console.log('[QuicVCConnectionManager] Found VC_INIT frame - handling as server');
+                await this.handleVCInitFrame(connection, frame);
+                handledVCInit = true;
+            } else if (frame.type === QuicVCFrameType.DISCOVERY) {
+                // Handle DISCOVERY frame - ESP32 is broadcasting its presence
+                // Don't stop processing other frames - just handle discovery and continue
+                console.log('[QuicVCConnectionManager] Found DISCOVERY frame - device is broadcasting (continuing to check for other frames)');
+                await this.handleDiscoveryFrame(connection, frame, rinfo);
+            }
+        }
+
+        // If we handled a VC response or init, we're done
+        if (handledVCResponse || handledVCInit) {
             return;
         }
+
+        // If we only saw discovery frames, log but don't error
+        if (frames.some(f => f.type === QuicVCFrameType.DISCOVERY)) {
+            console.log('[QuicVCConnectionManager] Only DISCOVERY frames in packet - waiting for VC_RESPONSE');
+            return;
+        }
+
+        // No recognized frames
+        console.warn('[QuicVCConnectionManager] No recognized frames in INITIAL packet - ignoring');
+        debug('Frame types received:', frames.map(f => f.type));
     }
 
     /**
@@ -607,9 +760,133 @@ export class QuicVCConnectionManager {
             // DON'T close the connection - we need it for future LED commands!
             // The connection should remain open for the device's lifetime
             console.log('[QuicVCConnectionManager] Keeping connection open for future commands');
+        } else if (frame.status === 'revoked') {
+            // Ownership revoked - close the connection
+            console.log('[QuicVCConnectionManager] Ownership revoked - closing connection');
+            this.closeConnection(connection, `Ownership revoked`);
         } else {
             console.error('[QuicVCConnectionManager] ESP32 operation failed:', frame.status, frame.message);
             this.closeConnection(connection, `Ownership failed: ${frame.message || frame.status}`);
+        }
+    }
+    
+    /**
+     * Handle DISCOVERY packet without creating a connection
+     */
+    private async handleDiscoveryPacket(payload: Uint8Array, header: QuicVCPacketHeader, rinfo: { address: string, port: number }): Promise<void> {
+        try {
+            const frameLength = (payload[1] << 8) | payload[2];
+            const jsonStart = 3; // Skip frame header
+
+            if (payload.length >= jsonStart + frameLength) {
+                const contentBytes = payload.slice(jsonStart, jsonStart + frameLength);
+                const contentString = new TextDecoder().decode(contentBytes);
+                // console.log('[QuicVCConnectionManager] Discovery content:', contentString);
+
+                // Parse HTML microdata or JSON
+                let discoveryData: any = {};
+
+                if (contentString.startsWith('<!DOCTYPE html>')) {
+                    // Parse HTML microdata for device information
+                    const idMatch = contentString.match(/itemprop="id" content="([^"]+)"/);
+                    const typeMatch = contentString.match(/itemprop="type" content="([^"]+)"/);
+                    const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
+                    const ownershipMatch = contentString.match(/itemprop="ownership" content="([^"]+)"/);
+
+                    discoveryData = {
+                        id: idMatch ? idMatch[1] : '',
+                        type: typeMatch ? typeMatch[1] : 'unknown',
+                        status: statusMatch ? statusMatch[1] : 'online',
+                        ownership: ownershipMatch ? ownershipMatch[1] : 'unclaimed'
+                    };
+                } else {
+                    // Try parsing as JSON
+                    discoveryData = JSON.parse(contentString);
+                }
+
+                // console.log('[QuicVCConnectionManager] Parsed discovery data:', discoveryData);
+
+                // Emit discovery event without creating a connection
+                this.onDeviceDiscovered.emit({
+                    type: 'discovery',
+                    deviceInfo: {
+                        deviceId: discoveryData.id || '',
+                        deviceType: discoveryData.type || 'ESP32',
+                        isOwned: discoveryData.ownership !== 'unclaimed',
+                        ownership: discoveryData.ownership || 'unclaimed',
+                        status: discoveryData.status || 'online',
+                        address: rinfo.address,
+                        port: rinfo.port
+                    },
+                    address: rinfo.address,
+                    port: rinfo.port,
+                    scid: header.scid // Include SCID for consistent device identification
+                });
+
+                // console.log('[QuicVCConnectionManager] Emitted stateless discovery event for:', discoveryData.id);
+            }
+        } catch (error) {
+            console.error('[QuicVCConnectionManager] Failed to parse discovery packet:', error);
+        }
+    }
+
+    /**
+     * Handle DISCOVERY frame from ESP32 devices (deprecated - use handleDiscoveryPacket)
+     */
+    private async handleDiscoveryFrame(connection: QuicVCConnection | null, frame: any, rinfo: { address: string, port: number }): Promise<void> {
+        console.log('[QuicVCConnectionManager] Processing DISCOVERY frame');
+        
+        // Parse the discovery data (ESP32 sends JSON in the frame payload)
+        try {
+            const discoveryData = typeof frame.payload === 'string' 
+                ? JSON.parse(frame.payload)
+                : JSON.parse(new TextDecoder().decode(frame.payload));
+            
+            console.log('[QuicVCConnectionManager] Discovery data:', discoveryData);
+            
+            // Extract device information
+            const deviceInfo = {
+                deviceId: discoveryData.device_id || '',
+                deviceType: discoveryData.device_type || 'ESP32',
+                ownership: discoveryData.ownership || 'unclaimed',
+                status: discoveryData.status || 'online',
+                protocol: discoveryData.protocol || 'quicvc/1.0',
+                capabilities: discoveryData.capabilities || [],
+                address: rinfo.address,
+                port: rinfo.port,
+                lastSeen: Date.now()
+            };
+            
+            // Update connection with device info if we have one
+            if (connection) {
+                connection.deviceId = deviceInfo.deviceId;
+            }
+            
+            // Emit discovery event for the DeviceDiscoveryModel to handle
+            this.onDeviceDiscovered.emit({
+                type: 'discovery',
+                deviceInfo,
+                address: rinfo.address,
+                port: rinfo.port
+            });
+
+            console.log('[QuicVCConnectionManager] Emitted device discovery event for:', deviceInfo.deviceId);
+
+            // For unclaimed devices, the connection stays in 'initial' state
+            // The app must explicitly initiate authentication when user claims the device
+            // via initiateHandshake() or connect() methods which will reuse this connection
+
+            if (deviceInfo.ownership === 'unclaimed' && connection) {
+                console.log('[QuicVCConnectionManager] Device is unclaimed, connection ready for claiming');
+                // Connection remains in 'initial' state until user claims via UI
+            } else if (deviceInfo.ownership === 'claimed' && connection) {
+                // For claimed devices, authentication may be needed if we're the owner
+                console.log('[QuicVCConnectionManager] Device is claimed, authentication may be needed');
+                // Authentication will be triggered by DeviceDiscoveryModel/ESP32ConnectionManager
+            }
+
+        } catch (error) {
+            console.error('[QuicVCConnectionManager] Failed to parse discovery frame:', error);
         }
     }
     
@@ -649,37 +926,25 @@ export class QuicVCConnectionManager {
      */
     private async handleHandshakePacket(connection: QuicVCConnection, data: Uint8Array, header: QuicVCPacketHeader): Promise<void> {
         const payload = this.extractPayload(data, header);
-        const frame = JSON.parse(new TextDecoder().decode(payload));
-        
-        if (frame.type !== QuicVCFrameType.VC_RESPONSE) {
-            debug('Expected VC_RESPONSE frame in HANDSHAKE packet');
+
+        // ESP32 sends frames in binary format, not JSON
+        const frames = this.parseFrames(payload);
+        console.log('[QuicVCConnectionManager] HANDSHAKE packet contains', frames.length, 'frames');
+
+        if (frames.length === 0) {
+            console.warn('[QuicVCConnectionManager] No frames in HANDSHAKE packet');
             return;
         }
-        
-        // Verify credential if we're the client
-        if (!connection.isServer && this.vcManager) {
-            const verifiedInfo = await this.vcManager.verifyCredential(frame.credential, frame.credential.credentialSubject.id);
-            
-            if (verifiedInfo && verifiedInfo.issuerPersonId === this.ownPersonId) {
-                connection.remoteVC = verifiedInfo;
-                
-                // Derive all keys
-                connection.handshakeKeys = await this.deriveHandshakeKeys(connection);
-                connection.applicationKeys = await this.deriveApplicationKeys(connection);
-                
-                // Complete handshake
-                connection.state = 'established';
-                this.completeHandshake(connection);
-            } else {
-                this.closeConnection(connection, 'Invalid credential in handshake');
-            }
-        } else if (connection.isServer) {
-            // Server completes handshake
-            connection.handshakeKeys = await this.deriveHandshakeKeys(connection);
-            connection.applicationKeys = await this.deriveApplicationKeys(connection);
-            connection.state = 'established';
-            this.completeHandshake(connection);
+
+        // Look for VC_RESPONSE frame
+        const vcResponseFrame = frames.find(f => f.type === QuicVCFrameType.VC_RESPONSE);
+        if (vcResponseFrame) {
+            console.log('[QuicVCConnectionManager] Found VC_RESPONSE in HANDSHAKE packet');
+            await this.handleVCResponseFrame(connection, vcResponseFrame);
+            return;
         }
+
+        debug('No VC_RESPONSE frame in HANDSHAKE packet');
     }
     
     /**
@@ -924,16 +1189,16 @@ export class QuicVCConnectionManager {
     }
     
     private findConnectionByIds(dcid: Uint8Array, scid: Uint8Array): QuicVCConnection | undefined {
-        // Try to find connection by DCID first (normal case)
+        // ESP32 response has: DCID = our SCID (from our initial packet)
+        // So look up connection by the incoming packet's DCID
         const dcidStr = this.getConnectionId(dcid);
         let connection = this.connections.get(dcidStr);
-        
+
         if (!connection) {
-            // If not found by DCID, try to find by SCID (ESP32 case)
-            // ESP32 uses its MAC as SCID consistently across packets
+            // Fallback: search all connections
             const scidStr = this.getConnectionId(scid);
             for (const [_, conn] of this.connections) {
-                if (this.getConnectionId(conn.scid) === scidStr || this.getConnectionId(conn.dcid) === scidStr) {
+                if (this.getConnectionId(conn.scid) === dcidStr || this.getConnectionId(conn.dcid) === scidStr) {
                     connection = conn;
                     break;
                 }
@@ -966,8 +1231,8 @@ export class QuicVCConnectionManager {
      */
     private findConnectionByAddress(address: string, port: number): QuicVCConnection | undefined {
         for (const conn of this.connections.values()) {
-            // For client connections, match the remote address/port
-            if (!conn.isServer && conn.address === address && conn.port === port) {
+            // Match any connection with the same address/port
+            if (conn.address === address && conn.port === port) {
                 return conn;
             }
         }
@@ -987,37 +1252,62 @@ export class QuicVCConnectionManager {
             scid: connection.scid,
             packetNumber: connection.nextPacketNumber++
         };
-        
-        // Serialize header 
+
+        // Serialize header
         const headerBytes = this.serializeHeader(header);
-        
+
         // For INITIAL packets, create proper frame structure that ESP32 expects
         let frameBytes: Uint8Array;
         if (type === QuicVCPacketType.INITIAL && frameType !== undefined) {
             // Create frame: frame_type(1) + frame_length(2) + frame_data
             const payloadBytes = new TextEncoder().encode(payload);
             frameBytes = new Uint8Array(1 + 2 + payloadBytes.length);
-            
+
             // Frame type (1 byte)
             frameBytes[0] = frameType;
-            
+
             // Frame length (2 bytes, big-endian)
             const frameLength = payloadBytes.length;
             frameBytes[1] = (frameLength >> 8) & 0xFF;
             frameBytes[2] = frameLength & 0xFF;
-            
+
             // Frame data
             frameBytes.set(payloadBytes, 3);
         } else {
             // For other packet types, use payload directly
             frameBytes = new TextEncoder().encode(payload);
         }
-        
+
+        // Update the length field in the header with actual payload length
+        // For INITIAL packets: length field is at offset = flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + token_len(1)
+        // Length field format: 2-byte varint encoding (payload_length + packet_number_length)
+        if (type === QuicVCPacketType.INITIAL || type === QuicVCPacketType.HANDSHAKE) {
+            const pnLength = 2; // We use 2-byte packet numbers
+            const totalPayloadLength = frameBytes.length + pnLength;
+
+            // Find the offset to the length field in the header
+            let lengthOffset = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length;
+            if (type === QuicVCPacketType.INITIAL) {
+                lengthOffset += 1; // Skip token length field for INITIAL packets
+            }
+
+            // Write 2-byte varint (0x40 | (length >> 8), length & 0xFF)
+            // Max length is 16383 for 2-byte varint
+            if (totalPayloadLength <= 16383) {
+                headerBytes[lengthOffset] = 0x40 | ((totalPayloadLength >> 8) & 0x3F);
+                headerBytes[lengthOffset + 1] = totalPayloadLength & 0xFF;
+            } else {
+                console.warn('[QuicVCConnectionManager] Payload too large for 2-byte varint, truncating');
+                headerBytes[lengthOffset] = 0x7F;
+                headerBytes[lengthOffset + 1] = 0xFF;
+            }
+        }
+
         // Combine header and frames
         const packet = new Uint8Array(headerBytes.length + frameBytes.length);
         packet.set(headerBytes, 0);
         packet.set(frameBytes, headerBytes.length);
-        
+
         return packet;
     }
     
@@ -1067,80 +1357,209 @@ export class QuicVCConnectionManager {
     }
     
     private serializeHeader(header: QuicVCPacketHeader): Uint8Array {
-        // ESP32-compatible header serialization
-        // Header length: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + packet_num(1)
-        const buffer = new ArrayBuffer(1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 1);
+        // QUIC spec-compliant header serialization per RFC 9000
+        // For INITIAL packets: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + token_len(varint) + token + length(varint) + pn(1-4)
+        // For other long headers: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + length(varint) + pn(1-4)
+
+        // Calculate packet number length (use 2 bytes for now as per QUIC spec)
+        const pnLength = 2;
+        const pnLengthBits = pnLength - 1; // 0=1byte, 1=2bytes, 2=4bytes
+
+        // Flags byte: bit 7 = long header (1), bits 5-4 = packet type for QUIC v1, bits 1-0 = packet number length - 1
+        let flags: number;
+        switch (header.type) {
+            case QuicVCPacketType.INITIAL:
+                flags = 0xC0 | pnLengthBits;  // Long header + INITIAL packet type + PN length
+                break;
+            case QuicVCPacketType.HANDSHAKE:
+                flags = 0xD0 | pnLengthBits;  // Long header + HANDSHAKE packet type + PN length
+                break;
+            case QuicVCPacketType.PROTECTED:
+                flags = 0x40 | pnLengthBits;  // Short header + PN length
+                break;
+            case QuicVCPacketType.RETRY:
+                flags = 0xF0;  // Long header + RETRY packet type (no PN length)
+                break;
+            default:
+                flags = 0x80 | (header.type & 0x03) | pnLengthBits;  // Fallback
+        }
+
+        // For INITIAL packets, calculate total size including token and length fields
+        let totalSize: number;
+        if (header.type === QuicVCPacketType.INITIAL) {
+            // flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + token_len(1) + length(2) + pn(2)
+            totalSize = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 1 + 2 + pnLength;
+        } else if (header.type === QuicVCPacketType.PROTECTED) {
+            // Short header: flags(1) + dcid + pn(2)
+            totalSize = 1 + header.dcid.length + pnLength;
+        } else {
+            // Other long headers: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + length(2) + pn(2)
+            totalSize = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 2 + pnLength;
+        }
+
+        const buffer = new ArrayBuffer(totalSize);
         const view = new DataView(buffer);
         let offset = 0;
-        
-        // Flags byte: bit 7 = long header (1), bits 0-1 = packet type
-        // For QUIC-VC/ESP32: packet type goes in lower 2 bits
-        const flags = 0x80 | (header.type & 0x03);
+
         view.setUint8(offset++, flags);
-        
-        // Version (4 bytes, big-endian)
-        view.setUint32(offset, header.version, false); offset += 4;
-        
-        // DCID length and data
-        view.setUint8(offset++, header.dcid.length);
+
+        if (header.type !== QuicVCPacketType.PROTECTED) {
+            // Version (4 bytes, big-endian) - only for long headers
+            view.setUint32(offset, header.version, false); offset += 4;
+        }
+
+        // DCID length and data (long header) or just DCID (short header)
+        if (header.type !== QuicVCPacketType.PROTECTED) {
+            view.setUint8(offset++, header.dcid.length);
+        }
         new Uint8Array(buffer, offset, header.dcid.length).set(header.dcid);
         offset += header.dcid.length;
-        
-        // SCID length and data
-        view.setUint8(offset++, header.scid.length);
-        new Uint8Array(buffer, offset, header.scid.length).set(header.scid);
-        offset += header.scid.length;
-        
-        // Packet number (ESP32 uses 1 byte for simplicity)
-        view.setUint8(offset, Number(header.packetNumber & 0xFFn));
-        
+
+        if (header.type !== QuicVCPacketType.PROTECTED) {
+            // SCID length and data (only for long headers)
+            view.setUint8(offset++, header.scid.length);
+            new Uint8Array(buffer, offset, header.scid.length).set(header.scid);
+            offset += header.scid.length;
+
+            // For INITIAL packets, add token length field (variable-length integer, using 1 byte = 0)
+            if (header.type === QuicVCPacketType.INITIAL) {
+                view.setUint8(offset++, 0x00); // Token length = 0 (no token)
+                // No token bytes to write
+            }
+
+            // Length field (variable-length integer) - placeholder, will be set by caller with payload length
+            // For now, use 2-byte varint (0x40 | length)
+            // This will need to be updated with actual payload length by createPacket
+            view.setUint8(offset++, 0x40); // 2-byte varint prefix
+            view.setUint8(offset++, 0x00); // Placeholder for actual length
+        }
+
+        // Packet number (variable length based on pnLength)
+        const pn = Number(header.packetNumber & 0xFFFFn); // Use lower 16 bits
+        if (pnLength === 1) {
+            view.setUint8(offset, pn & 0xFF);
+        } else if (pnLength === 2) {
+            view.setUint16(offset, pn & 0xFFFF, false); // big-endian
+        } else if (pnLength === 4) {
+            view.setUint32(offset, pn, false); // big-endian
+        }
+
         return new Uint8Array(buffer);
     }
     
     private parsePacketHeader(data: Uint8Array): QuicVCPacketHeader | null {
-        if (data.length < 8) return null; // Minimum header size
-        
+        if (data.length < 10) return null; // Minimum header size
+
         const view = new DataView(data.buffer, data.byteOffset);
         let offset = 0;
-        
+
         // Parse flags byte
         const flags = view.getUint8(offset++);
         const longHeader = (flags & 0x80) !== 0;
-        // Packet type is in the LOWER 2 bits (bits 0-1) for QUIC-VC
-        const type = (flags & 0x03) as QuicVCPacketType;
-        
+        const fixedBit = (flags & 0x40) !== 0;
+
         if (!longHeader) {
             console.warn('[QuicVCConnectionManager] Short header not supported');
             return null;
         }
-        
+
+        // For QUIC v1, the packet type is in bits 5-4 of the flags byte
+        // 0xC0 = INITIAL, 0xE0 = HANDSHAKE, 0xD0 = 0-RTT, 0xF0 = RETRY
+        let type: QuicVCPacketType;
+        if ((flags & 0xF0) === 0xC0) {
+            type = QuicVCPacketType.INITIAL;
+        } else if ((flags & 0xF0) === 0xE0) {
+            type = QuicVCPacketType.HANDSHAKE; // ESP32 sends 0xE0 for its VC_RESPONSE
+        } else if ((flags & 0xF0) === 0xD0) {
+            type = QuicVCPacketType.HANDSHAKE; // Also treat 0xD0 as handshake
+        } else {
+            // For simplicity, treat others as PROTECTED
+            type = QuicVCPacketType.PROTECTED;
+        }
+
         // Version
         const version = view.getUint32(offset, false); offset += 4;
-        
+
         // DCID length and data
         const dcidLen = view.getUint8(offset++);
-        if (data.length < offset + dcidLen + 2) return null; // Need room for DCID + SCID len + packet num
-        
+        if (data.length < offset + dcidLen + 1) return null;
+
         const dcid = new Uint8Array(data.buffer, data.byteOffset + offset, dcidLen);
         offset += dcidLen;
-        
-        // SCID length and data  
+
+        // SCID length and data
         const scidLen = view.getUint8(offset++);
-        if (data.length < offset + scidLen + 1) return null;
-        
+        if (data.length < offset + scidLen) return null;
+
         const scid = new Uint8Array(data.buffer, data.byteOffset + offset, scidLen);
         offset += scidLen;
-        
-        // Packet number (1 byte for ESP32 compatibility)
-        const packetNumber = BigInt(view.getUint8(offset));
-        
-        return { type, version, dcid, scid, packetNumber };
+
+        // Calculate header length based on packet type
+        let headerLength = offset;
+        let packetNumber = BigInt(0);
+
+        // ESP32 doesn't always send a packet number, especially for simple responses
+        // Check if we have enough data for packet number
+        if (type === QuicVCPacketType.INITIAL) {
+            // For INITIAL packets from ESP32
+            // Token length (variable-length integer, but ESP32 uses 1 byte with value 0)
+            if (data.length > offset) {
+                const tokenLen = view.getUint8(offset++);
+                offset += tokenLen; // Skip token bytes if any
+            }
+
+            // ESP32 might send a length field or might not
+            // Check if there's more data that looks like a length field
+            if (data.length >= offset + 2) {
+                // Check if next bytes look like a reasonable length (< 1500 for typical MTU)
+                const possibleLength = view.getUint16(offset, false);
+                if (possibleLength > 0 && possibleLength < 1500) {
+                    // This looks like a length field
+                    offset += 2;
+                }
+            }
+
+            // ESP32 might not send packet number for simple responses
+            // Check if there's at least 1 byte left that could be packet number
+            if (data.length > offset) {
+                // Try to read 1-byte packet number
+                packetNumber = BigInt(view.getUint8(offset));
+                headerLength = offset + 1;
+            } else {
+                // No packet number, payload starts at current offset
+                headerLength = offset;
+            }
+
+            return { type, version, dcid, scid, packetNumber, headerLength };
+        } else if (type === QuicVCPacketType.HANDSHAKE) {
+            // For HANDSHAKE packets from ESP32 (which contain VC_RESPONSE)
+            // ESP32 sends frames directly after the header without packet number
+            // The payload starts immediately after SCID
+            headerLength = offset;
+            return { type, version, dcid, scid, packetNumber, headerLength };
+        } else {
+            // For other packet types, try to read packet number if available
+            if (data.length >= offset + 8) {
+                packetNumber = view.getBigUint64(offset, false);
+                headerLength = offset + 8;
+            } else if (data.length >= offset + 1) {
+                packetNumber = BigInt(view.getUint8(offset));
+                headerLength = offset + 1;
+            } else {
+                headerLength = offset;
+            }
+
+            return { type, version, dcid, scid, packetNumber, headerLength };
+        }
     }
     
     private extractPayload(data: Uint8Array, header: QuicVCPacketHeader): Uint8Array {
-        // Calculate header size (ESP32 format)
-        // flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + packet_num(1)
-        const headerSize = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 1;
+        // Use the header length calculated during parsing
+        // This properly accounts for INITIAL packet structure with token and length fields
+        const headerSize = (header as any).headerLength ||
+            // Fallback for backward compatibility
+            (1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 8);
+        console.log('[QuicVCConnectionManager] Extracting payload: headerSize =', headerSize, 'dataLength =', data.length, 'payloadLength =', data.length - headerSize);
         return data.slice(headerSize);
     }
     
@@ -1151,22 +1570,24 @@ export class QuicVCConnectionManager {
     
     private parseFrames(data: Uint8Array): any[] {
         console.log('[QuicVCConnectionManager] Parsing frames from', data.length, 'bytes');
+        console.log('[QuicVCConnectionManager] First 20 bytes of frame data:', Array.from(data.slice(0, Math.min(20, data.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
         const frames: any[] = [];
         let offset = 0;
-        
+
         try {
             while (offset < data.length) {
                 if (offset + 3 > data.length) break; // Need at least frame_type + length
-                
+
                 const frameType = data[offset];
                 const length = (data[offset + 1] << 8) | data[offset + 2];
                 offset += 3;
-                
-                console.log('[QuicVCConnectionManager] Frame type:', frameType, 'length:', length);
+
+                console.log('[QuicVCConnectionManager] Frame type: 0x' + frameType.toString(16).padStart(2, '0'), 'length:', length);
                 
                 if (offset + length > data.length) {
-                    console.warn('[QuicVCConnectionManager] Frame length extends beyond payload');
-                    break;
+                    console.warn('[QuicVCConnectionManager] Frame length extends beyond payload - ignoring rest of packet');
+                    break; // Stop parsing but return what we have so far
                 }
                 
                 const framePayload = data.slice(offset, offset + length);
@@ -1439,7 +1860,7 @@ export class QuicVCConnectionManager {
     }
     
     private closeConnection(connection: QuicVCConnection, reason: string): void {
-        const connId = this.getConnectionId(connection.dcid);
+        const connId = this.getConnectionId(connection.scid);
         
         console.log(`[QuicVCConnectionManager] ❌ CLOSING CONNECTION ${connId} for device ${connection.deviceId} - Reason: ${reason}`);
         console.log(`[QuicVCConnectionManager] Connection was in state: ${connection.state}`);

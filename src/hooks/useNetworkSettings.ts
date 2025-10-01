@@ -18,10 +18,10 @@ export const useNetworkSettings = () => {
     networkSettingsService.isLeuteConnected()
   );
   const [discoveryEnabled, setDiscoveryEnabled] = useState<boolean>(
-    false
+    networkSettingsService.isDeviceDiscoveryEnabled()
   );
   const [autoConnectEnabled, setAutoConnectEnabled] = useState<boolean>(
-    false
+    networkSettingsService.isDeviceAutoConnectEnabled()
   );
   const [connections, setConnections] = useState<any[]>(
     []
@@ -37,8 +37,10 @@ export const useNetworkSettings = () => {
   
   // Effect to listen for network state changes
   useEffect(() => {
-    // Get initial states (only the ones available)
+    // Get initial states
     setLeuteConnected(networkSettingsService.isLeuteConnected());
+    setDiscoveryEnabled(networkSettingsService.isDeviceDiscoveryEnabled());
+    setAutoConnectEnabled(networkSettingsService.isDeviceAutoConnectEnabled());
     
     // Load initial connections using both methods for compatibility
     const loadConnections = async () => {
@@ -99,20 +101,28 @@ export const useNetworkSettings = () => {
       setCommServerUrl(url);
     });
 
+    // Set up device discovery change listener
+    const unsubscribeDiscovery = networkSettingsService.onDeviceDiscoveryChanged.listen(() => {
+      console.log('[useNetworkSettings] Device discovery state changed');
+      setDiscoveryEnabled(networkSettingsService.isDeviceDiscoveryEnabled());
+      setAutoConnectEnabled(networkSettingsService.isDeviceAutoConnectEnabled());
+    });
+
     // Set up LeuteModel.onUpdated listener for Someone changes
     const appModel = ModelService.getModel();
-    let unsubscribe3: { remove?: () => void } | undefined;
+    let unsubscribeLeuteModel: { remove?: () => void } | undefined;
     if (appModel?.leuteModel) {
-      unsubscribe3 = appModel.leuteModel.onUpdated.listen(() => {
+      unsubscribeLeuteModel = appModel.leuteModel.onUpdated.listen(() => {
         console.log('[useNetworkSettings] LeuteModel updated, reloading Someone connections');
         loadConnections();
       });
     }
-    
+
     return () => {
       unsubscribe1.remove?.();
       unsubscribe2.remove?.();
-      unsubscribe3?.remove?.();
+      unsubscribeDiscovery.remove?.();
+      unsubscribeLeuteModel?.remove?.();
     };
   }, []);
   

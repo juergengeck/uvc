@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Identity
+
+**uvc.one** - A secure, local-first messaging application built on the ONE platform. P2P communication with end-to-end encryption, local AI processing, and cross-device sync without cloud dependencies.
+
 ## Essential Commands
 
 ### Development & Build
@@ -135,23 +139,35 @@ app/                        # Expo Router screens
 src/
 ├── components/           # React components
 ├── models/              # Domain models
+│   ├── network/         # Network models (TransportManager, QuicModel, DeviceDiscovery)
+│   ├── ai/              # AI models (LLMManager, AIAssistant)
+│   └── contacts/        # Contact management (InviteManager)
 ├── hooks/               # Custom React hooks
 ├── providers/           # Context providers
 ├── services/            # Business logic
 ├── utils/               # Utilities
-├── initialization/      # App initialization
+├── initialization/      # App initialization (parallel init, crypto optimization)
 └── platform/           # Platform-specific code
 
-ios-custom-modules/      # Custom native modules
-└── UDPDirectModule/     # Native UDP implementation
+packages/
+├── refinio.api/         # API package (new)
+└── refinio.cli/         # CLI package (new)
+
+vendor/                  # Local ONE platform dependencies
+└── [one.core, one.models, one.btle tarballs]
 ```
 
 ### Critical Files
-- `src/initialization/index.ts` - App initialization sequence
-- `src/models/AppModel.ts` - Root model orchestrator
-- `src/providers/app/AppModelProvider.tsx` - Main context provider
-- `babel.config.js` - Module resolution and aliases
-- `package.json` - Dependencies and scripts
+- [src/initialization/index.ts](src/initialization/index.ts) - App initialization sequence
+- [src/initialization/parallelInit.ts](src/initialization/parallelInit.ts) - Parallel initialization optimizations
+- [src/models/AppModel.ts](src/models/AppModel.ts) - Root model orchestrator
+- [src/models/network/TransportManager.ts](src/models/network/TransportManager.ts) - Multi-transport coordination
+- [src/models/network/QuicModel.ts](src/models/network/QuicModel.ts) - QUIC/UDP transport
+- [src/models/network/DeviceDiscoveryModel.ts](src/models/network/DeviceDiscoveryModel.ts) - P2P device discovery
+- [src/providers/app/OneProvider.tsx](src/providers/app/OneProvider.tsx) - Main ONE platform provider
+- [src/utils/appJournal.ts](src/utils/appJournal.ts) - Application event journal
+- [babel.config.js](babel.config.js) - Module resolution and aliases
+- [package.json](package.json) - Dependencies and scripts
 
 ## Development Guidelines
 
@@ -245,11 +261,20 @@ const wrappedEvent = {
 ## Common Patterns
 
 ### Initialization Sequence
-The app follows a strict 3-phase initialization:
+The app follows a strict 3-phase initialization with performance optimizations:
 
-1. **Platform Setup** - Load native modules, crypto, QUIC transport
+1. **Platform Setup** - Load native modules, crypto optimization, QUIC transport
+   - Parallel loading of independent components
+   - Key caching for performance
+   - Early initialization of critical services
 2. **Authentication** - MultiUser login/register
+   - ONE instance creation
+   - Identity verification
 3. **Model Creation** - Initialize domain models in dependency order
+   - AppModel → TransportManager → Network models
+   - LeuteModel → ChannelManager → TopicModel
+   - DeviceModel, DeviceDiscoveryModel, OrganisationModel
+   - System topic creation (Everyone, Glue, AI Subjects)
 
 ### Error Handling
 - Use comprehensive error boundaries
@@ -335,9 +360,12 @@ import { useAppModel } from '@src/hooks/useAppModel';
 - **Build failures** - Run `npm run clean` and `npm run prebuild:clean`
 
 ### Logging
-- **Model events** - Use structured logging with component names
+- **Model events** - Use structured logging with `[ComponentName]` prefix
+- **Performance tracking** - Use `[PERF]` prefix with timestamps
 - **Network events** - Enable debug logging in NetworkPlugin
 - **Native modules** - Check native logs in Xcode/Android Studio
+- **App journal** - See [src/utils/appJournal.ts](src/utils/appJournal.ts) for event tracking
+- **Debug logger** - See [src/utils/debugLogger.ts](src/utils/debugLogger.ts) for advanced debugging
 
 ## Automated Code Review
 
@@ -368,10 +396,22 @@ This prompt ensures focused reviews on critical issues without unnecessary comme
 
 ### Initialization Sequence Memories
 - **understand our init sequence**:
-  - `createInstance()` - Load imports/setup
-  - `Login process`
-  - `initModel()` - Initialize with user context
+  - `createInstance()` - Load imports/setup with parallel initialization
+  - `Login process` - Authentication and identity verification
+  - `initModel()` - Initialize with user context and create model hierarchy
+
+### Recent Changes
+- **Performance optimizations** - Parallel initialization, crypto optimization, key caching
+- **Debug utilities** - Enhanced logging, performance tracking, app journal
+- **Network stack** - QUIC model improvements, device discovery enhancements
+- **iOS build fixes** - Module import corrections, native module integration
+- **New packages** - Added `refinio.api` and `refinio.cli` packages
 
 ---
 
 **Key Principle**: This is a sophisticated local-first application with complex P2P networking and native integration. Always understand the model state lifecycle and use the provided hooks and patterns for safe operations.
+
+**Important Paths:**
+- ESP32 code: `packages/one.core.expo/src/system/esp32/esp32-quicvc-project/`
+- Main repo: `/Users/gecko/src/uvc`
+- ONE platform core: `vendor/` tarballs

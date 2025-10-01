@@ -20,13 +20,13 @@ export function useInstance() {
   const authState = authenticator?.authState?.currentState || 'logged_out';
   const isAuthenticated = authState === 'logged_in';
   
-  console.log(`[useInstance] model defined: ${!!model}, authState: ${authState}, modelState: ${model?.currentState}`);
-  
+  // console.log(`[useInstance] model defined: ${!!model}, authState: ${authState}, modelState: ${model?.currentState}`);
+
   // Debug what we actually have
-  if (model) {
-    console.log('[useInstance] Model type:', model.constructor.name);
-    console.log('[useInstance] Has organisationModel?', !!model.organisationModel);
-  }
+  // if (model) {
+  //   console.log('[useInstance] Model type:', model.constructor.name);
+  //   console.log('[useInstance] Has organisationModel?', !!model.organisationModel);
+  // }
   
   // Explicitly type returned models for better type checking
   return {

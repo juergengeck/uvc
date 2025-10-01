@@ -177,7 +177,7 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
       // Log ALL packets from local network for debugging
       if (rinfo.address.startsWith('192.168.178.')) {
         const firstByte = data.length > 0 ? data[0] : -1;
-        console.log(`[UdpServiceTransport] 📡 UDP packet from ${rinfo.address}:${rinfo.port}, size: ${data.length}, first byte: 0x${firstByte.toString(16)}`);
+        // console.log(`[UdpServiceTransport] 📡 UDP packet from ${rinfo.address}:${rinfo.port}, size: ${data.length}, first byte: 0x${firstByte.toString(16)}`);
       }
       
 
@@ -187,14 +187,18 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
         
         // Log packets from ESP32 subnet for debugging
         if (rinfo.address.startsWith('192.168.178.')) {
-          console.log(`[UdpServiceTransport] Packet from ${rinfo.address}:${rinfo.port}, size: ${data.length}, first byte: 0x${firstByte.toString(16).padStart(2, '0')}, lower 2 bits: ${firstByte & 0x03}`);
+          // console.log(`[UdpServiceTransport] Packet from ${rinfo.address}:${rinfo.port}, size: ${data.length}, first byte: 0x${firstByte.toString(16).padStart(2, '0')}, lower 2 bits: ${firstByte & 0x03}`);
         }
         
-        // Check if this is a QUICVC packet (lower 2 bits indicate packet type)
-        const packetType = firstByte & 0x03;
-        if (packetType === 0x00 && data.length > 20) {
-          // This looks like a QUICVC INITIAL packet, emit raw message for QuicModel to handle
-          console.log(`[UdpServiceTransport] Detected QUICVC INITIAL packet from ${rinfo.address}:${rinfo.port}`);
+        // Check if this is a QUICVC packet (bit 7 = 1 indicates long header)
+        const isLongHeader = (firstByte & 0x80) !== 0;
+        if (isLongHeader && data.length > 20) {
+          // This looks like a QUICVC long header packet, emit raw message for QuicModel to handle
+          const packetType = (firstByte & 0x30) >> 4; // Packet type is in bits 4-5
+          const packetTypeName = packetType === 0 ? 'INITIAL' :
+                                 packetType === 1 ? 'HANDSHAKE' :
+                                 packetType === 2 ? '0-RTT' : 'RETRY';
+          // console.log(`[UdpServiceTransport] Detected QUICVC ${packetTypeName} packet from ${rinfo.address}:${rinfo.port}`);
           debug(`Received QUICVC packet from ${rinfo.address}:${rinfo.port}`);
           this.emit('message', data, rinfo);
           return;
@@ -217,13 +221,13 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
         // Check if this looks like a service-prefixed message
         if (serviceType >= 0 && serviceType <= 255 && this.services.has(serviceType)) {
           debug(`Received service message type ${serviceType} from ${rinfo.address}:${rinfo.port}`);
-          console.log(`[UdpServiceTransport] Routing to service handler for type ${serviceType}`);
+          // console.log(`[UdpServiceTransport] Routing to service handler for type ${serviceType}`);
           
           // Strip the service byte and pass only the payload to handler
           const payload = data.slice(1);
           const handler = this.services.get(serviceType);
           if (handler) {
-            console.log(`[UdpServiceTransport] Calling handler for service type ${serviceType}`);
+            // console.log(`[UdpServiceTransport] Calling handler for service type ${serviceType}`);
             try {
               const result = handler(payload, rinfo);
               if (result && typeof result.catch === 'function') {
@@ -240,7 +244,7 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
           this.emit('message', data, rinfo, serviceType);
           return;
         } else {
-          console.log(`[UdpServiceTransport] No handler registered for service type ${serviceType}, registered types:`, Array.from(this.services.keys()));
+          // console.log(`[UdpServiceTransport] No handler registered for service type ${serviceType}, registered types:`, Array.from(this.services.keys()));
         }
       }
 

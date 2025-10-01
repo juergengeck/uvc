@@ -727,23 +727,8 @@ export default function ContactDebugScreen() {
         <Button
           mode="outlined"
           onPress={async () => {
-            addDebugLog("Running contact and topic diagnostic repair");
-            try {
-              // Check if AppModel is available
-              if (!instance) {
-                addDebugLog("Error: AppModel not available for repair");
-                return;
-              }
-              
-              // Run the repair function
-              const repaired = await instance.repairContactsAndTopics();
-              addDebugLog(`Repair completed: ${repaired} items repaired`);
-              
-              // Reload contact details
-              loadContact();
-            } catch (error) {
-              addDebugLog(`Error repairing contacts: ${error}`);
-            }
+            addDebugLog("Repair function removed - we fix root causes, not mitigate");
+            addDebugLog("If data is corrupt, investigate and fix the source of corruption");
           }}
           style={styles.actionButton}
           icon="tools"

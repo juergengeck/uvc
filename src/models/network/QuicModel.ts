@@ -137,38 +137,51 @@ export class QuicModel extends Model {
     // Handle raw UDP messages for QUICVC packets
     console.log('[QuicModel] Setting up UDP message handler');
     this._transport.on('message', (data: Buffer, rinfo: any) => {
-      console.log(`[QuicModel] 📡 Received UDP packet from ${rinfo.address}:${rinfo.port}, size: ${data.length} bytes`);
+      // console.log(`[QuicModel] 📡 Received UDP packet from ${rinfo.address}:${rinfo.port}, size: ${data.length} bytes`);
       
       // Check if this is a QUICVC packet
       if (data.length > 0) {
-        const packetType = data[0] & 0x03; // Lower 2 bits contain packet type
-        console.log(`[QuicModel] Packet type: ${packetType} (0x${packetType.toString(16)})`);
-        
+        // Check if this is a long header packet (bit 7 = 1)
+        const isLongHeader = (data[0] & 0x80) !== 0;
+
+        // For long header packets, packet type is in bits 4-5
+        // For short header packets, we don't support them yet
+        let packetType = -1;
+        if (isLongHeader) {
+          packetType = data[0] & 0x03; // Bits 0-1 contain packet type (QUIC spec)
+        } else {
+          // Short header packets not supported for QUICVC discovery
+          // console.log(`[QuicModel] Short header packet received - not supported`);
+          return;
+        }
+
+        // console.log(`[QuicModel] Packet type: ${packetType} (first byte: 0x${data[0].toString(16)})`);
+
         // Log first 20 bytes for debugging
         const hexBytes = Array.from(data.slice(0, Math.min(20, data.length)))
           .map(b => b.toString(16).padStart(2, '0'))
           .join(' ');
-        console.log(`[QuicModel] First bytes: ${hexBytes}`);
-        
+        // console.log(`[QuicModel] First bytes: ${hexBytes}`);
+
         // Route QUIC-VC packets appropriately
         if (packetType === 0x00) { // INITIAL packet
-          console.log(`[QuicModel] ✅ Detected QUICVC INITIAL packet`);
+          // console.log(`[QuicModel] ✅ Detected QUICVC INITIAL packet`);
           
           // Emit discovery event for DeviceDiscoveryModel
           // DeviceDiscoveryModel will forward to QuicVCConnectionManager as needed
-          console.log('[QuicModel] Emitting QUICVC discovery event');
+          // console.log('[QuicModel] Emitting QUICVC discovery event');
           this.onQuicVCDiscovery.emit(data, rinfo);
         } else if (packetType === 0x01 || packetType === 0x02) { // HANDSHAKE or PROTECTED
-          console.log(`[QuicModel] ℹ️ Detected QUICVC ${packetType === 0x01 ? 'HANDSHAKE' : 'PROTECTED'} packet`);
+          // console.log(`[QuicModel] ℹ️ Detected QUICVC ${packetType === 0x01 ? 'HANDSHAKE' : 'PROTECTED'} packet`);
           
           // These need to go to QuicVCConnectionManager, emit them too
           // DeviceDiscoveryModel will forward them
           this.onQuicVCDiscovery.emit(data, rinfo);
         } else {
-          console.log(`[QuicModel] ⚠️ Unknown packet type ${packetType}`);
+          // console.log(`[QuicModel] ⚠️ Unknown packet type ${packetType}`);
         }
       } else {
-        console.log(`[QuicModel] ⚠️ Received empty UDP packet from ${rinfo.address}:${rinfo.port}`);
+        // console.log(`[QuicModel] ⚠️ Received empty UDP packet from ${rinfo.address}:${rinfo.port}`);
       }
     });
     

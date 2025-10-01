@@ -37,6 +37,17 @@ interface AppJournalContext {
 
 let appJournalContext: AppJournalContext | null = null;
 
+// Journal queue for background processing
+interface QueuedJournalEntry {
+  type: 'lifecycle' | 'usage';
+  eventType: string;
+  data: Record<string, any>;
+  timestamp: number;
+}
+
+const journalQueue: QueuedJournalEntry[] = [];
+let isProcessingQueue = false;
+
 /**
  * Initialize the app journal context
  */
@@ -67,45 +78,92 @@ function getDeviceInfo() {
 }
 
 /**
+ * Process the journal queue in background
+ */
+async function processJournalQueue(): Promise<void> {
+  if (isProcessingQueue || journalQueue.length === 0 || !appJournalContext) {
+    return;
+  }
+
+  isProcessingQueue = true;
+
+  try {
+    while (journalQueue.length > 0) {
+      const queuedEntry = journalQueue.shift()!;
+
+      try {
+        const entryId = `app-${queuedEntry.type}-${queuedEntry.eventType.toLowerCase()}-${queuedEntry.timestamp}-${Math.random().toString(36).substr(2, 9)}`;
+        const journalEntry: JournalEntry = {
+          $type$: 'JournalEntry',
+          id: entryId,
+          timestamp: queuedEntry.timestamp,
+          type: queuedEntry.eventType,
+          data: {
+            ...(queuedEntry.type === 'lifecycle' ? getDeviceInfo() : {}),
+            ...queuedEntry.data,
+            eventType: queuedEntry.eventType,
+            userId: appJournalContext.personId.toString()
+          },
+          userId: appJournalContext.personId.toString()
+        };
+
+        // Store and post to journal channel
+        const result = await storeUnversionedObject(journalEntry);
+        await appJournalContext.channelManager.postToChannel(
+          appJournalContext.journalChannelId,
+          result.hash,
+          appJournalContext.personId
+        );
+
+        // console.log(`[AppJournal] Processed queued journal entry: ${queuedEntry.eventType}`);
+      } catch (error) {
+        console.error('[AppJournal] Error processing queued journal entry:', error);
+        // Continue processing other entries even if one fails
+      }
+
+      // Small delay between processing entries to avoid blocking the main thread
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  } catch (error) {
+    console.error('[AppJournal] Error in queue processing:', error);
+  } finally {
+    isProcessingQueue = false;
+  }
+}
+
+/**
+ * Add entry to journal queue for background processing
+ */
+function queueJournalEntry(
+  type: 'lifecycle' | 'usage',
+  eventType: string,
+  data: Record<string, any>
+): void {
+  if (!appJournalContext) {
+    console.warn('[AppJournal] Not initialized, skipping journal entry');
+    return;
+  }
+
+  // Add to queue
+  journalQueue.push({
+    type,
+    eventType,
+    data,
+    timestamp: Date.now()
+  });
+
+  // Start processing queue in background
+  setTimeout(() => processJournalQueue(), 0);
+}
+
+/**
  * Create an app lifecycle journal entry
  */
 export async function createAppLifecycleJournalEntry(
   eventType: AppLifecycleEventType,
   data: Record<string, any> = {}
 ): Promise<void> {
-  if (!appJournalContext) {
-    console.warn('[AppJournal] Not initialized, skipping lifecycle journal entry');
-    return;
-  }
-
-  try {
-    const entryId = `app-lifecycle-${eventType.toLowerCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const journalEntry: JournalEntry = {
-      $type$: 'JournalEntry',
-      id: entryId,
-      timestamp: Date.now(),
-      type: eventType,
-      data: {
-        ...getDeviceInfo(),
-        ...data,
-        eventType,
-        userId: appJournalContext.personId.toString()
-      },
-      userId: appJournalContext.personId.toString()
-    };
-    
-    // Store and post to journal channel
-    const result = await storeUnversionedObject(journalEntry);
-    await appJournalContext.channelManager.postToChannel(
-      appJournalContext.journalChannelId,
-      result.hash,
-      appJournalContext.personId
-    );
-    
-    console.log(`[AppJournal] Created lifecycle journal entry: ${eventType}`);
-  } catch (error) {
-    console.error('[AppJournal] Error creating lifecycle journal entry:', error);
-  }
+  queueJournalEntry('lifecycle', eventType, data);
 }
 
 /**
@@ -115,38 +173,7 @@ export async function createAppUsageJournalEntry(
   eventType: AppUsageEventType,
   data: Record<string, any> = {}
 ): Promise<void> {
-  if (!appJournalContext) {
-    console.warn('[AppJournal] Not initialized, skipping usage journal entry');
-    return;
-  }
-
-  try {
-    const entryId = `app-usage-${eventType.toLowerCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const journalEntry: JournalEntry = {
-      $type$: 'JournalEntry',
-      id: entryId,
-      timestamp: Date.now(),
-      type: eventType,
-      data: {
-        ...data,
-        eventType,
-        userId: appJournalContext.personId.toString()
-      },
-      userId: appJournalContext.personId.toString()
-    };
-    
-    // Store and post to journal channel
-    const result = await storeUnversionedObject(journalEntry);
-    await appJournalContext.channelManager.postToChannel(
-      appJournalContext.journalChannelId,
-      result.hash,
-      appJournalContext.personId
-    );
-    
-    console.log(`[AppJournal] Created usage journal entry: ${eventType}`);
-  } catch (error) {
-    console.error('[AppJournal] Error creating usage journal entry:', error);
-  }
+  queueJournalEntry('usage', eventType, data);
 }
 
 /**

@@ -8,7 +8,7 @@
 import { IQuicTransport, NetworkServiceType } from '../interfaces';
 import { VCManager, VerifiedVCInfo } from '../vc/VCManager';
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
-import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
+// Note: Removed buffer imports since we're using TextEncoder().encode() for crypto operations
 import Debug from 'debug';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
@@ -16,6 +16,7 @@ import { UdpRemoteInfo } from '../UdpModel';
 import { QuicConnectionManager } from '../QuicConnectionManager';
 import { QuicVCConnectionManager } from '../QuicVCConnectionManager';
 import profiler from '@src/utils/performanceProfiler';
+import { createCryptoApiFromDefaultKeys, getDefaultKeys } from '@refinio/one.core/lib/keychain/keychain.js';
 
 const debug = Debug('one:esp32:connection');
 
@@ -89,11 +90,11 @@ export class ESP32ConnectionManager {
   private emitDeviceAuthenticated(device: ESP32Device): void {
     const now = Date.now();
     const lastEmitted = this.lastAuthenticatedTime.get(device.id);
-    
+
     // Only emit if we haven't emitted for this device recently
     if (!lastEmitted || now - lastEmitted > this.AUTH_EVENT_DEBOUNCE_MS) {
       this.lastAuthenticatedTime.set(device.id, now);
-      this.emitDeviceAuthenticated(device);
+      this.onDeviceAuthenticated.emit(device);
       debug(`[ESP32ConnectionManager] Authentication event emitted for ${device.id}`);
     } else {
       debug(`[ESP32ConnectionManager] Authentication event skipped for ${device.id} (debounced)`);
@@ -208,7 +209,7 @@ export class ESP32ConnectionManager {
       if (device) {
         // Retry authentication with the device
         console.log(`[ESP32ConnectionManager] Retrying authentication with ${deviceId}`);
-        const appCredential = this.createAppCredential();
+        const appCredential = await this.createAppCredential();
 
         try {
           await this.quicVCManager.initiateHandshake(deviceId, address, port, appCredential);
@@ -234,14 +235,17 @@ export class ESP32ConnectionManager {
   /**
    * Create a DeviceIdentityCredential for this mobile app
    */
-  private createAppCredential(): DeviceIdentityCredential {
+  private async createAppCredential(): Promise<DeviceIdentityCredential> {
+    // Get crypto API and keys from ONE platform (now imported at top)
+    const cryptoApi = await createCryptoApiFromDefaultKeys(this.ownPersonId);
+    const keys = await getDefaultKeys(this.ownPersonId);
+
     // Generate a unique device ID for this app instance
     const appDeviceId = `lama-app-${this.ownPersonId.substring(0, 8)}`;
-    
-    // For now, use a dummy public key - in production this should be the app's actual Ed25519 public key
-    // TODO: Get actual public key from ONE instance or generate one
-    const publicKeyHex = "0000000000000000000000000000000000000000000000000000000000000000";
-    
+
+    // Use our actual public signing key
+    const publicKeyHex = keys.publicSignKey;
+
     const credential: DeviceIdentityCredential = {
       $type$: 'DeviceIdentityCredential',
       id: appDeviceId,
@@ -259,10 +263,73 @@ export class ESP32ConnectionManager {
         created: new Date().toISOString(),
         verificationMethod: `${this.ownPersonId}#key-1`,
         proofPurpose: 'assertionMethod',
-        proofValue: '' // Will be filled by signing process
+        proofValue: '' // Will be filled below
       }
     };
-    
+
+    // Sign the credential
+    const credentialToSign = { ...credential };
+    delete credentialToSign.proof.proofValue;
+    const messageText = JSON.stringify(credentialToSign);
+    const message = new TextEncoder().encode(messageText);
+    const signature = await cryptoApi.sign(message);
+    credential.proof.proofValue = signature.toString('base64');
+
+    return credential;
+  }
+
+  /**
+   * Create a DeviceIdentityCredential to claim ownership of an ESP32 device
+   * This credential is issued BY the user FOR the ESP32 device
+   */
+  private async createOwnershipCredential(deviceId: string): Promise<DeviceIdentityCredential> {
+    // Get crypto API and keys from ONE platform (now imported at top)
+    const cryptoApi = await createCryptoApiFromDefaultKeys(this.ownPersonId);
+    const keys = await getDefaultKeys(this.ownPersonId);
+
+    // Get our actual public signing key
+    const ourPublicKeyHex = keys.publicSignKey;
+
+    // For ESP32, we don't have its public key yet (it's unclaimed)
+    // Use a placeholder that ESP32 will update when it accepts ownership
+    const devicePublicKeyHex = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    const credential: DeviceIdentityCredential = {
+      $type$: 'DeviceIdentityCredential',
+      id: `vc-${deviceId}-${Date.now()}`,
+      owner: this.ownPersonId,  // The owner is the person issuing this credential
+      issuer: this.ownPersonId,  // We are issuing this credential
+      issuanceDate: new Date().toISOString(),
+      expirationDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString(), // 10 years
+      credentialSubject: {
+        id: deviceId,  // CRITICAL: This MUST match the ESP32's device ID
+        publicKeyHex: devicePublicKeyHex,
+        type: 'ESP32',
+        capabilities: ['led_control', 'credential_provisioning', 'wifi_provisioning']
+      },
+      proof: {
+        type: 'Ed25519Signature2020',
+        created: new Date().toISOString(),
+        verificationMethod: `${this.ownPersonId}#key-1`,
+        proofPurpose: 'assertionMethod',
+        proofValue: '' // Will be filled below
+      }
+    };
+
+    // Sign the credential using ONE.core crypto API
+    // Create canonical representation without proof.proofValue
+    const credentialToSign = { ...credential };
+    delete credentialToSign.proof.proofValue;
+
+    // Sign the credential
+    const messageText = JSON.stringify(credentialToSign);
+    const message = new TextEncoder().encode(messageText);
+    const signature = await cryptoApi.sign(message);
+
+    // Add the signature as base64
+    credential.proof.proofValue = signature.toString('base64');
+
+    console.log(`[ESP32ConnectionManager] Created signed ownership credential for ${deviceId}`);
     return credential;
   }
 
@@ -288,7 +355,7 @@ export class ESP32ConnectionManager {
       if (!this.quicVCManager.isInitialized()) {
         console.log('[ESP32ConnectionManager] Initializing QuicVCConnectionManager...');
         // Create credential for this app to present during QUIC-VC handshake
-        const appCredential = this.createAppCredential();
+        const appCredential = await this.createAppCredential();
         console.log('[ESP32ConnectionManager] Created app credential:', appCredential.credentialSubject.id);
         await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
       }
@@ -351,7 +418,7 @@ export class ESP32ConnectionManager {
       const errorUnsubscribe = this.quicVCManager.onError.listen(errorListener);
       
       // Initiate QUIC-VC handshake with app credential
-      const appCredential = this.createAppCredential();
+      const appCredential = await this.createAppCredential();
       await this.quicVCManager.initiateHandshake(deviceId, address, quicvcPort, appCredential);
       
       // Set timeout for authentication
@@ -376,76 +443,79 @@ export class ESP32ConnectionManager {
 
   /**
    * Claim ownership of an unclaimed ESP32 device
-   * This is a faster, more direct method than authenticateDevice for claiming
+   *
+   * ESP32 ownership flow:
+   * 1. Send DeviceIdentityCredential via service type 2 (CREDENTIALS_SERVICE)
+   * 2. ESP32 stores credential and sends provisioning_ack on service type 2
+   * 3. handleCredentialMessage() processes the ack and updates device state
+   *
+   * NOTE: We do NOT use QUICVC handshake for unclaimed devices because:
+   * - ESP32 only sends DISCOVERY frames, not VC_RESPONSE
+   * - Handshake would timeout waiting for VC_RESPONSE
+   * - Provisioning uses simple request/response on service type 2
    */
   public async claimDevice(deviceId: string, address: string, port: number): Promise<boolean> {
     console.log(`[ESP32ConnectionManager] Claiming ownership of ESP32 device ${deviceId} at ${address}:${port}`);
-    
+
     // Add device to our list
     this.addDiscoveredDevice(deviceId, address, port, deviceId);
-    
+
     try {
-      // Initialize QuicVCConnectionManager if needed
-      if (!this.quicVCManager.isInitialized()) {
-        const appCredential = this.createAppCredential();
-        await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
-      }
-      
-      // Create a promise that resolves when we get a response
-      return new Promise<boolean>((resolve) => {
+      // Create ownership credential
+      const ownershipCredential = await this.createOwnershipCredential(deviceId);
+      console.log(`[ESP32ConnectionManager] Created signed ownership credential for device ${deviceId}`);
+
+      // Create provisioning message for service type 2
+      const provisioningMessage = {
+        type: "provision_device",
+        credential: ownershipCredential,
+        senderPersonId: this.ownPersonId,
+        timestamp: Date.now()
+      };
+
+      // Create a promise that resolves when we get provisioning_ack
+      return new Promise<boolean>(async (resolve) => {
         let responded = false;
-        
-        // Set up listeners
-        const successListener = (connectedDeviceId: string, vcInfo: any) => {
-          if (connectedDeviceId === deviceId && !responded) {
+
+        // Listen for provisioning_ack from handleCredentialMessage()
+        const ackListener = (event: any) => {
+          // handleCredentialMessage processes provisioning_ack and emits onDeviceAuthenticated
+          // So we listen to that event instead
+        };
+
+        // Listen for device authenticated event (emitted after provisioning_ack)
+        const authListener = (device: ESP32Device) => {
+          if (device.id === deviceId && !responded) {
             responded = true;
-            console.log(`[ESP32ConnectionManager] Device ${deviceId} claimed successfully`);
-            
-            // Mark device as authenticated
-            const device = this.connectedDevices.get(deviceId);
-            if (device) {
-              device.isAuthenticated = true;
-              device.vcInfo = vcInfo;
-              device.ownerPersonId = this.ownPersonId;
-              this.emitDeviceAuthenticated(device);
-            }
-            
+            console.log(`[ESP32ConnectionManager] Device ${deviceId} claimed successfully via provisioning_ack`);
             resolve(true);
           }
         };
-        
-        const errorListener = (errorDeviceId: string, error: Error) => {
-          if (errorDeviceId === deviceId && !responded) {
-            responded = true;
-            console.error(`[ESP32ConnectionManager] Failed to claim device ${deviceId}:`, error);
-            resolve(false);
-          }
-        };
-        
-        // Listen for response
-        const successUnsubscribe = this.quicVCManager.onConnectionEstablished.listen(successListener);
-        const errorUnsubscribe = this.quicVCManager.onError.listen(errorListener);
-        
-        // Send the ownership claim with app credential
-        const appCredential = this.createAppCredential();
-        this.quicVCManager.initiateHandshake(deviceId, address, 49497, appCredential).catch(error => {
-          if (!responded) {
-            responded = true;
-            console.error(`[ESP32ConnectionManager] Error initiating handshake:`, error);
-            resolve(false);
-          }
-        });
-        
-        // Timeout after 3 seconds - should be plenty for local network
+
+        const authUnsubscribe = this.onDeviceAuthenticated.listen(authListener);
+
+        // Send provisioning message via service type 2
+        const messageData = new TextEncoder().encode(JSON.stringify(provisioningMessage));
+        const packet = new Uint8Array(1 + messageData.length);
+        packet[0] = 2; // NetworkServiceType.CREDENTIALS_SERVICE
+        packet.set(messageData, 1);
+
+        console.log(`[ESP32ConnectionManager] Sending ownership credential to ${address}:${port} via service type 2`);
+        console.log(`[ESP32ConnectionManager] Provisioning message:`, provisioningMessage);
+        console.log(`[ESP32ConnectionManager] Packet size: ${packet.length} bytes, first 10 bytes:`,
+          Array.from(packet.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+        await this.transport.send(packet, address, port);
+        console.log(`[ESP32ConnectionManager] Ownership credential sent, waiting for provisioning_ack...`);
+
+        // Timeout after 6 seconds (ESP32 needs time to store credential and respond)
         setTimeout(() => {
-          successUnsubscribe();
-          errorUnsubscribe();
+          authUnsubscribe();
           if (!responded) {
             responded = true;
-            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId}`);
+            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId} - no provisioning_ack received`);
             resolve(false);
           }
-        }, 3000);
+        }, 6000);
       });
     } catch (error) {
       console.error(`[ESP32ConnectionManager] Error claiming device ${deviceId}:`, error);
@@ -866,7 +936,7 @@ export class ESP32ConnectionManager {
         jsonStr = new TextDecoder().decode(uint8Array);
       } else if (data instanceof Uint8Array) {
         jsonStr = new TextDecoder().decode(data);
-      } else if (Buffer && Buffer.isBuffer && Buffer.isBuffer(data)) {
+      } else if (data && typeof data.toString === 'function' && (data._type === 'BLOB' || data._type === 'CLOB')) {
         jsonStr = data.toString();
       } else {
         console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
@@ -971,7 +1041,7 @@ export class ESP32ConnectionManager {
         jsonStr = new TextDecoder().decode(uint8Array);
       } else if (data instanceof Uint8Array) {
         jsonStr = new TextDecoder().decode(data);
-      } else if (Buffer && Buffer.isBuffer && Buffer.isBuffer(data)) {
+      } else if (data && typeof data.toString === 'function' && (data._type === 'BLOB' || data._type === 'CLOB')) {
         jsonStr = data.toString();
       } else {
         console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
@@ -1136,7 +1206,7 @@ export class ESP32ConnectionManager {
         jsonStr = new TextDecoder().decode(uint8Array);
       } else if (data instanceof Uint8Array) {
         jsonStr = new TextDecoder().decode(data);
-      } else if (Buffer && Buffer.isBuffer && Buffer.isBuffer(data)) {
+      } else if (data && typeof data.toString === 'function' && (data._type === 'BLOB' || data._type === 'CLOB')) {
         jsonStr = data.toString();
       } else {
         console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
@@ -1564,7 +1634,7 @@ export class ESP32ConnectionManager {
       
       // Initialize QuicVCConnectionManager if needed
       if (!this.quicVCManager.isInitialized()) {
-        const appCredential = this.createAppCredential();
+        const appCredential = await this.createAppCredential();
         await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
       }
       

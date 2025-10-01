@@ -11,6 +11,7 @@ import { DeviceType } from '@src/models/network/deviceTypes';
 import { ESP32ConnectionManager } from '@src/models/network/esp32/ESP32ConnectionManager';
 import { ModelService } from '@src/services/ModelService';
 import profiler from '@src/utils/performanceProfiler';
+import { debugLog } from '@src/utils/debugLogger';
 
 const DEVICE_TIMEOUT_MS = 60000; // 60 seconds
 
@@ -35,7 +36,7 @@ export function useDeviceDiscovery() {
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
-      console.log('[useDeviceDiscovery] Component unmounting');
+      debugLog.info('useDeviceDiscovery', 'Component unmounting');
       isMountedRef.current = false;
     };
   }, []);
@@ -83,7 +84,7 @@ export function useDeviceDiscovery() {
           // DeviceModel returns devices with 'deviceId' property
           const deviceId = device.deviceId;
           if (!device || !deviceId) {
-            console.log('[useDeviceDiscovery] Skipping device - no valid ID:', device);
+            debugLog.info('useDeviceDiscovery', 'Skipping device - no valid ID:', device);
             return;
           }
         
@@ -150,7 +151,7 @@ export function useDeviceDiscovery() {
             (device.blueLedStatus && existingDevice.blueLedStatus !== device.blueLedStatus);
           
           if (hasChanges) {
-            console.log('[useDeviceDiscovery] Updating existing device at index', existingIndex);
+            debugLog.info('useDeviceDiscovery', 'Updating existing device at index', existingIndex);
             // Update existing device
             deviceList[existingIndex] = {
               ...existingDevice,
@@ -419,51 +420,40 @@ export function useDeviceDiscovery() {
       await loadDevices();
       return;
     }
-    
-    // For ESP32 devices, send credential_remove command first
+
+    // For ESP32 devices, always try to remove ownership
+    // The ESP32 might be owned even if the app doesn't know about it
+    // (e.g., after app restart when ESP32 is in silent mode)
     if (device.type === DeviceType.ESP32) {
       try {
-        // Check if we are the owner
-        const esp32ConnectionManager = await discoveryModel.getESP32ConnectionManager();
-        if (esp32ConnectionManager) {
-          const esp32Device = esp32ConnectionManager.getDevice(device.id);
-          const currentUserId = getInstanceOwnerIdHash();
-          if (esp32Device && esp32Device.isAuthenticated && esp32Device.ownerPersonId === currentUserId) {
-          console.log(`[useDeviceDiscovery] Removing credentials from ESP32 device ${device.id}`);
-          
-          // Send credential_remove command
-          const removeCommand = {
-            type: 'credential_remove',
-            senderPersonId: getInstanceOwnerIdHash(),
-            deviceId: device.id,
-            timestamp: Date.now()
-          };
-          
-          // Create packet with credentials service type
-          const packet = Buffer.concat([
-            Buffer.from([2]), // SERVICE_TYPE_CREDENTIALS
-            Buffer.from(JSON.stringify(removeCommand))
-          ]);
-          
-          // Get QUIC model to send the packet
-          const quicModel = QuicModel.getInstance();
-          if (quicModel.isReady()) {
-            await quicModel.send(packet, device.address, device.port || 49497);
-            console.log(`[useDeviceDiscovery] Sent credential_remove to ${device.id}`);
-            
-            // Wait a bit for the device to process
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-          }
+        console.log(`[useDeviceDiscovery] Removing ownership of ESP32 device ${device.id}`);
+        const success = await discoveryModel.removeDeviceOwnership(device.id);
+        if (success) {
+          console.log(`[useDeviceDiscovery] Successfully removed ownership of ${device.id}`);
+        } else {
+          console.warn(`[useDeviceDiscovery] Failed to remove ownership of ${device.id}`);
         }
       } catch (error) {
-        console.error(`[useDeviceDiscovery] Error removing credentials from ESP32:`, error);
+        console.error(`[useDeviceDiscovery] Error removing ownership:`, error);
       }
+    } else if (device.ownerId) {
+      // For other owned devices, use the removeDeviceOwnership method
+      try {
+        console.log(`[useDeviceDiscovery] Removing ownership of device ${device.id}`);
+        const success = await discoveryModel.removeDeviceOwnership(device.id);
+        if (success) {
+          console.log(`[useDeviceDiscovery] Successfully removed ownership of ${device.id}`);
+        } else {
+          console.warn(`[useDeviceDiscovery] Failed to remove ownership of ${device.id}`);
+        }
+      } catch (error) {
+        console.error(`[useDeviceDiscovery] Error removing ownership:`, error);
+      }
+    } else {
+      // For unowned devices, just remove from local storage
+      await removeDevice(device.id);
     }
-    
-    // Remove from local storage
-    await removeDevice(device.id);
-    
+
     // Refresh the device list
     await loadDevices();
   }, [removeDevice, loadDevices]);
@@ -498,11 +488,11 @@ export function useDeviceDiscovery() {
   
   // Initialize and set up event listeners
   useEffect(() => {
-    console.log('[useDeviceDiscovery] Main effect running - setting up event listeners');
+    debugLog.info('useDeviceDiscovery', 'Main effect running - setting up event listeners');
     
     // Defer initial loadDevices to avoid potential race conditions
     const loadTimer = setTimeout(() => {
-      console.log('[useDeviceDiscovery] Initial loadDevices call');
+      debugLog.info('useDeviceDiscovery', 'Initial loadDevices call');
       loadDevices(true);
     }, 100);
     
@@ -538,8 +528,8 @@ export function useDeviceDiscovery() {
       { 
         name: 'onDeviceDiscovered', 
         handler: (discoveredDevice: any) => {
-          console.log('[useDeviceDiscovery] *** onDeviceDiscovered event received for:', discoveredDevice?.deviceId);
-          console.log('[useDeviceDiscovery] Discovered device details:', discoveredDevice);
+          // console.log('[useDeviceDiscovery] *** onDeviceDiscovered event received for:', discoveredDevice?.deviceId);
+          // console.log('[useDeviceDiscovery] Discovered device details:', discoveredDevice);
           if (!discoveredDevice || !discoveredDevice.deviceId) {
             console.log('[useDeviceDiscovery] Invalid device discovered - missing deviceId');
             return;
@@ -576,7 +566,7 @@ export function useDeviceDiscovery() {
               }
             }
             
-            console.log('[useDeviceDiscovery] Adding newly discovered device:', discoveredDevice.deviceId);
+            // console.log('[useDeviceDiscovery] Adding newly discovered device:', discoveredDevice.deviceId);
             const newDevice: Device = {
               id: discoveredDevice.deviceId,
               name: discoveredDevice.name || discoveredDevice.deviceId,

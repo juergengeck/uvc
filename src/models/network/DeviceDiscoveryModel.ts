@@ -14,6 +14,7 @@
  */
 
 import createDebug from 'debug';
+import { debugLog } from '@src/utils/debugLogger';
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
 import { QuicModel } from './QuicModel';
@@ -21,6 +22,7 @@ import { QuicVCConnectionManager } from './QuicVCConnectionManager';
 import type { UdpRemoteInfo } from '@src/platform/react-native/UDPModule';
 import { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import { Person } from '@refinio/one.core/lib/recipes.js';
+import { getInstanceOwnerIdHash } from '@refinio/one.core/lib/instance.js';
 import { NetworkServiceType } from './interfaces';
 import type { 
   DiscoveryDevice, 
@@ -33,7 +35,7 @@ import type {
   VerifiedVCInfo,
   Credential
 } from './interfaces';
-import type { ESP32ConnectionManager } from './esp32/ESP32ConnectionManager';
+import { ESP32ConnectionManager } from './esp32/ESP32ConnectionManager';
 import { OwnedDeviceMonitor } from './OwnedDeviceMonitor';
 import type DeviceSettingsService from '@src/services/DeviceSettingsService';
 import { DeviceModel } from '../device/DeviceModel';
@@ -87,8 +89,8 @@ export class DeviceDiscoveryModel {
   
   // Identity for attestation
   private _appOwnDeviceId?: string;
-  private _appOwnHexSecretKey?: string;
   private _appOwnHexPublicKey?: string;
+  private _cryptoApi?: any; // Crypto API for signing operations
   
   // Device operations are deferred to avoid blocking UI
   
@@ -114,6 +116,11 @@ export class DeviceDiscoveryModel {
   private readonly DISCOVERY_BROADCAST_INTERVAL = 5000; // 5 seconds - for app broadcasts
   private readonly AVAILABILITY_CHECK_INTERVAL = 10000; // 10 seconds
   private readonly DEVICE_TIMEOUT = 60000; // 1 minute
+
+  // Deduplication for device updates
+  private readonly updateThrottle = new Map<string, NodeJS.Timeout>();
+  private readonly pendingUpdates = new Map<string, DiscoveryDevice>();
+  private readonly UPDATE_THROTTLE_MS = 100; // 100ms throttle for device updates
 
   private constructor() {
     debug('DeviceDiscoveryModel instance created');
@@ -163,17 +170,25 @@ export class DeviceDiscoveryModel {
   }
 
   /**
-   * Set the ChannelManager and PersonId
+   * Set the ChannelManager for journal functionality
+   * Note: Person ID is now obtained directly from the instance in init()
    */
-  public async setChannelManager(channelManager: ChannelManager, personId: SHA256IdHash<Person>): Promise<void> {
-    console.log('[DeviceDiscoveryModel] Setting channel manager and person ID:', personId.toString());
+  public async setChannelManager(channelManager: ChannelManager): Promise<void> {
+    console.log('[DeviceDiscoveryModel] Setting channel manager for journal functionality');
     this._channelManager = channelManager;
-    this._personId = personId;
-    
-    // Load owned devices now that we have personId
-    console.log('[DeviceDiscoveryModel] Loading owned devices for person:', personId.toString());
-    await this.loadOwnedDevices();
-    console.log('[DeviceDiscoveryModel] Finished loading owned devices');
+
+    // Get person ID from instance if not already set (for backwards compatibility)
+    if (!this._personId) {
+      this._personId = getInstanceOwnerIdHash();
+      console.log('[DeviceDiscoveryModel] Retrieved person ID from instance:', this._personId?.toString());
+    }
+
+    // Load owned devices
+    if (this._personId) {
+      console.log('[DeviceDiscoveryModel] Loading owned devices for person:', this._personId.toString());
+      await this.loadOwnedDevices();
+      console.log('[DeviceDiscoveryModel] Finished loading owned devices');
+    }
   }
 
   /**
@@ -182,11 +197,19 @@ export class DeviceDiscoveryModel {
   public async setOwnIdentity(deviceId: string, hexSecretKey: string, hexPublicKey: string): Promise<void> {
     console.log(`[DeviceDiscoveryModel] Setting own identity: ${deviceId}`);
     this._appOwnDeviceId = deviceId;
-    this._appOwnHexSecretKey = hexSecretKey;
+    // Ignore hexSecretKey - we'll use crypto API instead
     this._appOwnHexPublicKey = hexPublicKey;
-    
+
     // QUICVC configuration updated with new identity
     console.log(`[DeviceDiscoveryModel] Updated identity configuration for QUICVC: ${deviceId}`);
+  }
+
+  /**
+   * Set the crypto API for signing operations
+   */
+  public setCryptoApi(cryptoApi: any): void {
+    console.log('[DeviceDiscoveryModel] Setting crypto API for signing operations');
+    this._cryptoApi = cryptoApi;
   }
 
   /**
@@ -395,33 +418,38 @@ export class DeviceDiscoveryModel {
       }
 
       // Validate identity data
-      if (!this._appOwnDeviceId || !this._appOwnHexSecretKey || !this._appOwnHexPublicKey) {
+      if (!this._appOwnDeviceId || !this._appOwnHexPublicKey) {
         debug('[DeviceDiscoveryModel] Own identity not fully set yet. Will be configured later via setOwnIdentity().');
       }
 
       // Initialize QUICVC Connection Manager
-      try {
-        console.log('[DeviceDiscoveryModel] Initializing QUICVC Connection Manager');
-        
-        if (!this._personId) {
-          console.error('[DeviceDiscoveryModel] Cannot initialize QUICVC without Person ID');
-        } else {
+      // Get person ID directly from the instance if not already set
+      if (!this._personId) {
+        this._personId = getInstanceOwnerIdHash();
+      }
+
+      if (this._personId) {
+        try {
+          console.log('[DeviceDiscoveryModel] Initializing QUICVC Connection Manager with personId:', this._personId.toString());
+
           this._quicVCManager = QuicVCConnectionManager.getInstance(this._personId);
-          
+
           // Initialize with VCManager when available
           if (this._vcManager) {
             await this._quicVCManager.initialize(this._vcManager);
             console.log('[DeviceDiscoveryModel] QUICVC Connection Manager initialized');
-            
+
             // Set up QUICVC discovery listener on port 49498
             this.setupQuicVCDiscovery();
           } else {
             console.log('[DeviceDiscoveryModel] VCManager not available, QUICVC partially initialized');
           }
+        } catch (quicvcError) {
+          console.error('[DeviceDiscoveryModel] Failed to initialize QUICVC:', quicvcError);
+          // Continue without QUICVC - graceful degradation
         }
-      } catch (quicvcError) {
-        console.error('[DeviceDiscoveryModel] Failed to initialize QUICVC:', quicvcError);
-        // Continue without QUICVC - graceful degradation
+      } else {
+        console.log('[DeviceDiscoveryModel] Instance not yet initialized, cannot get person ID for QUICVC');
       }
 
       // Set up event handlers
@@ -531,7 +559,7 @@ export class DeviceDiscoveryModel {
     // QuicModel is already listening on port 49497
     // Listen for QUICVC discovery events from QuicModel's OEvent
     this._quicModel.onQuicVCDiscovery.listen((data: Buffer, rinfo: any) => {
-      console.log(`[DeviceDiscoveryModel] Received QUICVC discovery event from ${rinfo.address}:${rinfo.port}`);
+      // console.log(`[DeviceDiscoveryModel] Received QUICVC discovery event from ${rinfo.address}:${rinfo.port}`);
       this.handleQuicVCPacket(data as any as Uint8Array, rinfo);
     });
     
@@ -544,8 +572,15 @@ export class DeviceDiscoveryModel {
    */
   private handleQuicVCPacket(data: Uint8Array, rinfo: UdpRemoteInfo): void {
     if (data.length < 2) return;
-    
-    // Check packet type (lower 2 bits of first byte)
+
+    // Check if this is a long header packet (bit 7 = 1)
+    const isLongHeader = (data[0] & 0x80) !== 0;
+    if (!isLongHeader) {
+      // console.log('[DeviceDiscoveryModel] Short header packet - not supported for discovery');
+      return;
+    }
+
+    // For long header packets, packet type is in bits 0-1 (QUIC spec)
     const packetType = data[0] & 0x03;
     
     // QUICVC packet types
@@ -554,11 +589,11 @@ export class DeviceDiscoveryModel {
     const PROTECTED = 0x02;
     const RETRY = 0x03;
     
-    console.log('[DeviceDiscoveryModel] Received QUICVC packet type', packetType, 'from', rinfo.address);
+    // console.log('[DeviceDiscoveryModel] Received QUICVC packet type', packetType, 'from', rinfo.address);
     
     // First, always forward to QuicVCConnectionManager for handshake processing
     if (this._quicVCManager) {
-      console.log(`[DeviceDiscoveryModel] Forwarding packet to QuicVCConnectionManager`);
+      // console.log(`[DeviceDiscoveryModel] Forwarding packet to QuicVCConnectionManager`);
       try {
         this._quicVCManager.handleQuicVCPacket(data, rinfo);
       } catch (error) {
@@ -570,19 +605,11 @@ export class DeviceDiscoveryModel {
     
     // Then check if it's also discovery data (ESP32 embeds discovery in some packets)
     if (packetType === INITIAL) {
-      // Check for DISCOVERY frame at byte 1
-      const frameType = data[1];
-      const DISCOVERY_FRAME = 0x30;
-      
-      if (frameType === DISCOVERY_FRAME) {
-        console.log('[DeviceDiscoveryModel] Found DISCOVERY frame (0x30) at byte 1');
-        this.handleQuicVCDiscovery(data, rinfo);
-      } else {
-        // Try to extract ESP32 discovery data from INITIAL packet
-        const isEsp32Discovery = this.tryParseEsp32Discovery(data, rinfo);
-        if (isEsp32Discovery) {
-          console.log('[DeviceDiscoveryModel] Extracted ESP32 discovery data from INITIAL packet');
-        }
+      // Try to extract ESP32 discovery data from INITIAL packet
+      // ESP32 sends discovery as INITIAL packets with DISCOVERY frame (0x01)
+      const isEsp32Discovery = this.tryParseEsp32Discovery(data, rinfo);
+      if (isEsp32Discovery) {
+        // console.log('[DeviceDiscoveryModel] Extracted ESP32 discovery data from INITIAL packet');
       }
     }
   }
@@ -592,47 +619,61 @@ export class DeviceDiscoveryModel {
    */
   private tryParseEsp32Discovery(data: Uint8Array, rinfo: UdpRemoteInfo): boolean {
     try {
-      // Skip QUIC header to get payload
-      // Based on QUIC header format: type(1) + version(4) + dcid_len(1) + scid_len(1) + dcid + scid + packet_number(8)
+      // Parse QUIC header to get payload
+      // ESP32 format: type(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + packet_number(1)
       let offset = 0;
-      
+
       // Skip type byte
       offset += 1;
-      
+
       // Skip version (4 bytes)
       offset += 4;
-      
-      // Get connection ID lengths
+
+      // Get DCID length and skip DCID
       const dcidLen = data[offset++];
+      offset += dcidLen;
+
+      // Get SCID length and skip SCID
       const scidLen = data[offset++];
-      
-      // Skip connection IDs
-      offset += dcidLen + scidLen;
-      
-      // Skip packet number (8 bytes)
-      offset += 8;
-      
+      offset += scidLen;
+
+      // ESP32 uses 1-byte packet number (not 8 bytes)
+      offset += 1;
+
       if (offset >= data.length) {
         return false;
       }
-      
+
       const payload = data.slice(offset);
-      
-      // Try to parse ESP32 discovery format - skip first 4 bytes and parse JSON
-      const jsonStart = 4;
-      if (payload.length > jsonStart) {
-        const jsonBytes = payload.slice(jsonStart);
-        const jsonString = new TextDecoder().decode(jsonBytes);
-        const discoveryData = JSON.parse(jsonString);
-        
-        // Check if this looks like ESP32 discovery data
-        if (discoveryData.device_id && discoveryData.device_type === 'ESP32') {
-          console.log('[DeviceDiscoveryModel] Found ESP32 discovery data:', discoveryData);
-          this.handleEsp32Discovery(discoveryData, rinfo);
+
+      // ESP32 discovery format: frame_type(1) + frame_length(2) + JSON
+      if (payload.length > 3 && payload[0] === 0x01) { // Frame type 0x01 = DISCOVERY
+        const frameLength = (payload[1] << 8) | payload[2];
+        const jsonStart = 3;
+
+        if (payload.length >= jsonStart + frameLength) {
+          const jsonBytes = payload.slice(jsonStart, jsonStart + frameLength);
+          const jsonString = new TextDecoder().decode(jsonBytes);
+          const discoveryData = JSON.parse(jsonString);
+
+          // console.log('[DeviceDiscoveryModel] Parsed ESP32 discovery data:', discoveryData);
+
+          // Map ESP32 discovery format to our internal format
+          const mappedData = {
+            device_id: discoveryData.device_id,  // ESP32 sends device_id not deviceId
+            device_type: discoveryData.device_type === 'ESP32' ? 'ESP32' : 'Unknown',
+            ownership: discoveryData.ownership,
+            capabilities: discoveryData.capabilities,
+            status: discoveryData.status,
+            protocol: discoveryData.protocol,
+            timestamp: discoveryData.timestamp
+          };
+
+          this.handleEsp32Discovery(mappedData, rinfo);
           return true;
         }
       }
-      
+
       return false;
     } catch (error) {
       // Not ESP32 discovery format
@@ -649,7 +690,7 @@ export class DeviceDiscoveryModel {
       const address = rinfo.address;
       const port = rinfo.port;
 
-      console.log(`[DeviceDiscoveryModel] Processing ESP32 discovery from ${deviceId} at ${address}:${port}`);
+      // console.log(`[DeviceDiscoveryModel] Processing ESP32 discovery from ${deviceId} at ${address}:${port}`);
 
       // Create or update device entry
       const device = {
@@ -669,11 +710,11 @@ export class DeviceDiscoveryModel {
 
       // Add to device list
       this._deviceList.set(deviceId, device);
-      console.log(`[DeviceDiscoveryModel] Added ESP32 device ${deviceId} to device list`);
+      // console.log(`[DeviceDiscoveryModel] Added ESP32 device ${deviceId} to device list`);
 
       // Emit discovery event
       this.onDeviceDiscovered.emit(device);
-      console.log(`[DeviceDiscoveryModel] Emitted device discovered event for ${deviceId}`);
+      // console.log(`[DeviceDiscoveryModel] Emitted device discovered event for ${deviceId}`);
 
       // If device is owned by us, mark it as authenticated immediately for ESP32ConnectionManager
       if (discoveryData.ownership === 'claimed' && discoveryData.owner === this._personId && this._esp32ConnectionManager) {
@@ -730,7 +771,7 @@ export class DeviceDiscoveryModel {
       // Extract JSON payload
       const jsonPayload = data.slice(offset, offset + frameLength);
       const jsonStr = new TextDecoder().decode(jsonPayload);
-      console.log('[DeviceDiscoveryModel] Discovery JSON:', jsonStr);
+      // console.log('[DeviceDiscoveryModel] Discovery JSON:', jsonStr);
       
       // Parse JSON discovery data
       const discoveryData = JSON.parse(jsonStr);
@@ -741,14 +782,14 @@ export class DeviceDiscoveryModel {
       const ownership = discoveryData.ownership || 'unclaimed';
       const capabilities = discoveryData.capabilities || [];
       
-      console.log('[DeviceDiscoveryModel] Discovered device via QUICVC:', {
-        deviceId,
-        deviceType,
-        ownership,
-        address: rinfo.address,
-        port: rinfo.port,
-        capabilities
-      });
+      // console.log('[DeviceDiscoveryModel] Discovered device via QUICVC:', {
+      //   deviceId,
+      //   deviceType,
+      //   ownership,
+      //   address: rinfo.address,
+      //   port: rinfo.port,
+      //   capabilities
+      // });
       
       // Create or update device record
       const device: DiscoveryDevice = {
@@ -767,16 +808,16 @@ export class DeviceDiscoveryModel {
       const existing = this._deviceList.get(deviceId);
       if (existing) {
         // Update existing device
-        console.log('[DeviceDiscoveryModel] Device already exists in list, updating:', deviceId);
+        debugLog.info('DeviceDiscoveryModel', 'Device already exists in list, updating:', deviceId);
         Object.assign(existing, device);
-        this.onDeviceUpdated.emit(existing);
+        this.emitDeviceUpdate(deviceId, existing);
       } else {
         // New device discovered
-        console.log('[DeviceDiscoveryModel] New device, adding to list:', deviceId);
+        // console.log('[DeviceDiscoveryModel] New device, adding to list:', deviceId);
         this._deviceList.set(deviceId, device);
         this.onDeviceDiscovered.emit(device);
-        console.log('[DeviceDiscoveryModel] Emitted onDeviceDiscovered for:', deviceId);
-        console.log('[DeviceDiscoveryModel] Added device to list, total devices:', this._deviceList.size);
+        // console.log('[DeviceDiscoveryModel] Emitted onDeviceDiscovered for:', deviceId);
+        // console.log('[DeviceDiscoveryModel] Added device to list, total devices:', this._deviceList.size);
       }
       
       // Track device availability
@@ -794,12 +835,12 @@ export class DeviceDiscoveryModel {
     // Set up QUICVC connection events if manager is available
     if (this._quicVCManager) {
       this._quicVCManager.onConnectionEstablished.listen((deviceId, vcInfo) => {
-        console.log('[DeviceDiscoveryModel] QUICVC connection established with', deviceId);
+        debugLog.info('DeviceDiscoveryModel', 'QUICVC connection established with', deviceId);
         const device = this._deviceList.get(deviceId);
         if (device) {
           device.hasValidCredential = true;
           device.ownerId = vcInfo.issuer;
-          this.onDeviceUpdated.emit(device);
+          this.emitDeviceUpdate(deviceId, device);
         }
       });
 
@@ -810,6 +851,20 @@ export class DeviceDiscoveryModel {
       this._quicVCManager.onError.listen((deviceId, error) => {
         console.error('[DeviceDiscoveryModel] QUICVC error for', deviceId, ':', error);
       });
+
+      // Listen for device discovery events
+      this._quicVCManager.onDeviceDiscovered.listen((event) => {
+        // console.log('[DeviceDiscoveryModel] Device discovered via QUICVC:', event);
+        if (event.deviceInfo) {
+          // Merge event address/port into deviceInfo for handler
+          const deviceInfoWithNetwork = {
+            ...event.deviceInfo,
+            address: event.address,
+            port: event.port
+          };
+          this.handleDiscoveredDevice(deviceInfoWithNetwork);
+        }
+      });
     }
 
     // Using QUICVC discovery only - no legacy protocols
@@ -818,6 +873,53 @@ export class DeviceDiscoveryModel {
     // Event handling is now managed through QUICVC connection manager
     // QUICVC events come through the handleQuicVCDiscoveryMessage method
     console.log('[DeviceDiscoveryModel] Event handling configured for QUICVC protocol');
+  }
+
+  /**
+   * Handle discovered device from QUICVC
+   */
+  private handleDiscoveredDevice(deviceInfo: any): void {
+    const deviceId = deviceInfo.deviceId;
+    if (!deviceId) {
+      console.warn('[DeviceDiscoveryModel] Discovered device missing deviceId');
+      return;
+    }
+
+    // Check if device already exists
+    const existing = this._deviceList.get(deviceId);
+    
+    const device: DiscoveryDevice = {
+      deviceId,
+      name: deviceInfo.deviceType || 'ESP32 Device',
+      deviceType: deviceInfo.deviceType || 'ESP32',
+      address: deviceInfo.address,
+      port: deviceInfo.port,
+      status: deviceInfo.status || 'online',
+      protocol: deviceInfo.protocol || 'quicvc/1.0',
+      capabilities: deviceInfo.capabilities || [],
+      lastSeen: deviceInfo.lastSeen || Date.now(),
+      transport: 'quicvc' as const,
+      hasValidCredential: deviceInfo.ownership === 'claimed',
+      ownerId: deviceInfo.ownership === 'claimed' ? this._personId : undefined,
+      online: true,
+      connected: false,
+      isAuthenticated: false
+    };
+
+    if (existing) {
+      // Update existing device
+      // console.log('[DeviceDiscoveryModel] Updating existing device:', deviceId);
+      Object.assign(existing, device);
+      this.emitDeviceUpdate(deviceId, existing);
+    } else {
+      // New device discovered
+      // console.log('[DeviceDiscoveryModel] New device discovered:', deviceId);
+      this._deviceList.set(deviceId, device);
+      this.onDeviceDiscovered.emit(device);
+    }
+
+    // Update availability tracking
+    this._deviceAvailability.set(deviceId, Date.now());
   }
 
   /**
@@ -1140,7 +1242,6 @@ export class DeviceDiscoveryModel {
       }
       
       console.log('[DeviceDiscoveryModel] Initializing ESP32ConnectionManager');
-      const { ESP32ConnectionManager } = await import('./esp32/ESP32ConnectionManager');
       this._esp32ConnectionManager = ESP32ConnectionManager.getInstance(
         this._transport,
         this._vcManager,
@@ -1162,7 +1263,7 @@ export class DeviceDiscoveryModel {
           existingDevice.hasValidCredential = true;
           existingDevice.ownerId = device.ownerPersonId;
           // Emit device update to trigger UI refresh
-          this.onDeviceUpdated.emit(existingDevice);
+          this.emitDeviceUpdate(deviceId, existingDevice);
         }
       });
       
@@ -1239,7 +1340,7 @@ export class DeviceDiscoveryModel {
         const existingDevice = this._deviceList.get(device.id);
         if (existingDevice) {
           existingDevice.btleStatus = 'active';
-          this.onDeviceUpdated.emit(existingDevice);
+          this.emitDeviceUpdate(deviceId, existingDevice);
         }
       });
 
@@ -1250,7 +1351,7 @@ export class DeviceDiscoveryModel {
         const existingDevice = this._deviceList.get(device.id);
         if (existingDevice) {
           existingDevice.btleStatus = 'inactive';
-          this.onDeviceUpdated.emit(existingDevice);
+          this.emitDeviceUpdate(deviceId, existingDevice);
         }
       });
 
@@ -1292,7 +1393,7 @@ export class DeviceDiscoveryModel {
       // Only emit update if status actually changed
       if (btleStatusChanged) {
         console.log(`[DeviceDiscoveryModel] Updated existing device ${device.id} with BTLE connectivity`);
-        this.onDeviceUpdated.emit(existingDevice);
+        this.emitDeviceUpdate(deviceId, existingDevice);
       } else {
         // Silent update - just refresh lastSeen
         console.log(`[DeviceDiscoveryModel] Device ${device.id} BTLE ping - refreshed lastSeen`);
@@ -1387,14 +1488,36 @@ export class DeviceDiscoveryModel {
   }
   
   /**
-   * Helper to emit device updates with only changed fields
+   * Helper to emit device updates with throttling to prevent duplicate events
    */
   private emitDeviceUpdate(deviceId: string, updates: Partial<DiscoveryDevice>): void {
-    // Always include deviceId for identification
-    this.onDeviceUpdated.emit({
+    // Clear any existing throttle timer
+    const existingTimer = this.updateThrottle.get(deviceId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Merge with any pending updates
+    const pendingUpdate = this.pendingUpdates.get(deviceId) || {};
+    const mergedUpdate = {
       deviceId,
+      ...pendingUpdate,
       ...updates
-    });
+    } as DiscoveryDevice;
+    this.pendingUpdates.set(deviceId, mergedUpdate);
+
+    // Set throttle timer
+    const timer = setTimeout(() => {
+      const finalUpdate = this.pendingUpdates.get(deviceId);
+      if (finalUpdate) {
+        this.pendingUpdates.delete(deviceId);
+        this.updateThrottle.delete(deviceId);
+        // Actually emit the update
+        this.onDeviceUpdated.emit(finalUpdate);
+      }
+    }, this.UPDATE_THROTTLE_MS);
+
+    this.updateThrottle.set(deviceId, timer);
   }
 
   /**
@@ -1830,7 +1953,7 @@ export class DeviceDiscoveryModel {
         existingDevice.ownerId = this._personId?.toString();
       }
       
-      this.onDeviceUpdated.emit(existingDevice);
+      this.emitDeviceUpdate(deviceId, existingDevice);
     } else {
       // New device discovered via WiFi
       console.log(`[DeviceDiscoveryModel] New device ${device.deviceId} discovered via WiFi`);
@@ -1928,7 +2051,7 @@ export class DeviceDiscoveryModel {
     this._deviceAvailability.set(device.deviceId, Date.now());
     
     // Emit the device update event so UI can refresh
-    this.onDeviceUpdated.emit(updatedDevice);
+    this.emitDeviceUpdate(device.deviceId, updatedDevice);
     
     // For ESP32 devices, ensure authentication is attempted if not already authenticated
     if (device.deviceType === 'ESP32' && this._esp32ConnectionManager && device.address && device.port) {
@@ -2010,7 +2133,7 @@ export class DeviceDiscoveryModel {
       }
       
       this._deviceList.set(deviceId, device);
-      this.onDeviceUpdated.emit(device);
+      this.emitDeviceUpdate(deviceId, device);
     }
     
     // Remove from availability tracking

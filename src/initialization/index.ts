@@ -66,20 +66,8 @@ process.env.ONE_CORE_VERSION_DEBUG = 'false';
 process.env.ONE_CORE_STORAGE_DEBUG = 'false';
 process.env.ONE_CORE_PLATFORM_DEBUG = 'false';
 
-// Minimal console filtering - remove only the most verbose logs
-const originalConsoleLog = console.log;
-
-console.log = function(...args: any[]) {
-  const message = args.join(' ');
-  
-  // Filter only the most verbose/repetitive logs
-  if (message.includes('[EncryptionPlugin]')) {
-    return; // Suppress all EncryptionPlugin logs
-  }
-  
-  // Otherwise, let it through
-  originalConsoleLog.apply(console, args);
-};
+// Console filtering removed for performance
+// If specific logs need filtering, use environment variables instead
 
 // NOTE: Removed aggressive console.log filtering since we fixed the real source
 // The [ONE_MODELS_BUS_DEBUG] noise was coming from AppModel.ts MessageBus listeners
@@ -163,10 +151,7 @@ export function disableFocusedConnectionDebugging() {
 // Import global references first
 import '../global/references';
 
-// Import debug helpers for console access
-// Disabled - causes diagnostic code to run before login
-// import '../utils/debugHelpers';
-import { addGlobalDebugFunctions } from '../config/debug';
+// Debug helpers removed - load on demand if needed
 
 // Remove direct import - will be imported lazily when needed
 // import { ensurePlatformLoaded } from '@refinio/one.core/lib/system/platform';
@@ -180,13 +165,7 @@ import { createRandomString } from '@refinio/one.core/lib/system/crypto-helpers'
 // Only import as a type
 import type { Model } from '@refinio/one.models/lib/models/Model';
 
-// Import UDP diagnostics and force loader
-import { runUDPDiagnostic, diagnoseUDP } from '../tools/UDPDiagnostic';
-import { forceLoadUDPModule } from '../tools/forceLoadUDP';
-import { simpleUDPCheck } from '../tools/simpleUDPCheck';
-import { turboModuleCheck } from '../tools/turboModuleCheck';
-import { forceUDPInit } from '../tools/forceUDPInit';
-import { testDirectUDP } from '../tools/testDirectUDP';
+// UDP diagnostics removed - import on demand if needed
 // Static import AppModel (bundling fixed by moving to static imports)
 import { AppModel } from '../models/AppModel';
 import { LLMManager } from '@src/models/ai/LLMManager';
@@ -259,8 +238,9 @@ let platformInitialized = false;
 // Define recipe maps for reverse mapping
 const RECIPE_MAPS = new Map<OneObjectTypeNames, Set<string>>();
 
-// Import clearChannelManagerInstance for cleanup only
-import { clearChannelManagerInstance } from './channelManagerSingleton';
+// Import channelManager functions - static import to avoid runtime bundling
+import { clearChannelManagerInstance, createChannelManager, initializeChannelManager } from './channelManagerSingleton';
+import LeuteAccessRightsManager from '../models/LeuteAccessRightsManager';
 
 // NOTE: CHUM plugin patch not needed - using one.leute approach with built-in protocol routing
 
@@ -285,19 +265,46 @@ import { ensurePlatformLoaded } from '@refinio/one.core/lib/system/platform';
 import { objectEvents } from '@refinio/one.models/lib/misc/ObjectEventDispatcher';
 import { createMessageBus } from '@refinio/one.core/lib/message-bus';
 import { initializePlatform } from '../platform/init';
+import { measureTime } from '../utils/performanceOptimization';
+import { keyCache } from './keyCache';
+import { performanceSummary } from '../utils/performanceSummary';
 
 /**
  * Enhanced loginOrRegister that uses the basic MultiUser method
  * The MultiUser register method has a bug with encryption key handling, so we'll use basic loginOrRegister
  */
 export async function loginOrRegisterWithKeys(
-  auth: MultiUser, 
-  email: string, 
-  secret: string, 
+  auth: MultiUser,
+  email: string,
+  secret: string,
   instanceName: string
 ): Promise<void> {
+  const startTime = Date.now();
+
+  // Check if we have cached keys from this session
+  if (keyCache.hasCachedKeys(email, instanceName)) {
+    console.log('[PERF] Keys already loaded in this session (from cache)');
+    // Keys are already loaded, just need to re-authenticate
+    // Note: This optimization only helps if the user logs out and back in during the same session
+  }
+
+  // Check if instance exists to provide better feedback
+  const { instanceExists } = await import('@refinio/one.core/lib/instance');
+  const exists = await instanceExists(instanceName, email);
+
+  if (!exists) {
+    console.log('[PERF] First-time login - will generate keys (this takes ~1-2 seconds)');
+  } else {
+    console.log('[PERF] Existing user - will decrypt stored keys (fast)');
+  }
+
   // Use the basic loginOrRegister method which handles key generation internally
   await auth.loginOrRegister(email, secret, instanceName);
+
+  // Mark keys as loaded in cache
+  keyCache.markKeysLoaded(email, instanceName);
+
+  console.log(`[PERF] loginOrRegister took: ${Date.now() - startTime}ms (${exists ? 'existing' : 'new'} user)`);
 }
 
 /**
@@ -484,6 +491,9 @@ async function attachAuthHandlers(auth: MultiUser): Promise<void> {
         console.error('[Initialization] ❌ Error clearing app journal context:', error);
         // Continue anyway - don't let this block logout
       }
+
+      // C2. Clear key cache
+      keyCache.clearCache();
       
       // D. Clear ChannelManager instance to reset registry cache
       try {
@@ -536,12 +546,15 @@ const initializeMessageBus = async () => {
  * Should only be called ONCE per login
  */
 export async function initModel(auth?: MultiUser, secret?: string): Promise<AppModel> {
+  const initStartTime = Date.now();
+  console.log('[PERF] Starting initModel...');
+
   // If model already exists, return it
   const existingModel = getModel();
   if (existingModel) {
     return existingModel;
   }
-  
+
   // Use provided auth or get from global state
   const authenticator = auth || getAuthenticator();
   if (!authenticator) {
@@ -553,26 +566,7 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     throw new Error('Instance ID hash not available after login');
   }
 
-  // Register all application recipes before initializing storage
-  console.log('[initModel] 📜 Checking application recipes...');
-  let registeredCount = 0;
-  let alreadyExistsCount = 0;
-  
-  ALL_RECIPES.forEach(recipe => {
-    try {
-      if (hasRecipe(recipe.name)) {
-        console.log(`[initModel] ✓ Recipe already exists: ${recipe.name}`);
-        alreadyExistsCount++;
-      } else {
-        addRecipeToRuntime(recipe);
-        console.log(`[initModel] ✅ Registered recipe: ${recipe.name}`);
-        registeredCount++;
-      }
-    } catch (error) {
-      console.error(`[initModel] ❌ Failed to register recipe ${recipe.name}:`, error);
-    }
-  });
-  console.log(`[initModel] ✅ Recipes status: ${registeredCount} newly registered, ${alreadyExistsCount} already existed`);
+  // Recipes are already registered via MultiUser constructor - no need to duplicate
 
   const storageOptions: InitStorageOptions = {
     instanceIdHash: instanceId,
@@ -581,38 +575,59 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     secretForStorageKey: secret || null
   };
   
-  await initStorage(storageOptions);
+  await measureTime('initStorage', async () => {
+    const result = await initStorage(storageOptions);
+    performanceSummary.record('initStorage', Date.now() - Date.now());
+    return result;
+  });
 
   // CRITICAL: Initialize ObjectEventDispatcher BEFORE any components that depend on it
   if (!objectEventsInitialized) {
-    await objectEvents.init();
-    objectEventsInitialized = true;
+    await measureTime('objectEvents.init', async () => {
+      await objectEvents.init();
+      objectEventsInitialized = true;
+    });
   }
 
   const commServerUrl = getNetworkSettingsService().getCommServerUrl();
-  const leuteModel = new LeuteModel(commServerUrl, true);
-  await leuteModel.init();
+  const leuteModel = await measureTime('LeuteModel.init', async () => {
+    const startTime = Date.now();
+    const model = new LeuteModel(commServerUrl, true);
+    await model.init();
+    performanceSummary.record('LeuteModel.init', Date.now() - startTime);
+    return model;
+  });
 
-  // Use the singleton to ensure only one instance
-  const { createChannelManager, initializeChannelManager } = await import('./channelManagerSingleton');
-  const channelManager = createChannelManager(leuteModel);
+  // Use the singleton to ensure only one instance (using static imports)
+  const channelManager = await measureTime('ChannelManager init', async () => {
+    const manager = createChannelManager(leuteModel);
+    await initializeChannelManager();
+    return manager;
+  });
   
-  // Initialize ChannelManager BEFORE creating other components that depend on it
-  await initializeChannelManager();
-  
-  const transportManager = new TransportManager(leuteModel, channelManager, commServerUrl);
-  await transportManager.init();
+  const transportManager = await measureTime('TransportManager.init', async () => {
+    const manager = new TransportManager(leuteModel, channelManager, commServerUrl);
+    await manager.init();
+    return manager;
+  });
   
   const getGroupIdByName = async (name: string) => {
     const group = await leuteModel.createGroup(name);
     return group.groupIdHash;
   };
-  const iomGroupId = await getGroupIdByName('iom');
-  const leuteReplicantGroupId = await getGroupIdByName('leute-replicant');
-  const glueReplicantGroupId = await getGroupIdByName('glue-replicant');
-  const everyoneGroupId = await getGroupIdByName('everyone');
 
-  const LeuteAccessRightsManager = (await import('../models/LeuteAccessRightsManager')).default;
+  // Parallelize group creation
+  const [iomGroupId, leuteReplicantGroupId, glueReplicantGroupId, everyoneGroupId] = await measureTime(
+    'Group creation (parallel)',
+    () => Promise.all([
+      getGroupIdByName('iom'),
+      getGroupIdByName('leute-replicant'),
+      getGroupIdByName('glue-replicant'),
+      getGroupIdByName('everyone')
+    ])
+  );
+
+  // Use statically imported LeuteAccessRightsManager
   const leuteAccessRightsManager = new LeuteAccessRightsManager(
     channelManager,
     transportManager.getConnectionsModel(),
@@ -638,58 +653,61 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
 
   // Initialize platform services (UDP, BTLE, QUIC) now that we have user context
   if (!platformInitialized) {
-    console.log('[initModel] 🔧 Initializing platform services...');
-    await initializePlatform();
-    platformInitialized = true;
-    console.log('[initModel] ✅ Platform services initialized');
+    await measureTime('initializePlatform', async () => {
+      await initializePlatform();
+      platformInitialized = true;
+    });
   }
 
   // Start networking AFTER all core components are properly integrated
-  try {
-    console.log('[initModel] 🌐 Starting networking...');
-    await transportManager.startNetworking();
-    console.log('[initModel] ✅ Networking started successfully');
-    // Note: Pairing success listener will be set up after AppModel is created and stored
-  } catch (netErr) {
+  // But defer this to not block UI
+  const networkingPromise = transportManager.startNetworking().catch(netErr => {
     console.error('[initModel] ❌ Failed to start networking layer:', netErr);
     // Continue initialization – the user can still use local features; networking can be retried later
-  }
-
-  console.log('[initModel] 🔴🔴🔴 CREATING APPMODEL INSTANCE NOW 🔴🔴🔴');
-  // Create AppModel without journal inputs (will be added after proper initialization)
-  const appModel = new AppModel({
-    leuteModel,
-    channelManager,
-    transportManager,
-    authenticator,
-    leuteAccessRightsManager,
-    llmManager: undefined // Will be created after AppModel.init()
   });
-  console.log('[initModel] 🔴🔴🔴 APPMODEL INSTANCE CREATED 🔴🔴🔴');
 
-  console.log('[initModel] 🚀🚀🚀 About to call appModel.init()...');
-  console.log('[initModel] AppModel state before init:', appModel.currentState);
-  await appModel.init();
-  console.log('[initModel] 🚀🚀🚀 appModel.init() completed!');
-  console.log('[initModel] AppModel state after init:', appModel.currentState);
+  // Create AppModel
+  const appModel = await measureTime('AppModel.init', async () => {
+    const model = new AppModel({
+      leuteModel,
+      channelManager,
+      transportManager,
+      authenticator,
+      leuteAccessRightsManager,
+      llmManager: undefined // Will be created after AppModel.init()
+    });
+    await model.init();
+    return model;
+  });
+
+  // Wait for networking to complete (non-blocking for UI)
+  await networkingPromise;
   
-  // Configure DeviceDiscoveryModel journal channel AFTER AppModel is fully initialized
-  try {
-    console.log('[initModel] 📱 Setting up DeviceDiscoveryModel journal channel...');
-    const { DeviceDiscoveryModel } = await import('../models/network/DeviceDiscoveryModel');
-    const deviceDiscoveryModel = DeviceDiscoveryModel.getInstance();
-    const personId = getInstanceOwnerIdHash();
-    if (personId) {
-      await deviceDiscoveryModel.setChannelManager(channelManager, personId);
-      console.log('[initModel] ✅ DeviceDiscoveryModel journal channel configured');
-      
-      // Journal functionality temporarily disabled
-      console.log('[initModel] ✅ DeviceDiscoveryModel configured (journal disabled)');
+  // Defer DeviceDiscoveryModel journal configuration - not critical for UI
+  const personId = getInstanceOwnerIdHash();
+  if (personId) {
+    // Import and defer the journal setup
+    const { deferUntilAfterRender } = await import('../utils/startupOptimization');
+
+    deferUntilAfterRender(async () => {
+      console.log('[initModel] 📱 Setting up DeviceDiscoveryModel journal channel (deferred)...');
+      const deviceDiscoveryModel = appModel.deviceDiscoveryModel;
+      if (!deviceDiscoveryModel) {
+        console.error('[initModel] ❌ DeviceDiscoveryModel not available on AppModel for journal setup');
+        return;
+      }
+
+      try {
+        await deviceDiscoveryModel.setChannelManager(channelManager);
+        console.log('[initModel] ✅ DeviceDiscoveryModel journal channel configured');
+      } catch (error) {
+        console.error('[initModel] ❌ Failed to setup DeviceDiscoveryModel journal channel:', error);
+      }
+    });
       
       // Defer app journal initialization to avoid loading all historical entries during startup
       console.log('[initModel] 📱 Deferring app journal initialization...');
-      const { deferUntilAfterRender } = await import('../utils/startupOptimization');
-      
+
       deferUntilAfterRender(async () => {
         console.log('[initModel] 📱 Initializing app journal (deferred)...');
         const { initializeAppJournal, logAppStart } = await import('../utils/appJournal');
@@ -712,17 +730,18 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
         console.log('[initModel] ✅ App journal initialized and app start logged (deferred)');
       });
       
-      // Initialize DeviceDiscoveryModel synchronously to ensure it's ready for services
-      console.log('[initModel] 📱 Initializing DeviceDiscoveryModel...');
+      // Initialize DeviceDiscoveryModel core dependencies immediately
+      // This ensures it's ready to handle discovery packets when they arrive
+      console.log('[initModel] 📱 Setting up DeviceDiscoveryModel prerequisites...');
       try {
         const { TrustModel } = await import('../models/TrustModel');
         const { QuicModel } = await import('../models/network/QuicModel');
-        
+
         // Get identity from TrustModel
         const trustModel = new TrustModel(leuteModel);
         await trustModel.init();
         const identity = trustModel.getDeviceCredentials();
-        
+
         if (identity) {
           // Get QuicModel instance and initialize with discovery port
           const quicModel = QuicModel.getInstance();
@@ -730,7 +749,14 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
             console.log('[initModel] Initializing QuicModel with discovery port 49497');
             await quicModel.init({ port: 49497, host: '0.0.0.0' });
           }
-          
+
+          // Use the DeviceDiscoveryModel instance from AppModel
+          const deviceDiscoveryModel = appModel.deviceDiscoveryModel;
+          if (!deviceDiscoveryModel) {
+            console.error('[initModel] ❌ DeviceDiscoveryModel not available on AppModel');
+            return;
+          }
+
           // Set up DeviceDiscoveryModel
           deviceDiscoveryModel.setQuicModel(quicModel);
           await deviceDiscoveryModel.setOwnIdentity(
@@ -768,19 +794,21 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
           deviceDiscoveryModel.setVCManager(vcManager);
           console.log('[initModel] ✅ VCManager created and set on DeviceDiscoveryModel');
           
-          // Now initialize DeviceDiscoveryModel with VCManager already in place
+          // Initialize DeviceDiscoveryModel immediately with VCManager in place
+          // This ensures it's ready to handle discovery packets right away
           const discoveryInitialized = await deviceDiscoveryModel.init();
           if (discoveryInitialized) {
             console.log('[initModel] ✅ DeviceDiscoveryModel initialized successfully');
-            
-            // Attach to AppModel for access by other components
-            (appModel as any).deviceDiscoveryModel = deviceDiscoveryModel;
-            
+
+            // DeviceDiscoveryModel is already attached to AppModel during AppModel.init()
+
             // Connect DeviceSettingsService if available
             const { createDeviceSettingsService } = await import('../services/createDeviceSettingsService');
             const settingsService = await createDeviceSettingsService(appModel);
             deviceDiscoveryModel.setSettingsService(settingsService);
             console.log('[initModel] ✅ DeviceSettingsService connected to DeviceDiscoveryModel');
+
+            // DeviceDiscoveryModel initialized successfully
           } else {
             console.error('[initModel] ❌ Failed to initialize DeviceDiscoveryModel');
           }
@@ -791,181 +819,98 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
         console.error('[initModel] ❌ Error initializing DeviceDiscoveryModel:', initError);
         // Don't fail the entire initialization if device discovery fails
       }
-    } else {
-      console.warn('[initModel] ⚠️ PersonId not available for DeviceDiscoveryModel journal setup');
-    }
-  } catch (error) {
-    console.error('[initModel] ❌ Failed to setup DeviceDiscoveryModel journal channel:', error);
+  } else {
+    console.warn('[initModel] ⚠️ PersonId not available for DeviceDiscoveryModel journal setup');
   }
-  
-  // Now create LLMManager and AIAssistantModel after everything is ready
-  console.log('[initModel] 🤖 Creating LLMManager with ready LeuteModel...');
-  try {
-    const llmManager = await LLMManager.getInstance({
-      channelManager: channelManager,
-      fs: { type: 'StorageStreams' } as any,
-      leuteModel: leuteModel
-    });
-    (appModel as any)._llmManager = llmManager;
-    console.log('[initModel] ✅ LLMManager created successfully');
-    
-    // Create MCPManager
-    console.log('[initModel] 🔧 Creating MCPManager...');
-    const { MCPManager } = await import('../models/mcp/MCPManager');
-    const mainIdentity = await leuteModel.myMainIdentity();
-    
-    if (mainIdentity) {
-      const mcpManager = new MCPManager(mainIdentity);
-      mcpManager.setDependencies(transportManager, transportManager.quicModel, leuteModel);
-      await mcpManager.init();
-      (appModel as any).mcpManager = mcpManager;
-      (llmManager as any).setMCPManager(mcpManager);
-      console.log('[initModel] ✅ MCPManager created successfully');
-      
-      // Create and start MCP Server for external communication
-      console.log('[initModel] 🌐 Creating MCP Server...');
-      const { MCPServer } = await import('../models/mcp/MCPServer');
-      const mcpServer = new MCPServer({
-        port: 3000,
-        appModel: appModel
+
+  // Initialize AI models in parallel - they don't block the UI since they're async
+  // Starting them immediately ensures they're ready when the user needs them
+  (async () => {
+    console.log('[initModel] 🤖 Creating LLMManager (parallel)...');
+    try {
+      const llmManager = await LLMManager.getInstance({
+        channelManager: channelManager,
+        fs: { type: 'StorageStreams' } as any,
+        leuteModel: leuteModel
       });
-      
-      // Start the server (this would listen for external MCP connections)
-      // Note: In React Native, this would need WebSocket server support
-      // For now, we're setting up the structure
-      (appModel as any).mcpServer = mcpServer;
-      console.log('[initModel] ✅ MCP Server created (WebSocket server implementation needed)');
+      (appModel as any)._llmManager = llmManager;
+      console.log('[initModel] ✅ LLMManager created successfully');
+
+      // Create MCPManager
+      console.log('[initModel] 🔧 Creating MCPManager...');
+      const { MCPManager } = await import('../models/mcp/MCPManager');
+      const mainIdentity = await leuteModel.myMainIdentity();
+
+      if (mainIdentity) {
+        const mcpManager = new MCPManager(mainIdentity);
+        mcpManager.setDependencies(transportManager, transportManager.quicModel, leuteModel);
+        await mcpManager.init();
+        (appModel as any).mcpManager = mcpManager;
+        (llmManager as any).setMCPManager(mcpManager);
+        console.log('[initModel] ✅ MCPManager created successfully');
+
+        // Create and start MCP Server for external communication
+        console.log('[initModel] 🌐 Creating MCP Server...');
+        const { MCPServer } = await import('../models/mcp/MCPServer');
+        const mcpServer = new MCPServer({
+          port: 3000,
+          appModel: appModel
+        });
+        (appModel as any).mcpServer = mcpServer;
+        console.log('[initModel] ✅ MCP Server created (WebSocket server implementation needed)');
+      }
+
+      // Create AIAssistantModel
+      console.log('[initModel] 🤖 Creating AIAssistantModel...');
+      const { default: AIAssistantModel } = await import('../models/ai/assistant/AIAssistantModel');
+      const me = await leuteModel.me();
+      const mainProfile = await me.mainProfile();
+
+      if (mainIdentity && mainProfile) {
+        const aiAssistantModel = new AIAssistantModel(mainIdentity, mainProfile.idHash);
+        aiAssistantModel.setAppModel(appModel as any);
+        await aiAssistantModel.init();
+        (appModel as any).aiAssistantModel = aiAssistantModel;
+        console.log('[initModel] ✅ AIAssistantModel created successfully');
+      }
+    } catch (error) {
+      console.error('[initModel] ❌ Failed to create LLMManager/AIAssistantModel/MCPManager:', error);
     }
-    
-    // Create AIAssistantModel
-    console.log('[initModel] 🤖 Creating AIAssistantModel...');
-    const { default: AIAssistantModel } = await import('../models/ai/assistant/AIAssistantModel');
-    const me = await leuteModel.me();
-    const mainProfile = await me.mainProfile();
-    
-    if (mainIdentity && mainProfile) {
-      const aiAssistantModel = new AIAssistantModel(mainIdentity, mainProfile.idHash);
-      aiAssistantModel.setAppModel(appModel as any);
-      await aiAssistantModel.init();
-      (appModel as any).aiAssistantModel = aiAssistantModel;
-      console.log('[initModel] ✅ AIAssistantModel created successfully');
-    }
-  } catch (error) {
-    console.error('[initModel] ❌ Failed to create LLMManager/AIAssistantModel/MCPManager:', error);
-  }
+  })()
 
 
-  // DEBUGGING: Make diagnostic available globally
-  try {
-    const { diagnoseMessageExchange } = await import('../utils/messageExchangeDiagnostic');
-    (global as any).diagnoseMessageExchange = diagnoseMessageExchange;
-    
-    // Add AI diagnostic function
-    (global as any).refreshAITopicMappings = async () => {
-      console.log('🤖 Refreshing AI topic mappings...');
-      if (appModel.aiAssistantModel) {
-        await appModel.aiAssistantModel.refreshTopicMappings();
-      } else {
-        console.warn('❌ AIAssistantModel not available');
+  // Single lazy-loaded debug helper
+  if (__DEV__) {
+    (global as any).loadDebugTools = async () => {
+      console.log('[Debug] Loading debug tools...');
+      try {
+        const tools: any = {};
+
+        // Load only essential debug tools on demand
+        const { diagnoseMessageExchange } = await import('../utils/messageExchangeDiagnostic');
+        tools.diagnoseMessageExchange = diagnoseMessageExchange;
+
+        // Assign to global
+        Object.assign(global, tools);
+        console.log('[Debug] ✅ Debug tools loaded:', Object.keys(tools));
+        return tools;
+      } catch (err) {
+        console.error('[Debug] Failed to load debug tools:', err);
+        return {};
       }
     };
-    
-    (global as any).checkAIStatus = () => {
-      console.log('🤖 Checking AI status...');
-      if (appModel.aiAssistantModel) {
-        const status = appModel.aiAssistantModel.getStatus();
-        console.log('AI Status:', status);
-        // Use type assertion to access private properties for debugging
-        const aiModel = appModel.aiAssistantModel as any;
-        if (aiModel.topicManager && aiModel.topicManager.topicModelMap) {
-          console.log('Topic mappings:', aiModel.topicManager.topicModelMap.size);
-          aiModel.topicManager.topicModelMap.forEach((modelId: string, topicId: string) => {
-            console.log(`  ${topicId} -> ${modelId}`);
-          });
-        } else {
-          console.log('Topic manager not available');
-        }
-      } else {
-        console.warn('❌ AIAssistantModel not available');
-      }
-    };
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load message exchange diagnostic:', err);
-  }
-  
-  // CHUM diagnostics
-  try {
-    const { diagnoseChumMessageExchange, monitorChumSync } = await import('../utils/chumMessageDiagnostics');
-    (global as any).diagnoseChumMessageExchange = () => diagnoseChumMessageExchange(appModel);
-    (global as any).monitorChumSync = () => monitorChumSync(appModel);
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load CHUM diagnostics:', err);
-  }
-  
-  // CHUM sync fix
-  try {
-    const { fixChumSync } = await import('../utils/fixChumSync');
-    (global as any).fixChumSync = () => fixChumSync(appModel);
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load CHUM sync fix:', err);
-  }
-  
-  // Message sync debugging
-  try {
-    const { debugMessageSync } = await import('../utils/debugMessageSync');
-    (global as any).debugMessageSync = () => debugMessageSync(appModel);
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load message sync debug:', err);
-  }
-  
-  // CHUM sync debugging
-  try {
-    const { debugChumSync } = await import('../utils/debugChumSync');
-    (global as any).debugChumSync = () => debugChumSync(appModel);
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load CHUM sync debug:', err);
-  }
-  
-  // Enhanced CHUM export/import tracing with user names
-  try {
-    const { traceChumExportImport, traceSendMessage } = await import('../utils/traceChumExportImport');
-    (global as any).traceChumExportImport = traceChumExportImport;
-    (global as any).traceSendMessage = traceSendMessage;
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load CHUM export/import tracing:', err);
-  }
-  
-  // Model file checking utility
-  try {
-    const { checkModelFile } = await import('../utils/checkModelFile');
-    (global as any).checkModelFile = checkModelFile;
-    console.log('[initModel] ✅ Model file checker loaded - use checkModelFile(path) to diagnose');
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load model file checker:', err);
+    console.log('[initModel] Debug tools available - use loadDebugTools() when needed');
   }
 
+  const totalTime = Date.now() - initStartTime;
+  console.log(`[PERF] Total initModel time: ${totalTime}ms`);
+  performanceSummary.record('Total initModel', totalTime);
   console.log('[initModel] 🎉 Model initialization completed successfully!');
   
   // Store the model in ModelService for global access
-  console.log('[initModel] 📦 Storing AppModel in ModelService...');
-  console.log('[initModel] AppModel has organisationModel?', !!appModel.organisationModel);
-  console.log('[initModel] AppModel properties:', Object.keys(appModel));
   ModelService.setModel(appModel);
-  console.log('[initModel] ✅ AppModel stored in ModelService');
   
-  // Add UDP diagnostics to global scope
-  try {
-    (global as any).runUDPDiagnostic = runUDPDiagnostic;
-    (global as any).diagnoseUDP = diagnoseUDP;
-    (global as any).forceLoadUDPModule = forceLoadUDPModule;
-    (global as any).simpleUDPCheck = simpleUDPCheck;
-    (global as any).turboModuleCheck = turboModuleCheck;
-    (global as any).forceUDPInit = forceUDPInit;
-    (global as any).testDirectUDP = testDirectUDP;
-    console.log('[initModel] ✅ UDP diagnostics loaded - use testDirectUDP() for direct test');
-  } catch (err) {
-    console.warn('[initModel] ⚠️ Failed to load UDP diagnostics:', err);
-  }
+  // UDP diagnostics removed - load on demand if needed
   
   
   
@@ -1337,7 +1282,7 @@ export async function testAppModelInit(): Promise<void> {
       return;
     }
     
-    console.log('[TEST] AppModel instance obtained, current state:', appModel.currentState);
+    console.log('[TEST] AppModel instance obtained, current state:', appModel.state.currentState);
     
     // Test connections access
     try {

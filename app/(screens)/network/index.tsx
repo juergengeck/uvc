@@ -71,25 +71,8 @@ export default function NetworkSettingsScreen() {
             title={t('settings.network.advanced.settings', { defaultValue: 'Advanced Settings' })}
             description={t('settings.network.advanced.settingsDescription', { defaultValue: 'CommServer URL and advanced network options' })}
             onPress={() => router.push('/(screens)/network/advanced')}
-            style={themedStyles.settingsItem}
-            left={props => <List.Icon {...props} icon="cog" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
-          />
-          <List.Item
-            title={t('settings.network.diagnostics.title', { defaultValue: 'Network Diagnostics' })}
-            description={t('settings.network.diagnostics.description', { defaultValue: 'Test connections and monitor network activity' })}
-            onPress={() => router.push('/(screens)/network/diagnostics')}
-            style={themedStyles.settingsItem}
-            left={props => <List.Icon {...props} icon="test-tube" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
-          />
-          <View style={themedStyles.settingsDivider} />
-          <List.Item
-            title="QUICVC Test"
-            description="Test QUIC with Verifiable Credentials connections"
-            onPress={() => router.push('/(screens)/network/quicvc-test')}
             style={[themedStyles.settingsItem, themedStyles.settingsItemLast]}
-            left={props => <List.Icon {...props} icon="rocket" />}
+            left={props => <List.Icon {...props} icon="cog" />}
             right={props => <List.Icon {...props} icon="chevron-right" />}
           />
         </View>

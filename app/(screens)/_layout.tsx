@@ -288,6 +288,110 @@ export default function ScreensLayout() {
                             ),
                         }}
                     />
+
+                    {/* Device management screens */}
+                    <Stack.Screen
+                        name="device-list"
+                        options={{
+                            headerTitle: 'Devices',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="device-detail"
+                        options={{
+                            headerShown: false, // Has dynamic content, will handle its own header
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="devices/room-assignment"
+                        options={{
+                            headerTitle: 'Assign to Room',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="devices/add-device"
+                        options={{
+                            headerTitle: 'Add Device',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="devices/create-room"
+                        options={{
+                            headerTitle: 'Create Room',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="devices/create-department"
+                        options={{
+                            headerTitle: 'Create Department',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="devices/create-organisation"
+                        options={{
+                            headerTitle: 'Create Organisation',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
                 </Stack>
             </SettingsProvider>
         </OneProvider>

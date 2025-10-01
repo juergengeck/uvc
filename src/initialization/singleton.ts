@@ -11,6 +11,7 @@ console.log('[SingletonInitializer] Starting import from ./index');
 import { getAuthenticator, createInstance } from './index';
 import { QuicModel } from '@src/models/network/QuicModel';
 import { UdpModel } from '@src/models/network/UdpModel';
+import { preInitializeCrypto, prewarmCrypto } from './cryptoOptimization';
 
 console.log('[SingletonInitializer] Import successful - functions available:', {
   getAuthenticator: typeof getAuthenticator,
@@ -29,6 +30,15 @@ class SingletonInitializer {
     console.log('[SingletonInitializer] Starting one-time system initialization...');
     this.initializationPromise = (async () => {
       try {
+        // Pre-initialize crypto early to speed up login
+        console.log('[SingletonInitializer] Pre-initializing crypto...');
+        await preInitializeCrypto();
+
+        // Prewarm crypto libraries (non-blocking)
+        prewarmCrypto().catch(err =>
+          console.warn('[SingletonInitializer] Crypto prewarm failed (non-critical):', err)
+        );
+
         // Reset network layer to ensure clean state after reload
         console.log('[SingletonInitializer] Resetting network layer...');
         await UdpModel.resetInstance();

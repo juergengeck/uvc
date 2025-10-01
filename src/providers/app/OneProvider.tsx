@@ -69,20 +69,28 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
     };
   }, [authenticator]);
   
-  // Initialize model when we're logged in and don't have a model yet
+  // Initialize model IMMEDIATELY when login completes
   useEffect(() => {
     // Skip if we already have a model or are currently initializing
     if (model || isInitializingModel) return;
-    
-    // Skip if auth state is not ready or not logged in
-    console.log(`[OneProvider] Auth state check: authenticator=${!!authenticator}, authState=${!!authenticator?.authState}, currentState=${authenticator?.authState?.currentState}`);
-    if (!authenticator || !authenticator.authState || authenticator.authState.currentState !== 'logged_in') {
-      console.log('[OneProvider] Auth state check failed, skipping model initialization');
+
+    // Skip if auth state is not ready
+    if (!authenticator || !authenticator.authState) {
+      console.log('[OneProvider] Auth state not ready, skipping model initialization');
       return;
     }
-    
-    console.log('[OneProvider] User is logged in, checking for model');
-    
+
+    const currentState = authenticator.authState.currentState;
+    console.log(`[OneProvider] Auth state check: ${currentState}`);
+
+    // Only initialize when we transition to logged_in
+    if (currentState !== 'logged_in') {
+      console.log('[OneProvider] User not logged in, skipping model initialization');
+      return;
+    }
+
+    console.log('[OneProvider] User logged in - initializing model immediately');
+
     // Check if model is already available
     const existingModel = getModel();
     if (existingModel) {
@@ -90,14 +98,14 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
       setModel(existingModel);
       return;
     }
-    
-    // No model available - initialize it now that we're logged in
-    console.log('[OneProvider] No model available - initializing after login');
+
+    // No model available - initialize it immediately after login
+    console.log('[OneProvider] Initializing model immediately after login');
     setIsInitializingModel(true);
-    
+
     initModelAfterLogin()
       .then((newModel) => {
-        console.log('[OneProvider] Model initialized successfully after login');
+        console.log('[OneProvider] ✅ Model initialized immediately after login');
         setModel(newModel);
       })
       .catch((error) => {

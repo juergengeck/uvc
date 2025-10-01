@@ -21,7 +21,7 @@ import * as SplashScreen from 'expo-splash-screen';
 // Import the new singleton initializer
 import { initializeApp } from '@src/initialization/singleton';
 // We only need getAuthenticator now
-import { getAuthenticator, attemptCredentialRestore, cleanupApp } from '@src/initialization';
+import { getAuthenticator, cleanupApp } from '@src/initialization';
 import { AppThemeProvider, useTheme } from '@src/providers/app/AppTheme';
 import { Text } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
@@ -44,13 +44,8 @@ export default function RootLayout() {
   const [auth, setAuth] = useState<any>(null);
   const systemColorScheme = useColorScheme();
   const [isDarkMode, setIsDarkMode] = useState<boolean>(systemColorScheme === 'dark');
-  
-  // Mark initial render complete for startup optimization
-  useEffect(() => {
-    import('@src/utils/startupOptimization').then(({ markInitialRenderComplete }) => {
-      markInitialRenderComplete();
-    });
-  }, []);
+
+  // Don't mark render complete here - wait until after login and model initialization
   
   // Single initialization effect - ONLY runs once 
   useEffect(() => {

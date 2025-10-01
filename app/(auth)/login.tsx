@@ -18,6 +18,7 @@ import { useAuth } from '@src/providers/app/AuthProvider';
 import { AuthLogo } from '@src/components/auth/AuthLogo';
 import { APP_CONFIG } from '@src/config/app';
 import { useTheme as useAppTheme } from '@src/providers/app/AppTheme';
+import { instanceExists } from '@refinio/one.core/lib/instance';
 
 // Demo credentials
 const DEMO_USERNAME = 'demo';
@@ -34,6 +35,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const { authenticator } = useAuth();
   const theme = useTheme();
   const { styles: themedStyles } = useAppTheme();
@@ -56,8 +58,24 @@ export default function LoginScreen() {
       });
       
       // Import the enhanced loginOrRegister function and credential storage
+      const loginStartTime = Date.now();
       const { loginOrRegisterWithKeys, storeCredentials } = await import('@src/initialization');
+
+      // Check if this is a first-time user (using static import)
+      const userExists = await instanceExists(APP_CONFIG.name, username);
+
+      // Show appropriate feedback
+      if (!userExists) {
+        setLoadingMessage('Creating secure keys (one-time setup)...');
+      } else {
+        setLoadingMessage('Decrypting stored keys...');
+      }
+
+      // The heavy crypto operation (scrypt) only happens for new users
       await loginOrRegisterWithKeys(authenticator, username, password, APP_CONFIG.name);
+      console.log(`[PERF] Total login process took: ${Date.now() - loginStartTime}ms`);
+
+      setLoadingMessage('Initializing secure storage...');
       
       console.log('[Login] Login/Registration successful');
       console.log('[Login] Auth state after operation:', authenticator.authState.currentState);
