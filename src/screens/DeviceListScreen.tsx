@@ -24,75 +24,7 @@ import { useModelState } from '@src/hooks/useModelState';
 /**
  * Send ownership credential to ESP32 device via Type 7 VC exchange
  */
-async function sendESP32CredentialViaVCExchange(
-  credential: any,
-  deviceAddress: string,
-  devicePort: number,
-  ownerPersonId: string
-): Promise<boolean> {
-  try {
-    console.log(`[sendESP32CredentialViaVCExchange] Provisioning ESP32 device at ${deviceAddress}:${devicePort}`);
-    
-    // Get QUIC model
-    const quicModel = await QuicModel.ensureInitialized();
-    if (!quicModel.isReady()) {
-      throw new Error('QuicModel not ready');
-    }
-    
-    // Create DeviceIdentityCredential in the format ESP32 expects
-    const deviceIdentityCredential = {
-      "$type$": "DeviceIdentityCredential",
-      "id": `device-credential-${credential.device_id}`,
-      "issuer": ownerPersonId, // The owner who is provisioning the device
-      "issuanceDate": new Date().toISOString(),
-      "credentialSubject": {
-        "id": credential.device_id,
-        "type": "ESP32",
-        "publicKeyHex": "", // ESP32 will ignore this for provisioning
-        "capabilities": ["led_control", "sensor_data"]
-      },
-      "proof": {
-        "type": "Ed25519Signature2020",
-        "proofValue": "credential-provisioning-signature", // ESP32 will store this
-        "verificationMethod": `${ownerPersonId}#key-1`
-      }
-    };
-    
-    // Create provisioning message for Type 2 CREDENTIALS
-    const provisioningMessage = {
-      type: "provision_device",
-      credential: deviceIdentityCredential,
-      senderPersonId: ownerPersonId,
-      timestamp: Date.now()
-    };
-    
-    console.log(`[sendESP32CredentialViaVCExchange] Sending provisioning credential:`, {
-      deviceId: credential.device_id,
-      issuer: ownerPersonId,
-      type: "provision_device"
-    });
-    
-    // Create service packet for Type 2 (CREDENTIALS_SERVICE) - same as ownership removal
-    const messageData = new TextEncoder().encode(JSON.stringify(provisioningMessage));
-    const packet = new Uint8Array(1 + messageData.length);
-    packet[0] = 2; // NetworkServiceType.CREDENTIALS_SERVICE
-    packet.set(messageData, 1);
-    
-    // Send the provisioning credential
-    await quicModel.send(packet, deviceAddress, devicePort);
-    console.log(`[sendESP32CredentialViaVCExchange] Provisioning VC sent successfully`);
-    
-    // ESP32 firmware should send provisioning_ack on service type 2 after storing credential
-    // This will be handled by ESP32ConnectionManager.handleCredentialMessage()
-    // Response expected: {"type": "provisioning_ack", "device_id": "...", "owner": "...", "status": "success"}
-    
-    return true;
-    
-  } catch (error) {
-    console.error(`[sendESP32CredentialViaVCExchange] Error:`, error);
-    return false;
-  }
-}
+// NOTE: sendESP32CredentialViaVCExchange() removed - ownership now happens via QUIC-VC claimDevice()
 
 export function DeviceListScreen() {
   // Removed verbose logging for performance
@@ -704,124 +636,10 @@ export function DeviceListScreen() {
             profiler.endOperation(operationId, { success: true, reason: 'already_owned' });
             return;
           }
-                  
-          // Set up listener for unclaimed device response
-          const unclaimedListener = async (unclaimedDeviceId: string, message: string) => {
-            console.log(`[DeviceListScreen] Unclaimed device event received: ${unclaimedDeviceId}, looking for: ${device.id}`);
-            if (unclaimedDeviceId === device.id) {
-              console.log(`[DeviceListScreen] Device ${device.id} is unclaimed, provisioning with credential...`);
-              
-              try {
-                // Create and send DeviceIdentityCredential to provision the device
-                profiler.startOperation('create_credential', { deviceId: device.id });
-                const leuteModel = ModelService.getLeuteModel();
-                if (!leuteModel) {
-                  throw new Error('LeuteModel not available');
-                }
-                profiler.checkpoint('Got LeuteModel');
-                
-                const credentialModel = await VerifiableCredentialModel.ensureInitialized(leuteModel);
-                profiler.checkpoint('VerifiableCredentialModel initialized');
-                const credential = await credentialModel.createDeviceOwnershipCredential(
-                  currentUserPersonId,
-                  device.id,
-                  device.type || 'ESP32'
-                );
-                profiler.endOperation('create_credential');
-                
-                console.log(`[DeviceListScreen] Sending ownership credential to ${device.id} via Type 2 CREDENTIALS service`);
-                
-                // For ESP32 devices, use Type 2 CREDENTIALS service for provisioning
-                profiler.startOperation('send_credential_provisioning', { deviceId: device.id });
-                const provisionSuccess = await sendESP32CredentialViaVCExchange(
-                  credential,
-                  device.address,
-                  device.port,
-                  currentUserPersonId
-                );
-                profiler.endOperation('send_credential_provisioning', { success: provisionSuccess });
-                
-                if (!provisionSuccess) {
-                  throw new Error('Failed to provision device with ownership credential');
-                }
-                
-                console.log(`[DeviceListScreen] Device ${device.name} successfully provisioned and claimed`);
-                
-                // Register device ownership immediately - don't wait for provisioning_ack
-                // The ESP32 may not send an ack but will store the credential
-                try {
-                  const { DeviceDiscoveryModel } = await import('@src/models/network/DeviceDiscoveryModel');
-                  const discoveryModel = DeviceDiscoveryModel.getInstance();
-                  
-                  // Register ownership and update device state immediately
-                  await discoveryModel.registerDeviceOwner(device.id, currentUserPersonId);
-                  
-                  // Update the device to reflect owned status
-                  discoveryModel.updateDevice(device.id, {
-                    ownerId: currentUserPersonId,
-                    hasValidCredential: true,
-                    isAuthenticated: true
-                  });
-                  
-                  console.log(`[DeviceListScreen] Device ownership registered immediately for ${device.id}`);
-                } catch (error) {
-                  console.error(`[DeviceListScreen] Failed to register ownership:`, error);
-                }
-                
-                // Clear the timeout since we succeeded
-                clearTimeout(cleanupTimeout);
-                unsubscribe?.remove?.();
-                
-                // Save credential locally
-                const vcModel = VerifiableCredentialModel.getInstance();
-                vcModel.saveCredentials();
-                
-                // Don't remove from claiming set here - let the effect handle it
-                console.log(`[DeviceListScreen] Device ${device.id} provisioned, effect will handle claiming state`);
-                
-              } catch (provisionError: any) {
-                console.error(`[DeviceListScreen] Error provisioning device:`, provisionError);
-                throw provisionError;
-              }
-            }
-          };
-          
-          // Also listen for successful authentication (device already claimed)
-          const authListener = (authenticatedDevice: ESP32Device) => {
-            if (authenticatedDevice.id === device.id && authenticatedDevice.ownerPersonId === currentUserPersonId) {
-              console.log(`[DeviceListScreen] Device ${device.id} authenticated and already owned by current user`);
-              clearTimeout(cleanupTimeout);
-              unsubscribe?.remove?.();
-              authUnsubscribe?.remove?.();
-              
-              // Don't remove from claiming set here - let the effect handle it
-              console.log(`[DeviceListScreen] Device ${device.id} authenticated, effect will handle claiming state`);
-            }
-          };
-                  
-          // Listen for unclaimed device response
-          const unsubscribe = esp32ConnectionManager.onDeviceUnclaimed.listen(unclaimedListener);
-          const authUnsubscribe = esp32ConnectionManager.onDeviceAuthenticated.listen(authListener);
-          
-          // Clean up listener after 15 seconds
-          const cleanupTimeout = setTimeout(() => {
-            console.log(`[DeviceListScreen] Timeout waiting for device response for ${device.id}`);
-            unsubscribe?.remove?.();
-            authUnsubscribe?.remove?.();
-            // Don't remove from claiming set on timeout - user can refresh if needed
-            console.log(`[DeviceListScreen] Timeout for ${device.id}, keeping in claiming state`);
-            
-            // Check final device state before showing error
-            const finalDevice = discoveryModel.getDevice(device.id);
-            if (finalDevice?.ownerId !== currentUserPersonId) {
-              Alert.alert(
-                t('error.title'),
-                t('error.deviceNoResponse')
-              );
-            }
-          }, 15000);
-          
-          // Use fast claimDevice method for unclaimed devices
+
+          // NOTE: Legacy unclaimed listener flow removed - ownership now happens via QUIC-VC claimDevice()
+
+          // Use claimDevice method which establishes QUIC-VC connection and claims ownership
           console.log(`[DeviceListScreen] About to call claimDevice...`);
           profiler.startOperation('claim_device', { deviceId: device.id });
           const success = await esp32ConnectionManager.claimDevice(
@@ -840,18 +658,14 @@ export function DeviceListScreen() {
             // This prevents the toggle from appearing in wrong state
             
             profiler.endOperation(operationId, { success: false, reason: 'timeout' });
-            // Don't return - let the listeners continue waiting
+            // Don't return - let the ownership update event handle cleanup
           } else {
-            // Success! Clean up listeners
-            clearTimeout(cleanupTimeout);
-            unsubscribe?.remove?.();
-            authUnsubscribe?.remove?.();
-            
+            // Success! claimDevice() completed
             // DON'T remove from claiming set yet!
             // Keep the device in claiming state (toggle hidden) until the ownership update arrives
             // This prevents the empty toggle from showing
             // The useDeviceDiscovery hook will remove it from claiming when ownership is confirmed
-            
+
             console.log(`[DeviceListScreen] Device ${device.id} successfully claimed, keeping in claiming state until ownership confirmed`);
           }
         } else {

@@ -43,20 +43,24 @@ export function useDeviceDiscovery() {
   
   const loadDevicesImmediate = useCallback(async () => {
     if (isUpdatingRef.current) return;
-    
+
     try {
       isUpdatingRef.current = true;
-      
+
+      // CRITICAL: Capture current device state BEFORE loading to preserve ownership info
+      // DeviceModel may not have the latest ownerId if it was just set via event listener
+      const currentDevices = devicesRef.current;
+
       // No longer use savedDevices from settings - devices are stored in DeviceModel
       const discoveryModel = discoveryModelRef.current;
-      
+
       // Get devices from DeviceModel (which includes owned devices from storage)
       let allDevices: any[] = [];
       const deviceModel = ModelService.getDeviceModel();
       if (!deviceModel || !deviceModel.isInitialized()) {
         throw new Error('[useDeviceDiscovery] DeviceModel not initialized - app initialization failed');
       }
-      
+
       // This will get both discovered devices and owned devices from storage
       allDevices = await deviceModel.getDevices();
       
@@ -152,6 +156,13 @@ export function useDeviceDiscovery() {
           
           if (hasChanges) {
             debugLog.info('useDeviceDiscovery', 'Updating existing device at index', existingIndex);
+
+            // CRITICAL: Preserve ownerId from current state if DeviceModel doesn't have it yet
+            // This prevents race condition where event listener sets ownerId but DeviceModel
+            // hasn't persisted it yet, causing loadDevices to clear it
+            const currentDevice = currentDevices.find(d => d.id === deviceId);
+            const preservedOwnerId = device.ownerId ?? currentDevice?.ownerId ?? existingDevice.ownerId;
+
             // Update existing device
             deviceList[existingIndex] = {
               ...existingDevice,
@@ -163,7 +174,7 @@ export function useDeviceDiscovery() {
               online: isOnline,
               connected: isConnected,
               blueLedStatus: device.blueLedStatus || existingDevice.blueLedStatus || (deviceType === DeviceType.ESP32 || deviceType === 'ESP32' ? 'off' : undefined),
-              ownerId: device.ownerId, // Trust what the device reports, not stale data
+              ownerId: preservedOwnerId, // Preserve ownerId from current state to avoid race condition
               isSaved: existingDevice.isSaved // Preserve saved status
             };
           } else {
@@ -172,6 +183,10 @@ export function useDeviceDiscovery() {
           }
         } else {
           // Add new device - map deviceId to id for UI compatibility
+          // CRITICAL: Check current state for ownerId in case it was just set via event
+          const currentDevice = currentDevices.find(d => d.id === deviceId);
+          const preservedOwnerId = device.ownerId ?? currentDevice?.ownerId;
+
           const newDevice = {
             id: deviceId, // UI expects 'id' not 'deviceId'
             name: device.name || deviceId,
@@ -183,11 +198,11 @@ export function useDeviceDiscovery() {
             connected: isConnected,
             enabled: true,
             blueLedStatus: device.blueLedStatus || (deviceType === DeviceType.ESP32 || deviceType === 'ESP32' ? 'off' : undefined),
-            ownerId: device.ownerId, // Trust what the device reports
+            ownerId: preservedOwnerId, // Preserve from current state if available
             wifiStatus: device.wifiStatus || (device.port > 0 ? 'active' : 'inactive'), // Assume WiFi active if has port
             btleStatus: device.btleStatus || 'inactive' // Default to inactive unless explicitly set
           };
-          
+
           deviceList.push(newDevice);
         }
         } catch (error) {
@@ -469,8 +484,14 @@ export function useDeviceDiscovery() {
         if (esp32Manager) {
           const listener = (device: any) => {
             console.log(`[useDeviceDiscovery] ESP32 device authenticated: ${device.id}, triggering refresh`);
-            // Trigger a refresh to update the connected status
-            loadDevices(false);
+            // CRITICAL: Defer async work to avoid blocking other event listeners
+            // OEvent runs listeners sequentially with await by default, so returning a promise
+            // blocks all subsequent listeners. Use setImmediate to defer.
+            setImmediate(() => {
+              loadDevices(false).catch(err => {
+                console.error('[useDeviceDiscovery] Error loading devices after auth:', err);
+              });
+            });
           };
           unsubscribe = esp32Manager.onDeviceAuthenticated.listen(listener);
         }
@@ -519,6 +540,14 @@ export function useDeviceDiscovery() {
     if (!discoveryModel) {
       console.log('[useDeviceDiscovery] No discovery model available yet - app may not be fully initialized');
       return () => clearTimeout(loadTimer);
+    }
+
+    // Start discovery if not already running - this triggers active discovery probes
+    if (!actualDiscoveryState) {
+      console.log('[useDeviceDiscovery] Starting discovery for immediate device detection');
+      discoveryModel.startDiscovery().catch(error => {
+        console.error('[useDeviceDiscovery] Failed to start discovery:', error);
+      });
     }
     
     const unsubscribers: Array<() => void> = [];
@@ -668,10 +697,11 @@ export function useDeviceDiscovery() {
                   ...device,
                   online: updatedDevice.online ?? device.online,
                   // Only update connected status if hasValidCredential is explicitly provided
-                  connected: updatedDevice.hasValidCredential !== undefined 
-                    ? updatedDevice.hasValidCredential 
+                  connected: updatedDevice.hasValidCredential !== undefined
+                    ? updatedDevice.hasValidCredential
                     : device.connected,
-                  ownerId: 'ownerId' in updatedDevice ? updatedDevice.ownerId : device.ownerId, // Update ownerId even if it's undefined
+                  // Never clear ownerId - only update if new value is defined
+                  ownerId: updatedDevice.ownerId ?? device.ownerId,
                   blueLedStatus: updatedDevice.blueLedStatus ?? device.blueLedStatus,
                   lastSeen: updatedDevice.lastSeen ?? device.lastSeen,
                   address: updatedDevice.address ?? device.address,

@@ -544,9 +544,43 @@ export class QuicVCConnectionManager {
                     const contentString = new TextDecoder().decode(contentBytes);
                     // console.log('[QuicVCConnectionManager] Discovery content:', contentString);
 
-                    // Check if it's HTML (ESP32 format) or JSON
-                    if (contentString.startsWith('<!DOCTYPE html>')) {
-                        // Parse HTML microdata for device information
+                    // Parse JSON (new compact format) or HTML (legacy)
+                    if (contentString.startsWith('{')) {
+                        // Parse compact JSON format (new)
+                        // Format: {"t":"DevicePresence","i":"device-id","s":"online","o":"unclaimed"}
+                        try {
+                            const json = JSON.parse(contentString);
+                            const discoveryData = {
+                                id: json.i || json.id || json.deviceId,
+                                type: json.t === 'DevicePresence' ? 'ESP32' : (json.type || json.deviceType || 'unknown'),
+                                status: json.s || json.status || 'online',
+                                ownership: json.o || json.ownership || 'unclaimed'
+                            };
+                            console.log('[QuicVCConnectionManager] Parsed discovery data from JSON:', discoveryData);
+
+                            // Store device information in the connection
+                            connection.deviceId = discoveryData.id;
+                            connection.deviceType = discoveryData.type;
+                            connection.isOwned = discoveryData.ownership !== 'unclaimed';
+
+                            // Emit discovery event
+                            this.onDeviceDiscovered.emit({
+                                type: 'discovery',
+                                deviceInfo: {
+                                    deviceId: discoveryData.id,
+                                    deviceType: discoveryData.type,
+                                    isOwned: discoveryData.ownership !== 'unclaimed',
+                                    ownership: discoveryData.ownership,
+                                    status: discoveryData.status
+                                },
+                                address: rinfo.address,
+                                port: rinfo.port
+                            });
+                        } catch (e) {
+                            console.log('[QuicVCConnectionManager] Failed to parse JSON:', e.message);
+                        }
+                    } else if (contentString.startsWith('<!DOCTYPE html>')) {
+                        // Parse HTML microdata for device information (legacy - will be removed)
                         const idMatch = contentString.match(/itemprop="id" content="([^"]+)"/);
                         const typeMatch = contentString.match(/itemprop="type" content="([^"]+)"/);
                         const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
@@ -559,7 +593,7 @@ export class QuicVCConnectionManager {
                                 status: statusMatch ? statusMatch[1] : 'unknown',
                                 ownership: ownershipMatch ? ownershipMatch[1] : 'unknown'
                             };
-                            console.log('[QuicVCConnectionManager] Parsed discovery data from HTML:', discoveryData);
+                            console.log('[QuicVCConnectionManager] Parsed discovery data from HTML (legacy):', discoveryData);
 
                             // Store device information in the connection
                             connection.deviceId = discoveryData.id;
@@ -581,26 +615,7 @@ export class QuicVCConnectionManager {
                             });
                         }
                     } else {
-                        // Try parsing as JSON
-                        try {
-                            const discoveryData = JSON.parse(contentString);
-                            console.log('[QuicVCConnectionManager] Parsed discovery data from JSON:', discoveryData);
-
-                            // Store in connection and emit event
-                            connection.deviceId = discoveryData.id || discoveryData.deviceId;
-                            connection.deviceType = discoveryData.type || discoveryData.deviceType;
-                            connection.isOwned = discoveryData.ownership !== 'unclaimed';
-
-                            // Emit discovery event
-                            this.onDeviceDiscovered.emit({
-                                type: 'discovery',
-                                deviceInfo: discoveryData,
-                                address: rinfo.address,
-                                port: rinfo.port
-                            });
-                        } catch (e) {
-                            console.log('[QuicVCConnectionManager] Discovery content is neither HTML nor JSON');
-                        }
+                        console.warn('[QuicVCConnectionManager] Unknown discovery format:', contentString.substring(0, 50));
                     }
 
                     // This is an ESP32 discovery packet, not a QUICVC handshake
@@ -783,11 +798,21 @@ export class QuicVCConnectionManager {
                 const contentString = new TextDecoder().decode(contentBytes);
                 // console.log('[QuicVCConnectionManager] Discovery content:', contentString);
 
-                // Parse HTML microdata or JSON
+                // Parse JSON (new compact format) or HTML (legacy)
                 let discoveryData: any = {};
 
-                if (contentString.startsWith('<!DOCTYPE html>')) {
-                    // Parse HTML microdata for device information
+                if (contentString.startsWith('{')) {
+                    // Parse compact JSON format (new)
+                    // Format: {"t":"DevicePresence","i":"device-id","s":"online","o":"unclaimed"}
+                    const json = JSON.parse(contentString);
+                    discoveryData = {
+                        id: json.i || '',
+                        type: json.t === 'DevicePresence' ? 'ESP32' : (json.type || 'unknown'),
+                        status: json.s || 'online',
+                        ownership: json.o || 'unclaimed'
+                    };
+                } else if (contentString.startsWith('<!DOCTYPE html>')) {
+                    // Parse HTML microdata for device information (legacy - will be removed)
                     const idMatch = contentString.match(/itemprop="id" content="([^"]+)"/);
                     const typeMatch = contentString.match(/itemprop="type" content="([^"]+)"/);
                     const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
@@ -800,8 +825,7 @@ export class QuicVCConnectionManager {
                         ownership: ownershipMatch ? ownershipMatch[1] : 'unclaimed'
                     };
                 } else {
-                    // Try parsing as JSON
-                    discoveryData = JSON.parse(contentString);
+                    console.warn('[QuicVCConnectionManager] Unknown discovery format:', contentString.substring(0, 50));
                 }
 
                 // console.log('[QuicVCConnectionManager] Parsed discovery data:', discoveryData);

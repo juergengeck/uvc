@@ -511,7 +511,7 @@ export class DeviceDiscoveryModel {
           });
         }
       }
-      
+
       // Don't load devices here - they're loaded in setChannelManager when personId is available
 
       this._initialized = true;
@@ -2024,22 +2024,30 @@ export class DeviceDiscoveryModel {
     
     // Update our device list
     const existingDevice = this._deviceList.get(device.deviceId);
+
+    // CRITICAL: Discovery packets do not contain ownership information
+    // Only update fields that are actually present in discovery packets
+    // Preserve ownership fields from existing device
     const updatedDevice = {
       ...(existingDevice || {}),
-      ...device,
+      // Discovery packet fields only
+      deviceId: device.deviceId,
+      name: device.name,
+      deviceType: device.deviceType,
+      address: device.address,
+      port: device.port,
       online: true,
       lastSeen: Date.now(),
-      // Preserve ownership info if we have it
-      ownerId: existingDevice?.ownerId || device.ownerId,
-      hasValidCredential: existingDevice?.hasValidCredential || device.hasValidCredential
+      // Preserve ownership - discovery packets never have this
+      ownerId: existingDevice?.ownerId,
+      hasValidCredential: existingDevice?.hasValidCredential
     };
     this._deviceList.set(device.deviceId, updatedDevice);
     
     // Only mark dirty if this is a new device or significant properties changed
+    // Note: Discovery packets don't contain ownership info, so we only check discovery fields
     const isNewDevice = !existingDevice;
     const hasSignificantChange = existingDevice && (
-      existingDevice.ownerId !== updatedDevice.ownerId ||
-      existingDevice.hasValidCredential !== updatedDevice.hasValidCredential ||
       existingDevice.online !== updatedDevice.online ||
       existingDevice.address !== updatedDevice.address ||
       existingDevice.port !== updatedDevice.port
@@ -2049,9 +2057,26 @@ export class DeviceDiscoveryModel {
     
     // Track device availability
     this._deviceAvailability.set(device.deviceId, Date.now());
-    
+
     // Emit the device update event so UI can refresh
-    this.emitDeviceUpdate(device.deviceId, updatedDevice);
+    // CRITICAL: Discovery packets NEVER contain ownership information
+    // Once a device is owned, it stops broadcasting discovery packets
+    // Therefore: NEVER emit ownerId from discovery packets - only emit discovery fields
+    const updateFields: Partial<DiscoveryDevice> = {
+      deviceId: device.deviceId,
+      name: device.name,
+      deviceType: device.deviceType,
+      online: true,
+      lastSeen: updatedDevice.lastSeen,
+      address: device.address,
+      port: device.port
+    };
+
+    // Discovery packets do not contain ownership info - it's set separately via credential flow
+    // If device.ownerId or hasValidCredential are present in the incoming packet, that's a bug
+    // The credential flow (claimDevice, credential_message) sets ownership separately
+
+    this.emitDeviceUpdate(device.deviceId, updateFields);
     
     // For ESP32 devices, ensure authentication is attempted if not already authenticated
     if (device.deviceType === 'ESP32' && this._esp32ConnectionManager && device.address && device.port) {
@@ -2060,57 +2085,18 @@ export class DeviceDiscoveryModel {
         console.log(`[DeviceDiscoveryModel] ESP32 device ${device.deviceId} not in connection manager, adding it`);
         this._esp32ConnectionManager.addDiscoveredDevice(device.deviceId, device.address, device.port, device.name);
       }
-      
-      // Check if this device is owned by us according to discovery
-      const isOwnedByUs = device.ownerId === this._personId;
-      console.log(`[DeviceDiscoveryModel] Device ${device.deviceId} ownership check: ownerId=${device.ownerId}, ourId=${this._personId}, isOwnedByUs=${isOwnedByUs}`);
-      
-      // If we own the device but it's not authenticated, start authentication
-      // NOTE: We cannot trust that a device is owned by us just because it claims so!
-      // Proper QUIC-VC authentication is required to verify ownership
-      if (isOwnedByUs && (!esp32Device || !esp32Device.isAuthenticated)) {
-        console.log(`[DeviceDiscoveryModel] Device ${device.deviceId} claims to be owned by us, but needs authentication`);
-        
-        // Make sure device is added to connection manager first
-        if (!esp32Device) {
-          console.log(`[DeviceDiscoveryModel] Adding device to connection manager first`);
-          this._esp32ConnectionManager.addDiscoveredDevice(device.deviceId, device.address, device.port, device.name);
-        }
-        
-        // Do not automatically authenticate - wait for manual ownership claim
-        console.log(`[DeviceDiscoveryModel] Owned device ${device.deviceId} detected, manual authentication required`);
-      }
-      
-      // Check for ownership mismatch between device and app state
-      if (device.deviceType === 'ESP32' && !device.ownerId && esp32Device && esp32Device.ownerPersonId) {
-        console.warn(`[DeviceDiscoveryModel] OWNERSHIP MISMATCH DETECTED for ${device.deviceId}:`);
-        console.warn(`[DeviceDiscoveryModel] - Device reports: unclaimed (no owner)`);
-        console.warn(`[DeviceDiscoveryModel] - App thinks: owned by ${esp32Device.ownerPersonId}`);
-        
-        // This could be one of two scenarios:
-        // 1. Device was factory reset and lost its credentials
-        // 2. App has stale ownership data
-        // For now, we'll keep the app's ownership state and try to re-authenticate
-        console.warn(`[DeviceDiscoveryModel] Keeping ownership state, device may need re-authentication`);
-        
-        // Keep the ownership but mark as not authenticated
-        esp32Device.isAuthenticated = false;
-        
-        // Keep the ownership data for now - user can manually remove if needed
-        device.ownerId = esp32Device.ownerPersonId;
-        device.hasValidCredential = false;
-      } else if (esp32Device && esp32Device.ownerPersonId) {
-        // Only override if device also reports being owned
-        console.log(`[DeviceDiscoveryModel] Device ${device.deviceId} ownership consistent: ${esp32Device.ownerPersonId}`);
-        device.ownerId = esp32Device.ownerPersonId;
-        device.hasValidCredential = esp32Device.isAuthenticated;
-      }
+
+      // Discovery packets do not contain ownership information
+      // Ownership is determined separately through:
+      // 1. claimDevice() -> creates credential
+      // 2. credential_message handler -> validates and stores ownership
+      // 3. DeviceModel persistence -> persists ownership to storage
+      //
+      // Discovery packets only announce unowned devices looking for pairing
     }
-    
-    this.emitDeviceUpdate(device.deviceId || deviceId, { 
-      hasValidCredential: device.hasValidCredential,
-      ownerId: device.ownerId 
-    });
+
+    // Do NOT emit ownership fields from discovery packets - they don't contain this information
+    // The credential flow handles ownership updates separately
   }
 
   private async handleDeviceLost(deviceId: string): Promise<void> {
@@ -2368,14 +2354,32 @@ export class DeviceDiscoveryModel {
       return;
     }
     
-    console.log(`[DeviceDiscoveryModel] Sending keepalive heartbeat to ${deviceId} after ${this.HEARTBEAT_INACTIVITY_THRESHOLD}ms of inactivity`);
-    
+    console.log(`[DeviceDiscoveryModel] Considering keepalive heartbeat to ${deviceId} after ${this.HEARTBEAT_INACTIVITY_THRESHOLD}ms of inactivity`);
+
     try {
       // For ESP32 devices, send through ESP32ConnectionManager if available AND device is owned
       // Unowned devices don't need heartbeats as they broadcast discovery messages
       if (device.deviceType === 'ESP32' && this._esp32ConnectionManager && device.ownerId) {
+        // Check if device has an established QUIC-VC connection
+        // Heartbeats require an active connection - without it, the device will continue
+        // broadcasting discovery packets anyway
+        const esp32Device = this._esp32ConnectionManager.getDevice(deviceId);
+        if (!esp32Device) {
+          console.log(`[DeviceDiscoveryModel] Skipping heartbeat - device ${deviceId} not registered in connection manager`);
+          return;
+        }
+
+        // Skip heartbeat if no active connection - ownership claim doesn't establish QUIC-VC connection
+        // Commands require QUIC-VC connection which is established separately
+        if (!esp32Device.isAuthenticated) {
+          console.log(`[DeviceDiscoveryModel] Skipping heartbeat - device ${deviceId} not authenticated yet`);
+          return;
+        }
+
+        console.log(`[DeviceDiscoveryModel] Sending heartbeat to ${deviceId}`);
+
         // Send a lightweight ping command
-        await this._esp32ConnectionManager.sendCommand(deviceId, { 
+        await this._esp32ConnectionManager.sendCommand(deviceId, {
           type: 'ping',
           command: 'ping',
           deviceId: deviceId,

@@ -1,13 +1,18 @@
 /**
  * ESP32 Connection Manager
- * 
+ *
  * Manages secure connections to ESP32 devices using QUIC-VC protocol.
  * Ensures only authorized owners can control ESP32 devices.
+ *
+ * PERFORMANCE NOTE:
+ * - All OEvent instances use parallel execution (executeSequentially: false)
+ * - This prevents slow async listeners from blocking fast ones
+ * - Event listeners should defer expensive async work using setImmediate()
  */
 
 import { IQuicTransport, NetworkServiceType } from '../interfaces';
 import { VCManager, VerifiedVCInfo } from '../vc/VCManager';
-import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
+import { OEvent, EventTypes } from '@refinio/one.models/lib/misc/OEvent.js';
 // Note: Removed buffer imports since we're using TextEncoder().encode() for crypto operations
 import Debug from 'debug';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
@@ -17,6 +22,7 @@ import { QuicConnectionManager } from '../QuicConnectionManager';
 import { QuicVCConnectionManager } from '../QuicVCConnectionManager';
 import profiler from '@src/utils/performanceProfiler';
 import { createCryptoApiFromDefaultKeys, getDefaultKeys } from '@refinio/one.core/lib/keychain/keychain.js';
+import { DeviceDiscoveryModel } from '../DeviceDiscoveryModel';
 
 const debug = Debug('one:esp32:connection');
 
@@ -73,16 +79,18 @@ export class ESP32ConnectionManager {
   
   // Currently processing command for each device
   private processingCommands: Map<string, string> = new Map(); // deviceId -> requestId
-  
+
   // Authentication event deduplication
   private lastAuthenticatedTime: Map<string, number> = new Map(); // deviceId -> timestamp
   private readonly AUTH_EVENT_DEBOUNCE_MS = 1000; // Don't emit same device auth within 1 second
-  
+
   // Events
-  public readonly onDeviceAuthenticated = new OEvent<(device: ESP32Device) => void>();
-  public readonly onDeviceDisconnected = new OEvent<(deviceId: string) => void>();
-  public readonly onCommandResponse = new OEvent<(deviceId: string, response: ESP32Response) => void>();
-  public readonly onError = new OEvent<(error: Error) => void>();
+  // IMPORTANT: Use parallel execution (false) for authentication events to avoid blocking
+  // Multiple independent listeners need to react quickly without waiting for each other
+  public readonly onDeviceAuthenticated = new OEvent<(device: ESP32Device) => void>(EventTypes.Default, false);
+  public readonly onDeviceDisconnected = new OEvent<(deviceId: string) => void>(EventTypes.Default, false);
+  public readonly onCommandResponse = new OEvent<(deviceId: string, response: ESP32Response) => void>(EventTypes.Default, false);
+  public readonly onError = new OEvent<(error: Error) => void>(EventTypes.Default, false);
   
   /**
    * Emit authentication event with deduplication to prevent spam
@@ -94,14 +102,15 @@ export class ESP32ConnectionManager {
     // Only emit if we haven't emitted for this device recently
     if (!lastEmitted || now - lastEmitted > this.AUTH_EVENT_DEBOUNCE_MS) {
       this.lastAuthenticatedTime.set(device.id, now);
+      console.log(`[TRACE] Emitting onDeviceAuthenticated for ${device.id} at ${now}`);
       this.onDeviceAuthenticated.emit(device);
-      debug(`[ESP32ConnectionManager] Authentication event emitted for ${device.id}`);
+      console.log(`[TRACE] onDeviceAuthenticated.emit() completed for ${device.id} (took ${Date.now() - now}ms)`);
     } else {
-      debug(`[ESP32ConnectionManager] Authentication event skipped for ${device.id} (debounced)`);
+      console.warn(`[TRACE] Authentication event DEBOUNCED for ${device.id} (last emit was ${now - lastEmitted}ms ago, threshold: ${this.AUTH_EVENT_DEBOUNCE_MS}ms)`);
     }
   }
-  public readonly onAuthenticationFailed = new OEvent<(deviceId: string, reason: string) => void>();
-  public readonly onDeviceUnclaimed = new OEvent<(deviceId: string, message: string) => void>();
+  public readonly onAuthenticationFailed = new OEvent<(deviceId: string, reason: string) => void>(EventTypes.Default, false);
+  public readonly onDeviceUnclaimed = new OEvent<(deviceId: string, message: string) => void>(EventTypes.Default, false);
 
   public static getInstance(transport?: IQuicTransport, vcManager?: VCManager, ownPersonId?: SHA256IdHash<Person>): ESP32ConnectionManager {
     if (!ESP32ConnectionManager.instance) {
@@ -445,77 +454,68 @@ export class ESP32ConnectionManager {
    * Claim ownership of an unclaimed ESP32 device
    *
    * ESP32 ownership flow:
-   * 1. Send DeviceIdentityCredential via service type 2 (CREDENTIALS_SERVICE)
-   * 2. ESP32 stores credential and sends provisioning_ack on service type 2
-   * 3. handleCredentialMessage() processes the ack and updates device state
-   *
-   * NOTE: We do NOT use QUICVC handshake for unclaimed devices because:
-   * - ESP32 only sends DISCOVERY frames, not VC_RESPONSE
-   * - Handshake would timeout waiting for VC_RESPONSE
-   * - Provisioning uses simple request/response on service type 2
+   * 1. Establish QUIC-VC connection (send VC_INIT with DeviceIdentityCredential)
+   * 2. ESP32 processes ownership claim and stores credential
+   * 3. ESP32 responds with VC_RESPONSE to complete handshake
+   * 4. Connection is now established, authenticated, and can be encrypted
+   * 5. LED commands and other operations use the established QUIC-VC connection
    */
   public async claimDevice(deviceId: string, address: string, port: number): Promise<boolean> {
-    console.log(`[ESP32ConnectionManager] Claiming ownership of ESP32 device ${deviceId} at ${address}:${port}`);
+    const claimStart = Date.now();
+    console.log(`[ESP32ConnectionManager] [T+0ms] Claiming ownership of ESP32 device ${deviceId} at ${address}:${port}`);
 
     // Add device to our list
     this.addDiscoveredDevice(deviceId, address, port, deviceId);
 
     try {
       // Create ownership credential
+      const credStart = Date.now();
       const ownershipCredential = await this.createOwnershipCredential(deviceId);
-      console.log(`[ESP32ConnectionManager] Created signed ownership credential for device ${deviceId}`);
+      console.log(`[ESP32ConnectionManager] [T+${Date.now() - claimStart}ms] Created signed ownership credential for device ${deviceId} (took ${Date.now() - credStart}ms)`);
 
-      // Create provisioning message for service type 2
-      const provisioningMessage = {
-        type: "provision_device",
-        credential: ownershipCredential,
-        senderPersonId: this.ownPersonId,
-        timestamp: Date.now()
-      };
+      // Establish QUIC-VC connection first, then send ownership credential over it
+      console.log(`[ESP32ConnectionManager] [T+${Date.now() - claimStart}ms] Establishing QUIC-VC connection with ${deviceId}`);
 
-      // Create a promise that resolves when we get provisioning_ack
-      return new Promise<boolean>(async (resolve) => {
+      // Listen for QUIC-VC connection established event
+      return new Promise<boolean>((resolve) => {
         let responded = false;
 
-        // Listen for provisioning_ack from handleCredentialMessage()
-        const ackListener = (event: any) => {
-          // handleCredentialMessage processes provisioning_ack and emits onDeviceAuthenticated
-          // So we listen to that event instead
-        };
-
-        // Listen for device authenticated event (emitted after provisioning_ack)
-        const authListener = (device: ESP32Device) => {
-          if (device.id === deviceId && !responded) {
+        const connectionListener = (connectedDeviceId: string) => {
+          if (connectedDeviceId === deviceId && !responded) {
             responded = true;
-            console.log(`[ESP32ConnectionManager] Device ${deviceId} claimed successfully via provisioning_ack`);
+            const elapsed = Date.now() - claimStart;
+            console.log(`[ESP32ConnectionManager] [T+${elapsed}ms] QUIC-VC connection established and device ${deviceId} claimed (total time: ${elapsed}ms)`);
+            connectionUnsubscribe();
+            clearTimeout(timeout);
             resolve(true);
           }
         };
 
-        const authUnsubscribe = this.onDeviceAuthenticated.listen(authListener);
+        const connectionUnsubscribe = this.quicVCManager.onConnectionEstablished.listen(connectionListener);
 
-        // Send provisioning message via service type 2
-        const messageData = new TextEncoder().encode(JSON.stringify(provisioningMessage));
-        const packet = new Uint8Array(1 + messageData.length);
-        packet[0] = 2; // NetworkServiceType.CREDENTIALS_SERVICE
-        packet.set(messageData, 1);
-
-        console.log(`[ESP32ConnectionManager] Sending ownership credential to ${address}:${port} via service type 2`);
-        console.log(`[ESP32ConnectionManager] Provisioning message:`, provisioningMessage);
-        console.log(`[ESP32ConnectionManager] Packet size: ${packet.length} bytes, first 10 bytes:`,
-          Array.from(packet.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-        await this.transport.send(packet, address, port);
-        console.log(`[ESP32ConnectionManager] Ownership credential sent, waiting for provisioning_ack...`);
-
-        // Timeout after 6 seconds (ESP32 needs time to store credential and respond)
-        setTimeout(() => {
-          authUnsubscribe();
+        // Timeout after 10 seconds (QUIC-VC handshake + credential storage)
+        const timeout = setTimeout(() => {
           if (!responded) {
             responded = true;
-            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId} - no provisioning_ack received`);
+            connectionUnsubscribe();
+            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId} - QUIC-VC connection not established`);
             resolve(false);
           }
-        }, 6000);
+        }, 10000);
+
+        // Initiate QUIC-VC connection with ownership credential
+        // This will send VC_INIT with the DeviceIdentityCredential
+        // ESP32 will process ownership claim and respond with VC_RESPONSE
+        this.quicVCManager.connect(deviceId, address, port, ownershipCredential)
+          .catch((error) => {
+            if (!responded) {
+              responded = true;
+              connectionUnsubscribe();
+              clearTimeout(timeout);
+              console.error(`[ESP32ConnectionManager] Failed to establish QUIC-VC connection:`, error);
+              resolve(false);
+            }
+          });
       });
     } catch (error) {
       console.error(`[ESP32ConnectionManager] Error claiming device ${deviceId}:`, error);
@@ -994,7 +994,6 @@ export class ESP32ConnectionManager {
         Promise.resolve().then(async () => {
           try {
             // Track device activity to reset heartbeat timers
-            const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
             const discoveryModel = DeviceDiscoveryModel.getInstance();
             if (discoveryModel) {
               // Do these operations in parallel for speed
@@ -1030,11 +1029,13 @@ export class ESP32ConnectionManager {
    * Handle credential service messages (service type 2)
    */
   private async handleCredentialMessage(data: any, rinfo: UdpRemoteInfo): Promise<void> {
-    debug(`Received credential message from ${rinfo.address}:${rinfo.port}`);
-    
+    const msgReceived = Date.now();
+    console.log(`[TRACE] ===== handleCredentialMessage CALLED from ${rinfo.address}:${rinfo.port} at ${msgReceived} =====`);
+    debug(`[TRACE] Received credential message from ${rinfo.address}:${rinfo.port} at ${msgReceived}`);
+
     try {
       let jsonStr = '';
-      
+
       // Handle different data types
       if (data instanceof ArrayBuffer) {
         const uint8Array = new Uint8Array(data);
@@ -1047,11 +1048,15 @@ export class ESP32ConnectionManager {
         console.error('[ESP32ConnectionManager] Unknown data type:', typeof data);
         return;
       }
-      
+
+      const decodeTime = Date.now();
+      console.log(`[TRACE] Decoded message (took ${decodeTime - msgReceived}ms)`);
+
       let message;
       try {
         message = JSON.parse(jsonStr);
-        debug(`Parsed credential message:`, message);
+        const parseTime = Date.now();
+        console.log(`[TRACE] Parsed credential message (took ${parseTime - decodeTime}ms):`, message.type);
       } catch (parseError) {
         console.warn('[ESP32ConnectionManager] Failed to parse credential message:', parseError);
         return;
@@ -1059,11 +1064,12 @@ export class ESP32ConnectionManager {
       
       // Handle provisioning acknowledgment from ESP32
       if (message.type === 'provisioning_ack') {
+        const ackReceived = Date.now();
         const deviceId = message.device_id || message.deviceId;
         const ownerId = message.owner || message.owner_id;
-        
-        debug(`Received provisioning acknowledgment for device ${deviceId}, owner: ${ownerId}`);
-        
+
+        console.log(`[ESP32ConnectionManager] [ACK] Received provisioning_ack for device ${deviceId}, owner: ${ownerId}`);
+
         // Update device in our connected devices map IMMEDIATELY
         let device = this.connectedDevices.get(deviceId);
         if (!device) {
@@ -1087,7 +1093,9 @@ export class ESP32ConnectionManager {
           device.isAuthenticated = true;
           debug(`Updated device ${deviceId} with owner ${ownerId}`);
         }
-        
+
+        console.log(`[ESP32ConnectionManager] [ACK] Device updated, emitting authenticated event (processing took ${Date.now() - ackReceived}ms)`);
+
         // Emit device authenticated event IMMEDIATELY to trigger UI updates
         this.emitDeviceAuthenticated(device);
         
@@ -1095,7 +1103,6 @@ export class ESP32ConnectionManager {
         Promise.resolve().then(async () => {
           try {
             // Track device activity to reset heartbeat timers
-            const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
             const discoveryModel = DeviceDiscoveryModel.getInstance();
             if (discoveryModel) {
               // Do these operations in parallel for speed
@@ -1240,7 +1247,6 @@ export class ESP32ConnectionManager {
             
             // Track device activity to reset heartbeat timers
             try {
-              const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
               const discoveryModel = DeviceDiscoveryModel.getInstance();
               if (discoveryModel) {
                 discoveryModel.trackDeviceActivity(deviceId, message.type);
@@ -1335,7 +1341,6 @@ export class ESP32ConnectionManager {
           if (device) {
             // Track device activity and update LED status
             try {
-              const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
               const discoveryModel = DeviceDiscoveryModel.getInstance();
               if (discoveryModel) {
                 discoveryModel.trackDeviceActivity(device.id, 'command_response');
@@ -1366,7 +1371,6 @@ export class ESP32ConnectionManager {
             
             // Track device activity to reset heartbeat timers
             try {
-              const { DeviceDiscoveryModel } = await import('../DeviceDiscoveryModel');
               const discoveryModel = DeviceDiscoveryModel.getInstance();
               if (discoveryModel) {
                 discoveryModel.trackDeviceActivity(device.id, 'command_response_fallback');

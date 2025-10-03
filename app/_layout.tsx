@@ -108,16 +108,15 @@ export default function RootLayout() {
     }
     
     initialize();
-    
+
     return () => {
       console.log('[RootLayout] Cleanup - component unmounting');
       isMounted = false;
       if (unsubscribe) unsubscribe();
-      
-      // Cleanup app resources
-      cleanupApp().catch(error => {
-        console.error('[RootLayout] Error during app cleanup:', error);
-      });
+
+      // DO NOT cleanup app resources on component unmount
+      // This component can unmount/remount during development (hot reload, fast refresh)
+      // App cleanup should only happen on process termination, not component lifecycle
     };
   }, []); // Empty dependency array - only run once
   

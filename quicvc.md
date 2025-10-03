@@ -88,6 +88,26 @@ QUICVC maintains QUIC's packet format with modifications to the crypto layer:
    - Handshake keys: Derived from DH exchange embedded in credentials
    - 1-RTT keys: Derived from combined secrets
 
+#### ESP32 Device Ownership Flow
+
+For unclaimed ESP32 devices, the ownership claim happens during connection establishment:
+
+1. **Discovery**: ESP32 broadcasts DISCOVERY frames (0x30) containing device information
+2. **Connection Initiation**: App initiates QUIC-VC connection by sending INITIAL packet with VC_INIT frame containing DeviceIdentityCredential
+3. **Ownership Processing**: ESP32 receives VC_INIT, validates it's unclaimed, stores the credential issuer as owner
+4. **Connection Response**: ESP32 responds with HANDSHAKE packet containing VC_RESPONSE frame
+5. **Connection Established**: Both parties have authenticated, connection is ready for encrypted communication
+6. **Subsequent Commands**: All device operations (LED control, etc.) use the established QUIC-VC connection
+
+For already-owned devices:
+1. **Discovery**: ESP32 broadcasts DISCOVERY frames (no longer anonymous, shows owned status)
+2. **Connection Attempt**: App sends VC_INIT with DeviceIdentityCredential
+3. **Ownership Verification**: ESP32 verifies credential issuer matches stored owner
+4. **Connection Authorized**: If issuer matches owner, ESP32 responds with VC_RESPONSE
+5. **Connection Established**: Connection proceeds for authenticated owner
+
+This unified flow ensures all device communication happens over secure QUIC-VC connections, whether for initial ownership claim or subsequent authenticated access.
+
 ## Phase 1: ESP32 Local Implementation
 
 ### Target Capabilities
