@@ -2060,8 +2060,8 @@ export class DeviceDiscoveryModel {
 
     // Emit the device update event so UI can refresh
     // CRITICAL: Discovery packets NEVER contain ownership information
-    // Once a device is owned, it stops broadcasting discovery packets
-    // Therefore: NEVER emit ownerId from discovery packets - only emit discovery fields
+    // However, we MUST preserve and emit ownership data from our internal state
+    // Otherwise UI updates will clear the ownership when discovery packets arrive
     const updateFields: Partial<DiscoveryDevice> = {
       deviceId: device.deviceId,
       name: device.name,
@@ -2069,12 +2069,12 @@ export class DeviceDiscoveryModel {
       online: true,
       lastSeen: updatedDevice.lastSeen,
       address: device.address,
-      port: device.port
+      port: device.port,
+      // CRITICAL: Include preserved ownership from internal state
+      // Discovery packets don't have this, but we must emit it to preserve in UI
+      ownerId: updatedDevice.ownerId,
+      hasValidCredential: updatedDevice.hasValidCredential
     };
-
-    // Discovery packets do not contain ownership info - it's set separately via credential flow
-    // If device.ownerId or hasValidCredential are present in the incoming packet, that's a bug
-    // The credential flow (claimDevice, credential_message) sets ownership separately
 
     this.emitDeviceUpdate(device.deviceId, updateFields);
     
