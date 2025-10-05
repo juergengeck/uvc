@@ -39,10 +39,10 @@ import { ESP32ConnectionManager } from './esp32/ESP32ConnectionManager';
 import { OwnedDeviceMonitor } from './OwnedDeviceMonitor';
 import type DeviceSettingsService from '@src/services/DeviceSettingsService';
 import { DeviceModel } from '../device/DeviceModel';
-import type { VCManager } from './vc/VCManager';
+import { VCManager } from './vc/VCManager';
+import { RefactoredBTLEService } from '@src/services/RefactoredBTLEService';
 import { deviceOperationsQueue } from '@src/utils/deferredQueue';
 import { ModelService } from '@src/services/ModelService';
-// UniversalBTLEService imported dynamically to avoid module-load-time errors
 
 const debug = createDebug('lama:device-discovery');
 
@@ -1294,9 +1294,7 @@ export class DeviceDiscoveryModel {
 
     try {
       console.log('[DeviceDiscoveryModel] Initializing Universal BTLE service');
-      
-      // Dynamically import the BTLE service to avoid module-load-time errors
-      const { RefactoredBTLEService } = await import('@src/services/RefactoredBTLEService');
+
       this._btleService = new RefactoredBTLEService();
       console.log('[DeviceDiscoveryModel] Created new BTLE service instance');
       
@@ -1445,8 +1443,7 @@ export class DeviceDiscoveryModel {
     
     try {
       console.log('[DeviceDiscoveryModel] Initializing VCManager');
-      const { VCManager } = await import('./vc/VCManager');
-      
+
       // Get LeuteModel instance for issuer functions
       const leuteModel = ModelService.getLeuteModel();
       if (!leuteModel) {
