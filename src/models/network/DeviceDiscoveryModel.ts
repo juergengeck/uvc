@@ -839,7 +839,7 @@ export class DeviceDiscoveryModel {
         const device = this._deviceList.get(deviceId);
         if (device) {
           device.hasValidCredential = true;
-          device.ownerId = vcInfo.issuer;
+          device.ownerId = vcInfo.issuerPersonId;
           this.emitDeviceUpdate(deviceId, device);
         }
       });
