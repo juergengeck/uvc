@@ -46,9 +46,12 @@ import { ModelService } from '@src/services/ModelService';
 
 const debug = createDebug('lama:device-discovery');
 
+// Store singleton in global to survive hot reload
+declare global {
+  var __DeviceDiscoveryModel_instance: DeviceDiscoveryModel | undefined;
+}
+
 export class DeviceDiscoveryModel {
-  private static instance: DeviceDiscoveryModel;
-  
   // Core properties
   private _initialized = false;
   private _initializing = false;
@@ -127,10 +130,10 @@ export class DeviceDiscoveryModel {
   }
 
   public static getInstance(): DeviceDiscoveryModel {
-    if (!DeviceDiscoveryModel.instance) {
-      DeviceDiscoveryModel.instance = new DeviceDiscoveryModel();
+    if (!global.__DeviceDiscoveryModel_instance) {
+      global.__DeviceDiscoveryModel_instance = new DeviceDiscoveryModel();
     }
-    return DeviceDiscoveryModel.instance;
+    return global.__DeviceDiscoveryModel_instance;
   }
 
   /**
@@ -138,30 +141,30 @@ export class DeviceDiscoveryModel {
    * This will shut down the existing instance and clear the singleton reference
    */
   public static async resetInstance(): Promise<void> {
-    if (DeviceDiscoveryModel.instance) {
+    if (global.__DeviceDiscoveryModel_instance) {
       console.log('[DeviceDiscoveryModel] Resetting singleton instance...');
       try {
-        if (DeviceDiscoveryModel.instance._isDiscovering) {
-          await DeviceDiscoveryModel.instance.stopDiscovery();
+        if (global.__DeviceDiscoveryModel_instance._isDiscovering) {
+          await global.__DeviceDiscoveryModel_instance.stopDiscovery();
         }
         // Clear all timers
-        if (DeviceDiscoveryModel.instance._discoveryTimer) {
-          clearInterval(DeviceDiscoveryModel.instance._discoveryTimer);
+        if (global.__DeviceDiscoveryModel_instance._discoveryTimer) {
+          clearInterval(global.__DeviceDiscoveryModel_instance._discoveryTimer);
         }
-        if (DeviceDiscoveryModel.instance._availabilityCheckTimer) {
-          clearInterval(DeviceDiscoveryModel.instance._availabilityCheckTimer);
+        if (global.__DeviceDiscoveryModel_instance._availabilityCheckTimer) {
+          clearInterval(global.__DeviceDiscoveryModel_instance._availabilityCheckTimer);
         }
         // Clear heartbeat timers
-        DeviceDiscoveryModel.instance._heartbeatTimers.forEach(timer => clearTimeout(timer));
-        DeviceDiscoveryModel.instance._heartbeatTimers.clear();
-        
+        global.__DeviceDiscoveryModel_instance._heartbeatTimers.forEach(timer => clearTimeout(timer));
+        global.__DeviceDiscoveryModel_instance._heartbeatTimers.clear();
+
         // Reset initialized flag so init() can run again
-        DeviceDiscoveryModel.instance._initialized = false;
-        DeviceDiscoveryModel.instance._initializing = false;
+        global.__DeviceDiscoveryModel_instance._initialized = false;
+        global.__DeviceDiscoveryModel_instance._initializing = false;
       } catch (error) {
         console.error('[DeviceDiscoveryModel] Error during instance reset:', error);
       }
-      DeviceDiscoveryModel.instance = null as any;
+      global.__DeviceDiscoveryModel_instance = undefined;
     }
   }
 
