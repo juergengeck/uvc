@@ -836,11 +836,17 @@ export class DeviceDiscoveryModel {
     if (this._quicVCManager) {
       this._quicVCManager.onConnectionEstablished.listen((deviceId, vcInfo) => {
         debugLog.info('DeviceDiscoveryModel', 'QUICVC connection established with', deviceId);
+        console.log('[DeviceDiscoveryModel] vcInfo received:', vcInfo);
+        console.log('[DeviceDiscoveryModel] vcInfo.issuerPersonId:', vcInfo.issuerPersonId);
         const device = this._deviceList.get(deviceId);
+        console.log('[DeviceDiscoveryModel] Device before update:', device);
         if (device) {
           device.hasValidCredential = true;
           device.ownerId = vcInfo.issuerPersonId;
+          console.log('[DeviceDiscoveryModel] Device after setting ownerId:', device.ownerId);
           this.emitDeviceUpdate(deviceId, device);
+        } else {
+          console.warn('[DeviceDiscoveryModel] Device not found in list:', deviceId);
         }
       });
 
@@ -1590,18 +1596,22 @@ export class DeviceDiscoveryModel {
           // Update device ownership locally
           device.ownerId = this._personId.toString();
           device.hasValidCredential = true;
+          console.log(`[DeviceDiscoveryModel] Setting device ${deviceId} ownerId to:`, device.ownerId);
           this._deviceList.set(deviceId, device);
-          
+
           // Device record updated in internal device list
           console.log(`[DeviceDiscoveryModel] Device ownership updated for ${deviceId}`);
-          
+          console.log(`[DeviceDiscoveryModel] Device in _deviceList:`, this._deviceList.get(deviceId));
+
           // Register ownership
           await this.registerDeviceOwner(deviceId, this._personId.toString());
-          
-          this.emitDeviceUpdate(deviceId, { 
+
+          console.log(`[DeviceDiscoveryModel] About to emit device update with ownerId:`, device.ownerId);
+          this.emitDeviceUpdate(deviceId, {
             hasValidCredential: device.hasValidCredential,
-            ownerId: device.ownerId 
+            ownerId: device.ownerId
           });
+          console.log(`[DeviceDiscoveryModel] Emitted device update for ${deviceId}`);
           
           // Log successful claim
           await this.createDeviceOwnershipJournalEntry(
@@ -1952,8 +1962,8 @@ export class DeviceDiscoveryModel {
         console.log(`[DeviceDiscoveryModel] Rediscovered owned device ${device.deviceId}`);
         existingDevice.ownerId = this._personId?.toString();
       }
-      
-      this.emitDeviceUpdate(deviceId, existingDevice);
+
+      this.emitDeviceUpdate(device.deviceId, existingDevice);
     } else {
       // New device discovered via WiFi
       console.log(`[DeviceDiscoveryModel] New device ${device.deviceId} discovered via WiFi`);

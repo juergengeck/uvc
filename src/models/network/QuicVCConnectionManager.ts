@@ -737,13 +737,17 @@ export class QuicVCConnectionManager {
         // Parse the response to check ownership status
         if (frame.status === 'provisioned' || frame.status === 'already_owned' || frame.status === 'ownership_revoked') {
             console.log('[QuicVCConnectionManager] ESP32 operation successful:', frame.status);
-            
+            console.log('[QuicVCConnectionManager] frame.owner:', frame.owner);
+
             // Update connection state
             connection.state = 'established';
             if (frame.owner) {
-                connection.remoteVC = { issuerPersonId: frame.owner };
+                connection.remoteVC = { issuerPersonId: frame.owner } as any;
+                console.log('[QuicVCConnectionManager] Set connection.remoteVC to:', connection.remoteVC);
+            } else {
+                console.warn('[QuicVCConnectionManager] No frame.owner in response, remoteVC will be null');
             }
-            
+
             // Complete handshake
             this.completeHandshake(connection);
             
@@ -991,10 +995,14 @@ export class QuicVCConnectionManager {
         
         // Emit events
         this.onHandshakeComplete.emit(connection.deviceId);
+        console.log(`[QuicVCConnectionManager] connection.remoteVC:`, connection.remoteVC);
         if (connection.remoteVC) {
+            console.log(`[QuicVCConnectionManager] Emitting onConnectionEstablished with vcInfo:`, connection.remoteVC);
             this.onConnectionEstablished.emit(connection.deviceId, connection.remoteVC);
+        } else {
+            console.warn(`[QuicVCConnectionManager] No remoteVC for ${connection.deviceId}, skipping onConnectionEstablished`);
         }
-        
+
         console.log(`[QuicVCConnectionManager] QUICVC handshake complete with ${connection.deviceId}`);
     }
     
