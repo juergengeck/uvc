@@ -120,11 +120,6 @@ export class DeviceDiscoveryModel {
   private readonly AVAILABILITY_CHECK_INTERVAL = 10000; // 10 seconds
   private readonly DEVICE_TIMEOUT = 60000; // 1 minute
 
-  // Deduplication for device updates
-  private readonly updateThrottle = new Map<string, NodeJS.Timeout>();
-  private readonly pendingUpdates = new Map<string, DiscoveryDevice>();
-  private readonly UPDATE_THROTTLE_MS = 100; // 100ms throttle for device updates
-
   private constructor() {
     debug('DeviceDiscoveryModel instance created');
   }
@@ -441,12 +436,12 @@ export class DeviceDiscoveryModel {
           if (this._vcManager) {
             await this._quicVCManager.initialize(this._vcManager);
             console.log('[DeviceDiscoveryModel] QUICVC Connection Manager initialized');
-
-            // Set up QUICVC discovery listener on port 49498
-            this.setupQuicVCDiscovery();
           } else {
             console.log('[DeviceDiscoveryModel] VCManager not available, QUICVC partially initialized');
           }
+
+          // Set up QUICVC discovery listener regardless of VCManager - discovery doesn't need credentials
+          this.setupQuicVCDiscovery();
         } catch (quicvcError) {
           console.error('[DeviceDiscoveryModel] Failed to initialize QUICVC:', quicvcError);
           // Continue without QUICVC - graceful degradation
@@ -696,28 +691,61 @@ export class DeviceDiscoveryModel {
       // console.log(`[DeviceDiscoveryModel] Processing ESP32 discovery from ${deviceId} at ${address}:${port}`);
 
       // Create or update device entry
-      const device = {
-        deviceId,
-        address,
-        port,
-        deviceType: discoveryData.device_type,
-        ownership: discoveryData.ownership,
-        status: discoveryData.status,
-        protocol: discoveryData.protocol,
-        capabilities: discoveryData.capabilities,
-        lastSeen: Date.now(),
-        transport: 'quicvc' as const,
-        hasValidCredential: discoveryData.ownership === 'claimed',
-        ownerId: discoveryData.ownership === 'claimed' ? this._personId : undefined,
-      };
+      // CRITICAL: Check if device is currently being claimed OR released
+      // If so, ignore contradictory discovery broadcasts
+      const isBeingClaimed = this._esp32ConnectionManager?.isDeviceBeingClaimed(deviceId);
+      const isBeingReleased = this._esp32ConnectionManager?.isDeviceBeingReleased?.(deviceId);
 
-      // Add to device list
-      this._deviceList.set(deviceId, device);
-      // console.log(`[DeviceDiscoveryModel] Added ESP32 device ${deviceId} to device list`);
+      // Ignore "unclaimed" broadcasts when device is being claimed
+      if (isBeingClaimed && discoveryData.ownership === 'unclaimed') {
+        console.warn(`[DeviceDiscoveryModel] Ignoring "unclaimed" discovery broadcast for ${deviceId} - device is currently being claimed`);
+        return;
+      }
 
-      // Emit discovery event
-      this.onDeviceDiscovered.emit(device);
-      // console.log(`[DeviceDiscoveryModel] Emitted device discovered event for ${deviceId}`);
+      // Ignore "claimed" broadcasts when device is being released
+      if (isBeingReleased && discoveryData.ownership === 'claimed') {
+        console.warn(`[DeviceDiscoveryModel] Ignoring "claimed" discovery broadcast for ${deviceId} - device is currently being released`);
+        return;
+      }
+
+      // Check if device already exists
+      const existing = this._deviceList.get(deviceId);
+
+      if (existing) {
+        // Update existing device - discovery fields only
+        existing.address = address;
+        existing.port = port;
+        existing.lastSeen = Date.now();
+        existing.online = true;
+        // Don't touch ownership - that's managed by authentication flow
+
+        // Emit update
+        this.onDeviceDiscovered.emit(existing);
+      } else {
+        // New device - create with discovery info
+        const device = {
+          deviceId,
+          address,
+          port,
+          deviceType: discoveryData.device_type,
+          ownership: discoveryData.ownership,
+          status: discoveryData.status,
+          protocol: discoveryData.protocol,
+          capabilities: discoveryData.capabilities,
+          lastSeen: Date.now(),
+          transport: 'quicvc' as const,
+          hasValidCredential: false, // Always start unclaimed, VC exchange will set ownership
+          ownerId: undefined, // Will be set after VC verification
+        };
+
+        // Add to device list
+        this._deviceList.set(deviceId, device);
+        // console.log(`[DeviceDiscoveryModel] Added ESP32 device ${deviceId} to device list`);
+
+        // Emit discovery event
+        this.onDeviceDiscovered.emit(device);
+        // console.log(`[DeviceDiscoveryModel] Emitted device discovered event for ${deviceId}`);
+      }
 
       // If device is owned by us, mark it as authenticated immediately for ESP32ConnectionManager
       if (discoveryData.ownership === 'claimed' && discoveryData.owner === this._personId && this._esp32ConnectionManager) {
@@ -794,33 +822,44 @@ export class DeviceDiscoveryModel {
       //   capabilities
       // });
       
-      // Create or update device record
-      const device: DiscoveryDevice = {
-        deviceId,
-        name: `ESP32-${deviceId.substring(0, 8)}`,
-        deviceType: 'ESP32',
-        address: rinfo.address,
-        port: rinfo.port,
-        online: true,
-        lastSeen: Date.now(),
-        ownerId: ownership === 'claimed' ? 'claimed' : undefined,
-        hasValidCredential: ownership === 'claimed'
-      };
-      
       // Check if device already exists
       const existing = this._deviceList.get(deviceId);
+
       if (existing) {
-        // Update existing device
-        debugLog.info('DeviceDiscoveryModel', 'Device already exists in list, updating:', deviceId);
-        Object.assign(existing, device);
-        this.emitDeviceUpdate(deviceId, existing);
+        // Device exists - update discovery fields only
+        debugLog.info('DeviceDiscoveryModel', 'Device already exists in list, updating discovery fields only:', deviceId);
+
+        // Check if anything meaningful changed
+        const addressChanged = existing.address !== rinfo.address;
+        const portChanged = existing.port !== rinfo.port;
+        const wasOffline = existing.online === false;
+
+        existing.address = rinfo.address;
+        existing.port = rinfo.port;
+        existing.online = true;
+        existing.lastSeen = Date.now();
+        // Don't touch: ownerId, hasValidCredential, isAuthenticated
+        // These are managed by authentication flow, not discovery broadcasts
+
+        // Only emit update if something visible changed
+        if (addressChanged || portChanged || wasOffline) {
+          this.emitDeviceUpdate(deviceId);
+        }
       } else {
-        // New device discovered
-        // console.log('[DeviceDiscoveryModel] New device, adding to list:', deviceId);
+        // New device discovered - create with discovery info only
+        const device: DiscoveryDevice = {
+          deviceId,
+          name: `ESP32-${deviceId.substring(0, 8)}`,
+          deviceType: 'ESP32',
+          address: rinfo.address,
+          port: rinfo.port,
+          online: true,
+          lastSeen: Date.now(),
+          ownerId: undefined, // Discovery never sets ownership
+          hasValidCredential: false
+        };
         this._deviceList.set(deviceId, device);
         this.onDeviceDiscovered.emit(device);
-        // console.log('[DeviceDiscoveryModel] Emitted onDeviceDiscovered for:', deviceId);
-        // console.log('[DeviceDiscoveryModel] Added device to list, total devices:', this._deviceList.size);
       }
       
       // Track device availability
@@ -835,8 +874,10 @@ export class DeviceDiscoveryModel {
    * Set up event handlers for QUICVC events
    */
   private setupEventHandlers(): void {
+    console.log('[DeviceDiscoveryModel] setupEventHandlers called, _quicVCManager exists:', !!this._quicVCManager);
     // Set up QUICVC connection events if manager is available
     if (this._quicVCManager) {
+      console.log('[DeviceDiscoveryModel] Setting up QuicVCConnectionManager event listeners');
       this._quicVCManager.onConnectionEstablished.listen((deviceId, vcInfo) => {
         debugLog.info('DeviceDiscoveryModel', 'QUICVC connection established with', deviceId);
         console.log('[DeviceDiscoveryModel] vcInfo received:', vcInfo);
@@ -847,7 +888,7 @@ export class DeviceDiscoveryModel {
           device.hasValidCredential = true;
           device.ownerId = vcInfo.issuerPersonId;
           console.log('[DeviceDiscoveryModel] Device after setting ownerId:', device.ownerId);
-          this.emitDeviceUpdate(deviceId, device);
+          this.emitDeviceUpdate(deviceId);
         } else {
           console.warn('[DeviceDiscoveryModel] Device not found in list:', deviceId);
         }
@@ -862,9 +903,10 @@ export class DeviceDiscoveryModel {
       });
 
       // Listen for device discovery events
-      this._quicVCManager.onDeviceDiscovered.listen((event) => {
-        // console.log('[DeviceDiscoveryModel] Device discovered via QUICVC:', event);
+      const unsubscribe = this._quicVCManager.onDeviceDiscovered.listen((event) => {
+        console.log('[DeviceDiscoveryModel] *** onDeviceDiscovered listener fired! Event:', event);
         if (event.deviceInfo) {
+          console.log('[DeviceDiscoveryModel] Event has deviceInfo, calling handleDiscoveredDevice');
           // Merge event address/port into deviceInfo for handler
           const deviceInfoWithNetwork = {
             ...event.deviceInfo,
@@ -872,8 +914,13 @@ export class DeviceDiscoveryModel {
             port: event.port
           };
           this.handleDiscoveredDevice(deviceInfoWithNetwork);
+        } else {
+          console.log('[DeviceDiscoveryModel] WARNING: Event has no deviceInfo!', event);
         }
       });
+      console.log('[DeviceDiscoveryModel] ✅ Successfully registered onDeviceDiscovered listener, unsubscribe function:', typeof unsubscribe);
+    } else {
+      console.warn('[DeviceDiscoveryModel] ⚠️  Cannot set up event listeners - _quicVCManager is null/undefined!');
     }
 
     // Using QUICVC discovery only - no legacy protocols
@@ -894,35 +941,49 @@ export class DeviceDiscoveryModel {
       return;
     }
 
+    console.log(`[DeviceDiscoveryModel] handleDiscoveredDevice for ${deviceId}`);
+
     // Check if device already exists
     const existing = this._deviceList.get(deviceId);
-    
-    const device: DiscoveryDevice = {
-      deviceId,
-      name: deviceInfo.deviceType || 'ESP32 Device',
-      deviceType: deviceInfo.deviceType || 'ESP32',
-      address: deviceInfo.address,
-      port: deviceInfo.port,
-      status: deviceInfo.status || 'online',
-      protocol: deviceInfo.protocol || 'quicvc/1.0',
-      capabilities: deviceInfo.capabilities || [],
-      lastSeen: deviceInfo.lastSeen || Date.now(),
-      transport: 'quicvc' as const,
-      hasValidCredential: deviceInfo.ownership === 'claimed',
-      ownerId: deviceInfo.ownership === 'claimed' ? this._personId : undefined,
-      online: true,
-      connected: false,
-      isAuthenticated: false
-    };
 
     if (existing) {
-      // Update existing device
-      // console.log('[DeviceDiscoveryModel] Updating existing device:', deviceId);
-      Object.assign(existing, device);
-      this.emitDeviceUpdate(deviceId, existing);
+      // Update existing device network information
+      existing.address = deviceInfo.address;
+      existing.port = deviceInfo.port;
+      existing.lastSeen = Date.now();
+      existing.online = true;
+      existing.status = deviceInfo.status || 'online';
+
+      // Do NOT update ownership from discovery packets
+      // Discovery packets are unreliable for ownership state - they can be stale or out of sync
+      // Ownership is ONLY established through QUICVC handshake (VC_INIT/VC_RESPONSE exchange)
+      // and ONLY revoked through explicit revocation commands
+      // This prevents race conditions where discovery broadcasts override authenticated state
+
+      this._deviceList.set(deviceId, existing);
+
+      // Emit update - listeners will call getDevice() for full authoritative state
+      this.emitDeviceUpdate(deviceId);
     } else {
-      // New device discovered
-      // console.log('[DeviceDiscoveryModel] New device discovered:', deviceId);
+      // New device - create and emit
+      const device: DiscoveryDevice = {
+        deviceId,
+        name: deviceInfo.deviceId || deviceInfo.deviceType || 'ESP32 Device',
+        deviceType: deviceInfo.deviceType || 'ESP32',
+        address: deviceInfo.address,
+        port: deviceInfo.port,
+        status: deviceInfo.status || 'online',
+        protocol: deviceInfo.protocol || 'quicvc/1.0',
+        capabilities: deviceInfo.capabilities || [],
+        lastSeen: Date.now(),
+        transport: 'quicvc',
+        ownerId: undefined,
+        hasValidCredential: false,
+        online: true,
+        connected: false,
+        isAuthenticated: false
+      };
+
       this._deviceList.set(deviceId, device);
       this.onDeviceDiscovered.emit(device);
     }
@@ -1265,14 +1326,20 @@ export class DeviceDiscoveryModel {
         // ESP32Device uses 'id' not 'deviceId'
         const deviceId = device.id || device.deviceId;
         console.log(`[DeviceDiscoveryModel] Device ${deviceId} authenticated`);
-        
+
         // Update the device in our device list
         const existingDevice = this._deviceList.get(deviceId);
         if (existingDevice) {
           existingDevice.hasValidCredential = true;
-          existingDevice.ownerId = device.ownerPersonId;
-          // Emit device update to trigger UI refresh
-          this.emitDeviceUpdate(deviceId, existingDevice);
+          // Only update ownerId if it's provided and not already set
+          // onConnectionEstablished already handles ownership updates
+          if (device.ownerPersonId && !existingDevice.ownerId) {
+            existingDevice.ownerId = device.ownerPersonId;
+          }
+          // Emit device update to trigger UI refresh - only if we actually changed something
+          if (device.ownerPersonId && !existingDevice.ownerId) {
+            this.emitDeviceUpdate(deviceId);
+          }
         }
       });
       
@@ -1347,7 +1414,7 @@ export class DeviceDiscoveryModel {
         const existingDevice = this._deviceList.get(device.id);
         if (existingDevice) {
           existingDevice.btleStatus = 'active';
-          this.emitDeviceUpdate(deviceId, existingDevice);
+          this.emitDeviceUpdate(deviceId);
         }
       });
 
@@ -1358,7 +1425,7 @@ export class DeviceDiscoveryModel {
         const existingDevice = this._deviceList.get(device.id);
         if (existingDevice) {
           existingDevice.btleStatus = 'inactive';
-          this.emitDeviceUpdate(deviceId, existingDevice);
+          this.emitDeviceUpdate(deviceId);
         }
       });
 
@@ -1400,7 +1467,7 @@ export class DeviceDiscoveryModel {
       // Only emit update if status actually changed
       if (btleStatusChanged) {
         console.log(`[DeviceDiscoveryModel] Updated existing device ${device.id} with BTLE connectivity`);
-        this.emitDeviceUpdate(deviceId, existingDevice);
+        this.emitDeviceUpdate(deviceId);
       } else {
         // Silent update - just refresh lastSeen
         console.log(`[DeviceDiscoveryModel] Device ${device.id} BTLE ping - refreshed lastSeen`);
@@ -1494,36 +1561,11 @@ export class DeviceDiscoveryModel {
   }
   
   /**
-   * Helper to emit device updates with throttling to prevent duplicate events
+   * Emit device update - listeners should call getDevice(deviceId) for full state
+   * We only emit the deviceId to avoid partial update hell
    */
-  private emitDeviceUpdate(deviceId: string, updates: Partial<DiscoveryDevice>): void {
-    // Clear any existing throttle timer
-    const existingTimer = this.updateThrottle.get(deviceId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
-    // Merge with any pending updates
-    const pendingUpdate = this.pendingUpdates.get(deviceId) || {};
-    const mergedUpdate = {
-      deviceId,
-      ...pendingUpdate,
-      ...updates
-    } as DiscoveryDevice;
-    this.pendingUpdates.set(deviceId, mergedUpdate);
-
-    // Set throttle timer
-    const timer = setTimeout(() => {
-      const finalUpdate = this.pendingUpdates.get(deviceId);
-      if (finalUpdate) {
-        this.pendingUpdates.delete(deviceId);
-        this.updateThrottle.delete(deviceId);
-        // Actually emit the update
-        this.onDeviceUpdated.emit(finalUpdate);
-      }
-    }, this.UPDATE_THROTTLE_MS);
-
-    this.updateThrottle.set(deviceId, timer);
+  private emitDeviceUpdate(deviceId: string): void {
+    this.onDeviceUpdated.emit(deviceId);
   }
 
   /**
@@ -1533,8 +1575,7 @@ export class DeviceDiscoveryModel {
     const device = this.getDevice(deviceId);
     if (device) {
       Object.assign(device, updates);
-      // Only emit the updates plus deviceId for identification
-      this.emitDeviceUpdate(deviceId, updates);
+      this.emitDeviceUpdate(deviceId);
     }
   }
 
@@ -1607,10 +1648,7 @@ export class DeviceDiscoveryModel {
           await this.registerDeviceOwner(deviceId, this._personId.toString());
 
           console.log(`[DeviceDiscoveryModel] About to emit device update with ownerId:`, device.ownerId);
-          this.emitDeviceUpdate(deviceId, {
-            hasValidCredential: device.hasValidCredential,
-            ownerId: device.ownerId
-          });
+          this.emitDeviceUpdate(deviceId);
           console.log(`[DeviceDiscoveryModel] Emitted device update for ${deviceId}`);
           
           // Log successful claim
@@ -1705,17 +1743,46 @@ export class DeviceDiscoveryModel {
       // For ESP32 devices, use ESP32ConnectionManager
       if (device.deviceType === 'ESP32' && this._esp32ConnectionManager) {
         console.log(`[DeviceDiscoveryModel] Using ESP32ConnectionManager to remove ownership of ${deviceId}`);
-        
+
+        // Set up listener for discovery broadcast BEFORE sending release command
+        const discoveryBroadcastPromise = new Promise<boolean>((resolve) => {
+          let listenerUnsubscribe: (() => void) | undefined;
+
+          const timeout = setTimeout(() => {
+            if (listenerUnsubscribe) listenerUnsubscribe();
+            console.warn(`[DeviceDiscoveryModel] Timeout waiting for discovery broadcast from ${deviceId} after ownership release`);
+            resolve(false); // Timeout - but we still cleared ownership
+          }, 5000);
+
+          // Listen for device update that shows device is now unclaimed
+          listenerUnsubscribe = this.onDeviceUpdated.listen((updatedDeviceId: string) => {
+            if (updatedDeviceId === deviceId) {
+              const currentDevice = this._deviceList.get(deviceId);
+              // Check if device is now broadcasting as available (no owner)
+              if (currentDevice && !currentDevice.ownerId) {
+                clearTimeout(timeout);
+                if (listenerUnsubscribe) listenerUnsubscribe();
+                console.log(`[DeviceDiscoveryModel] ✅ Received discovery broadcast confirming ${deviceId} is available`);
+                resolve(true);
+              }
+            }
+          });
+        });
+
         const success = await this._esp32ConnectionManager.releaseDevice(deviceId, device.address, device.port);
-        
+
         if (success) {
-          console.log(`[DeviceDiscoveryModel] ✅ Successfully removed ownership of ESP32 device ${deviceId}`);
-          
+          console.log(`[DeviceDiscoveryModel] ✅ Received ACK for ownership removal of ${deviceId}`);
+
           // Update device ownership locally
           device.ownerId = undefined;
           device.hasValidCredential = false;
           this._deviceList.set(deviceId, device);
-          
+
+          // Emit update IMMEDIATELY before any async operations
+          console.log(`[DeviceDiscoveryModel] Emitting ownership removal update: hasValidCredential=${device.hasValidCredential}, ownerId=${device.ownerId}`);
+          this.emitDeviceUpdate(deviceId);
+
           // Cancel heartbeat timer since unowned devices don't need heartbeats
           const heartbeatTimer = this._heartbeatTimers.get(deviceId);
           if (heartbeatTimer) {
@@ -1723,24 +1790,29 @@ export class DeviceDiscoveryModel {
             this._heartbeatTimers.delete(deviceId);
             console.log(`[DeviceDiscoveryModel] Cancelled heartbeat timer for unowned device ${deviceId}`);
           }
-          
+
           // Remove from persistent storage
           await this.removeOwnedDeviceFromStorage(deviceId);
-          
+
           // Device record updated in internal device list
           console.log(`[DeviceDiscoveryModel] Device ownership removed for ${deviceId}`);
-          
+
           // Remove from DeviceModel
           const deviceModel = DeviceModel.getInstance();
           if (deviceModel.isInitialized()) {
             await deviceModel.removeDeviceOwnership(deviceId);
           }
-          
-          this.emitDeviceUpdate(deviceId, { 
-            hasValidCredential: device.hasValidCredential,
-            ownerId: device.ownerId 
-          });
-          
+
+          // Wait for ESP32 to start broadcasting as available
+          console.log(`[DeviceDiscoveryModel] Waiting for discovery broadcast from ${deviceId}...`);
+          const gotBroadcast = await discoveryBroadcastPromise;
+
+          if (gotBroadcast) {
+            console.log(`[DeviceDiscoveryModel] ✅ ESP32 confirmed available via discovery broadcast`);
+          } else {
+            console.warn(`[DeviceDiscoveryModel] ⚠️ Did not receive discovery broadcast (timeout), but ownership was cleared`);
+          }
+
           // Log successful removal
           await this.createDeviceOwnershipJournalEntry(
             deviceId,
@@ -1749,14 +1821,15 @@ export class DeviceDiscoveryModel {
             {
               deviceType: device.deviceType,
               deviceName: device.name,
-              removedBy: 'user-action'
+              removedBy: 'user-action',
+              broadcastReceived: gotBroadcast
             }
           );
-          
+
           return true;
         } else {
           console.error(`[DeviceDiscoveryModel] ❌ Failed to remove ownership of ESP32 device ${deviceId}`);
-          
+
           // Log failed removal
           await this.createDeviceOwnershipJournalEntry(
             deviceId,
@@ -1768,7 +1841,7 @@ export class DeviceDiscoveryModel {
               reason: 'ESP32 removal protocol failed'
             }
           );
-          
+
           return false;
         }
       }
@@ -1836,10 +1909,7 @@ export class DeviceDiscoveryModel {
       // Persist to DeviceModel - defer to avoid blocking UI
       // Skip this for now to avoid circular dependency - DeviceModel will pick it up from discovery
       
-      this.emitDeviceUpdate(deviceId, { 
-        hasValidCredential: true,
-        ownerId: ownerPersonId 
-      });
+      this.emitDeviceUpdate(deviceId);
     } else {
       console.warn(`[DeviceDiscoveryModel] Device ${deviceId} not found for owner registration`);
     }
@@ -1926,10 +1996,7 @@ export class DeviceDiscoveryModel {
         // Device hasn't been seen recently
         if (device.online) {
           device.online = false;
-          this.emitDeviceUpdate(deviceId, { 
-            hasValidCredential: device.hasValidCredential,
-            ownerId: device.ownerId 
-          });
+          this.emitDeviceUpdate(device.deviceId);
           debug(`Device ${device.deviceId} marked as offline`);
           console.log(`[DeviceDiscoveryModel] Device ${device.deviceId} marked as offline`);
         }
@@ -1963,7 +2030,7 @@ export class DeviceDiscoveryModel {
         existingDevice.ownerId = this._personId?.toString();
       }
 
-      this.emitDeviceUpdate(device.deviceId, existingDevice);
+      this.emitDeviceUpdate(device.deviceId);
     } else {
       // New device discovered via WiFi
       console.log(`[DeviceDiscoveryModel] New device ${device.deviceId} discovered via WiFi`);
@@ -2071,22 +2138,8 @@ export class DeviceDiscoveryModel {
     // Emit the device update event so UI can refresh
     // CRITICAL: Discovery packets NEVER contain ownership information
     // However, we MUST preserve and emit ownership data from our internal state
-    // Otherwise UI updates will clear the ownership when discovery packets arrive
-    const updateFields: Partial<DiscoveryDevice> = {
-      deviceId: device.deviceId,
-      name: device.name,
-      deviceType: device.deviceType,
-      online: true,
-      lastSeen: updatedDevice.lastSeen,
-      address: device.address,
-      port: device.port,
-      // CRITICAL: Include preserved ownership from internal state
-      // Discovery packets don't have this, but we must emit it to preserve in UI
-      ownerId: updatedDevice.ownerId,
-      hasValidCredential: updatedDevice.hasValidCredential
-    };
-
-    this.emitDeviceUpdate(device.deviceId, updateFields);
+    // Emit update - listeners will fetch full authoritative state
+    this.emitDeviceUpdate(device.deviceId);
     
     // For ESP32 devices, ensure authentication is attempted if not already authenticated
     if (device.deviceType === 'ESP32' && this._esp32ConnectionManager && device.address && device.port) {
@@ -2129,7 +2182,7 @@ export class DeviceDiscoveryModel {
       }
       
       this._deviceList.set(deviceId, device);
-      this.emitDeviceUpdate(deviceId, device);
+      this.emitDeviceUpdate(deviceId);
     }
     
     // Remove from availability tracking
@@ -2172,10 +2225,7 @@ export class DeviceDiscoveryModel {
         );
       }
       
-      this.emitDeviceUpdate(device.deviceId || deviceId, { 
-      hasValidCredential: device.hasValidCredential,
-      ownerId: device.ownerId 
-    });
+      this.emitDeviceUpdate(device.deviceId || deviceId);
     }
   }
 
@@ -2186,10 +2236,7 @@ export class DeviceDiscoveryModel {
     const device = this._deviceList.get(deviceId);
     if (device) {
       device.hasValidCredential = false;
-      this.emitDeviceUpdate(device.deviceId || deviceId, { 
-      hasValidCredential: device.hasValidCredential,
-      ownerId: device.ownerId 
-    });
+      this.emitDeviceUpdate(device.deviceId || deviceId);
     }
   }
 
@@ -2203,10 +2250,7 @@ export class DeviceDiscoveryModel {
     const device = this._deviceList.get(verifiedInfo.subjectDeviceId);
     if (device) {
       device.hasValidCredential = true;
-      this.emitDeviceUpdate(device.deviceId || deviceId, { 
-      hasValidCredential: device.hasValidCredential,
-      ownerId: device.ownerId 
-    });
+      this.emitDeviceUpdate(device.deviceId || deviceId);
       
       // VC verification is complete - no additional credential verification needed
     }
@@ -2226,10 +2270,7 @@ export class DeviceDiscoveryModel {
     const device = this._deviceList.get(deviceId);
     if (device) {
       device.hasValidCredential = false;
-      this.emitDeviceUpdate(device.deviceId || deviceId, { 
-      hasValidCredential: device.hasValidCredential,
-      ownerId: device.ownerId 
-    });
+      this.emitDeviceUpdate(device.deviceId || deviceId);
     }
   }
 
@@ -2777,10 +2818,7 @@ export class DeviceDiscoveryModel {
             this._deviceAvailability.set(credential.deviceId, Date.now());
           }
           
-          this.emitDeviceUpdate(deviceId, { 
-            hasValidCredential: device.hasValidCredential,
-            ownerId: device.ownerId 
-          });
+          this.emitDeviceUpdate(deviceId);
         } else {
           console.log(`[DeviceDiscoveryModel] Device ${credential.deviceId} not currently discovered`);
         }
@@ -2827,10 +2865,7 @@ export class DeviceDiscoveryModel {
       if (success) {
         console.log(`[DeviceDiscoveryModel] Successfully verified ownership of ${deviceId}`);
         device.hasValidCredential = true;
-        this.emitDeviceUpdate(device.deviceId || deviceId, { 
-      hasValidCredential: device.hasValidCredential,
-      ownerId: device.ownerId 
-    });
+        this.emitDeviceUpdate(device.deviceId || deviceId);
         return true;
       } else {
         console.log(`[DeviceDiscoveryModel] Failed to verify ownership of ${deviceId}`);
@@ -3005,9 +3040,9 @@ export class DeviceDiscoveryModel {
             // Add to device list using the deviceId
             this._deviceList.set(discoveryDevice.deviceId, discoveryDevice);
             loadedCount++;
-            
-            // Emit discovery event so UI updates
-            this.onDeviceDiscovered.emit(discoveryDevice.deviceId);
+
+            // Emit discovery event so UI updates - emit the full device object, not just the ID
+            this.onDeviceDiscovered.emit(discoveryDevice);
             console.log(`[DeviceDiscoveryModel] Loaded owned device: ${discoveryDevice.deviceId} with ownerId: ${discoveryDevice.ownerId}`);
             
             // For ESP32 devices, mark them as needing authentication

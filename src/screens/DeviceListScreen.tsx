@@ -53,29 +53,31 @@ export function DeviceListScreen() {
   }, [isBTLEDiscovering]);
   
   // Fetch organisation paths for owned devices
-  React.useEffect(() => {
-    const fetchOrgPaths = async () => {
-      if (!isOrgModelReady || !organisationModel || !devices.length) return;
-      
-      const newPaths = new Map<string, string>();
-      const ownedDevices = devices.filter(d => d.ownerId === currentUserPersonId);
-      
-      for (const device of ownedDevices) {
-        try {
-          const pathInfo = await organisationModel.getDeviceOrganisationPath(device.id);
-          if (pathInfo) {
-            newPaths.set(device.id, pathInfo.path);
-          }
-        } catch (error) {
-          console.warn(`[DeviceListScreen] Failed to get org path for device ${device.id}:`, error);
-        }
-      }
-      
-      setDeviceOrgPaths(newPaths);
-    };
-    
-    fetchOrgPaths();
-  }, [devices, currentUserPersonId, isOrgModelReady, organisationModel]);
+  // DISABLED: This was causing 5s UI delays because it runs on every device update
+  // and getDeviceOrganisationPath() is slow
+  // React.useEffect(() => {
+  //   const fetchOrgPaths = async () => {
+  //     if (!isOrgModelReady || !organisationModel || !devices.length) return;
+  //
+  //     const newPaths = new Map<string, string>();
+  //     const ownedDevices = devices.filter(d => d.ownerId === currentUserPersonId);
+  //
+  //     for (const device of ownedDevices) {
+  //       try {
+  //         const pathInfo = await organisationModel.getDeviceOrganisationPath(device.id);
+  //         if (pathInfo) {
+  //           newPaths.set(device.id, pathInfo.path);
+  //         }
+  //       } catch (error) {
+  //         console.warn(`[DeviceListScreen] Failed to get org path for device ${device.id}:`, error);
+  //       }
+  //     }
+  //
+  //     setDeviceOrgPaths(newPaths);
+  //   };
+  //
+  //   fetchOrgPaths();
+  // }, [devices, currentUserPersonId, isOrgModelReady, organisationModel]);
 
   // Initialize on mount and track discovery state
   React.useEffect(() => {
@@ -312,19 +314,9 @@ export function DeviceListScreen() {
       if (operation === 'claim') {
         // For claiming, wait until device is owned by current user
         if (device.ownerId === currentUserPersonId) {
-          // For ESP32 devices, also check if authenticated
-          if (device.type === 'ESP32' && esp32Manager) {
-            const esp32Device = esp32Manager.getDevice(deviceId);
-            if (esp32Device && esp32Device.isAuthenticated) {
-              console.log(`[DeviceListScreen] ESP32 device ${deviceId} is authenticated and owned, removing from claiming set`);
-              toRemove.push(deviceId);
-            }
-            // If not authenticated yet, keep in claiming state
-          } else {
-            // For non-ESP32, ownership alone is enough
-            console.log(`[DeviceListScreen] Device ${deviceId} is owned, removing from claiming set`);
-            toRemove.push(deviceId);
-          }
+          // Ownership is enough - authentication can happen in background
+          console.log(`[DeviceListScreen] Device ${deviceId} is owned by current user, removing from claiming set`);
+          toRemove.push(deviceId);
         }
       } else if (operation === 'revoke') {
         // For revocation, wait until device has no owner
@@ -639,20 +631,26 @@ export function DeviceListScreen() {
 
           // NOTE: Legacy unclaimed listener flow removed - ownership now happens via QUIC-VC claimDevice()
 
-          // Use claimDevice method which establishes QUIC-VC connection and claims ownership
-          console.log(`[DeviceListScreen] About to call claimDevice...`);
+          // Use claimDeviceOwnership method which establishes QUIC-VC connection and claims ownership
+          console.log(`[DeviceListScreen] About to call claimDeviceOwnership...`);
           profiler.startOperation('claim_device', { deviceId: device.id });
-          const success = await esp32ConnectionManager.claimDevice(
-            device.id, 
-            device.address, 
-            device.port
-          );
+          let success = await discoveryModel.claimDeviceOwnership(device.id);
           profiler.endOperation('claim_device', { success });
           console.log(`[DeviceListScreen] claimDevice returned: ${success}`);
-          
+
+          // Retry once on failure (ESP32 might have missed the packet)
+          if (!success) {
+            console.log(`[DeviceListScreen] First claim attempt failed, retrying after 500ms...`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            profiler.startOperation('claim_device_retry', { deviceId: device.id });
+            success = await discoveryModel.claimDeviceOwnership(device.id);
+            profiler.endOperation('claim_device_retry', { success });
+            console.log(`[DeviceListScreen] claimDevice retry returned: ${success}`);
+          }
+
           if (!success) {
             // Don't clean up listeners yet - the ESP32 might still respond
-            console.log(`[DeviceListScreen] Device ${device.id} claim timed out, but keeping listeners active`);
+            console.log(`[DeviceListScreen] Device ${device.id} claim timed out after retry, but keeping listeners active`);
             
             // Don't remove from claiming set - let the ownership confirmation remove it
             // This prevents the toggle from appearing in wrong state
@@ -721,33 +719,40 @@ export function DeviceListScreen() {
         } else {
           // For non-ESP32 devices, use the old credential removal method
           const credentialModel = await VerifiableCredentialModel.ensureInitialized(ModelService.getLeuteModel()!);
-          
+
           const removalCommand = {
             type: 'credential_remove' as const,
             senderPersonId: currentUserPersonId,
             deviceId: device.id,
             timestamp: Date.now()
           };
-          
+
           console.log(`[DeviceListScreen] Sending credential removal command to ${device.address}:${device.port}`);
-          
+
           const success = await credentialModel.sendCredentialRemovalToDevice(
             removalCommand,
             device.address,
             device.port
           );
-          
+
           console.log(`[DeviceListScreen] Credential removal ${success ? 'succeeded' : 'failed'}`);
-          
+
           // Remove from local device list
           await discoveryModel.removeDeviceOwnership(device.id);
         }
-        
-        // Wait a moment for the device update to propagate through the event system
-        setTimeout(() => {
-          // Don't remove from claiming set here - let the effect handle it
-          console.log(`[DeviceListScreen] Device ${device.id} ownership removed, effect will handle claiming state`);
-        }, 100);
+
+        // Ownership removed - remove from claiming set immediately
+        console.log(`[DeviceListScreen] Device ${device.id} ownership removed, removing from claiming set`);
+        setClaimingDevices(prev => {
+          const next = new Set(prev);
+          next.delete(device.id);
+          return next;
+        });
+        setClaimingOperations(prev => {
+          const next = new Map(prev);
+          next.delete(device.id);
+          return next;
+        });
         
         profiler.endOperation(operationId, { success: true });
         console.log(`[DeviceListScreen] Ownership removal initiated, device will update its broadcast`);
@@ -870,7 +875,6 @@ ${device.ownerId ? `Owner: ${device.ownerId.substring(0, 10)}...` : ''}`,
   }, [t, handleRefresh]);
   
   const renderDeviceItem = useCallback(({ item }: { item: Device }) => {
-    console.log('[DeviceListScreen] renderDeviceItem called for:', item.id);
     // Find the latest device state in case of race conditions
     const currentDevice = devices.find(d => d.id === item.id) || item;
     const isOwnedByCurrentUser = currentDevice.ownerId === currentUserPersonId;
@@ -880,36 +884,11 @@ ${device.ownerId ? `Owner: ${device.ownerId.substring(0, 10)}...` : ''}`,
     const isOwnedBySomeoneElse = !!currentDevice.ownerId && !isOwnedByCurrentUser && !isClaiming;
     const isItemLoading = isClaiming || isRemoving;  // Show loading for devices being claimed or removed
     const isLEDPending = pendingLEDCommands && pendingLEDCommands.includes(item.id);
-    
+
     // Add organisation path if available
     const deviceWithOrgPath = {
       ...currentDevice,
       organisationPath: deviceOrgPaths.get(item.id)
-    };
-    
-    // Debug logging for claiming state
-    if (item.id.includes('esp32')) {
-      console.log(`[DeviceListScreen] Render state for ${item.id}:`, {
-        isClaiming,
-        isItemLoading,
-        ownerId: currentDevice.ownerId,
-        isOwnedByCurrentUser,
-        claimingDevicesSize: claimingDevices.size
-      });
-    }
-    
-    // Debug ownership status
-    console.log('[DeviceListScreen] Ownership check:', {
-      deviceId: item.id,
-      ownerId: currentDevice.ownerId,
-      currentUserPersonId,
-      isOwnedByCurrentUser,
-      isEqual: currentDevice.ownerId === currentUserPersonId
-    });
-    
-    // Debug logging
-    if (item.type === 'ESP32' && pendingLEDCommands) {
-      console.log('[DeviceListScreen] Device:', item.id, 'pendingCommands:', pendingLEDCommands, 'isLEDPending:', isLEDPending);
     }
     
     return (

@@ -55,20 +55,6 @@ export default function SettingsScreen() {
   const { theme, styles: themedStyles, isDarkMode, toggleTheme } = useAppTheme();
   const { language, setLanguage, isLoading, error } = useSettings();
 
-  // Debug output
-  console.log('[Settings] Translation namespace:', 'settings');
-  console.log('[Settings] Raw keys:', {
-    title: t('settings.title'),
-    languageTitle: t('settings.language.title'),
-    appearanceTitle: t('settings.appearance.title'),
-    aiTitle: t('settings.ai.title'),
-    aiModelsTitle: t('settings.ai.models.title')
-  });
-  
-  // Debug AIModelSettings section
-  console.log('[Settings] Rendering AI Models section');
-
-
   // Reset PIN state
   const [pinDialogVisible, setPinDialogVisible] = useState(false);
   const [pinInput, setPinInput] = useState('');

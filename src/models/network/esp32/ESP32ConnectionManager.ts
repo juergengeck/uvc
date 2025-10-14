@@ -128,7 +128,7 @@ export class ESP32ConnectionManager {
       ESP32ConnectionManager.instance.connectedDevices.clear();
       ESP32ConnectionManager.instance.pendingCommands.forEach(pending => clearTimeout(pending.timeout));
       ESP32ConnectionManager.instance.pendingCommands.clear();
-      
+
       // Clear command queues
       ESP32ConnectionManager.instance.commandQueues.forEach(queue => {
         queue.forEach(queuedCommand => {
@@ -137,7 +137,7 @@ export class ESP32ConnectionManager {
       });
       ESP32ConnectionManager.instance.commandQueues.clear();
       ESP32ConnectionManager.instance.processingCommands.clear();
-      
+
       ESP32ConnectionManager.instance = null;
     }
   }
@@ -237,7 +237,7 @@ export class ESP32ConnectionManager {
         debug(`ESP32 device ${deviceId} disconnected (heartbeat timeout)`);
       }
     });
-    
+
     debug('ESP32ConnectionManager initialized');
   }
 
@@ -464,6 +464,10 @@ export class ESP32ConnectionManager {
     const claimStart = Date.now();
     console.log(`[ESP32ConnectionManager] [T+0ms] Claiming ownership of ESP32 device ${deviceId} at ${address}:${port}`);
 
+    // CRITICAL: Mark device as being claimed to prevent discovery broadcasts from overwriting ownership
+    this.pendingClaims.add(deviceId);
+    console.log(`[ESP32ConnectionManager] Added ${deviceId} to pendingClaims - discovery broadcasts will be ignored`);
+
     // Add device to our list
     this.addDiscoveredDevice(deviceId, address, port, deviceId);
 
@@ -476,29 +480,63 @@ export class ESP32ConnectionManager {
       // Establish QUIC-VC connection first, then send ownership credential over it
       console.log(`[ESP32ConnectionManager] [T+${Date.now() - claimStart}ms] Establishing QUIC-VC connection with ${deviceId}`);
 
-      // Listen for QUIC-VC connection established event
+      // CRITICAL: Wait for provisioning_ack, NOT just connection establishment
+      // The QUIC-VC connection establishes BEFORE ownership is saved to NVS
+      // We must wait for the ESP32 to confirm ownership was successfully saved
       return new Promise<boolean>((resolve) => {
         let responded = false;
 
-        const connectionListener = (connectedDeviceId: string) => {
-          if (connectedDeviceId === deviceId && !responded) {
+        // Listen for device authentication event (fired when provisioning_ack is received)
+        const authListener = (authenticatedDevice: ESP32Device) => {
+          if (authenticatedDevice.id === deviceId && !responded) {
             responded = true;
             const elapsed = Date.now() - claimStart;
-            console.log(`[ESP32ConnectionManager] [T+${elapsed}ms] QUIC-VC connection established and device ${deviceId} claimed (total time: ${elapsed}ms)`);
-            connectionUnsubscribe();
+            console.log(`[ESP32ConnectionManager] [T+${elapsed}ms] Device ${deviceId} ownership confirmed via provisioning_ack (total time: ${elapsed}ms)`);
+            authUnsubscribe();
+            closedUnsubscribe();
             clearTimeout(timeout);
+            // Keep device in pendingClaims for 2 more seconds to ignore stale discovery broadcasts
+            setTimeout(() => {
+              this.pendingClaims.delete(deviceId);
+              console.log(`[ESP32ConnectionManager] Removed ${deviceId} from pendingClaims - accepting discovery broadcasts again`);
+            }, 2000);
             resolve(true);
           }
         };
 
-        const connectionUnsubscribe = this.quicVCManager.onConnectionEstablished.listen(connectionListener);
+        // Also listen for connection closed event (e.g., "already_owned" failure)
+        const closedListener = (closedDeviceId: string, reason: string) => {
+          if (closedDeviceId === deviceId && !responded) {
+            // IGNORE closure for "Starting fresh" - that's intentional cleanup, not failure
+            if (reason === 'Starting fresh for ownership claim' || reason.includes('Starting fresh')) {
+              console.log(`[ESP32ConnectionManager] Ignoring intentional connection closure: ${reason}`);
+              return;
+            }
 
-        // Timeout after 10 seconds (QUIC-VC handshake + credential storage)
+            responded = true;
+            const elapsed = Date.now() - claimStart;
+            console.warn(`[ESP32ConnectionManager] [T+${elapsed}ms] QUIC-VC connection closed for ${deviceId}: ${reason}`);
+            authUnsubscribe();
+            closedUnsubscribe();
+            clearTimeout(timeout);
+            // Remove from pendingClaims immediately on failure
+            this.pendingClaims.delete(deviceId);
+            resolve(false);
+          }
+        };
+
+        const authUnsubscribe = this.onDeviceAuthenticated.listen(authListener);
+        const closedUnsubscribe = this.quicVCManager.onConnectionClosed.listen(closedListener);
+
+        // Timeout after 10 seconds (QUIC-VC handshake + ownership claim + NVS save)
         const timeout = setTimeout(() => {
           if (!responded) {
             responded = true;
-            connectionUnsubscribe();
-            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId} - QUIC-VC connection not established`);
+            authUnsubscribe();
+            closedUnsubscribe();
+            // Remove from pendingClaims on timeout
+            this.pendingClaims.delete(deviceId);
+            console.warn(`[ESP32ConnectionManager] Ownership claim timeout for ${deviceId} - no provisioning_ack received`);
             resolve(false);
           }
         }, 10000);
@@ -510,8 +548,11 @@ export class ESP32ConnectionManager {
           .catch((error) => {
             if (!responded) {
               responded = true;
-              connectionUnsubscribe();
+              authUnsubscribe();
+              closedUnsubscribe();
               clearTimeout(timeout);
+              // Remove from pendingClaims on connection failure
+              this.pendingClaims.delete(deviceId);
               console.error(`[ESP32ConnectionManager] Failed to establish QUIC-VC connection:`, error);
               resolve(false);
             }
@@ -519,6 +560,8 @@ export class ESP32ConnectionManager {
       });
     } catch (error) {
       console.error(`[ESP32ConnectionManager] Error claiming device ${deviceId}:`, error);
+      // Remove from pendingClaims on exception
+      this.pendingClaims.delete(deviceId);
       return false;
     }
   }
@@ -925,7 +968,7 @@ export class ESP32ConnectionManager {
    */
   private async handleESP32CommandResponse(data: any, rinfo: UdpRemoteInfo): Promise<void> {
     debug(`Received command response from ${rinfo.address}:${rinfo.port}, type:`, typeof data);
-    
+
     try {
       let jsonStr = '';
       
@@ -960,7 +1003,7 @@ export class ESP32ConnectionManager {
       if (message.type === 'provisioning_ack') {
         const deviceId = message.device_id || message.deviceId; // Support both field names
         const ownerId = message.owner || message.owner_id; // Support both field names
-        
+
         debug(`Received provisioning acknowledgment for device ${deviceId}, owner: ${ownerId}`);
         
         // Update device in our connected devices map IMMEDIATELY
@@ -1135,8 +1178,27 @@ export class ESP32ConnectionManager {
       // Handle ownership removal acknowledgment
       if (message.type === 'ownership_remove_ack') {
         const deviceId = message.device_id || message.deviceId;
+
+        // NOTE: We DO accept ownership_remove_ack from blocklisted devices
+        // This is the ONE exception - we need this ACK to complete the release flow
+        // However, we still validate it came from the device we're releasing
+        const pendingRemoval = this.pendingOwnershipRemovals.get(deviceId);
+        if (!pendingRemoval) {
+          console.warn(`[ESP32ConnectionManager] SECURITY: Received unexpected ownership_remove_ack from ${deviceId} (not pending removal)`);
+          return;
+        }
+
         console.log(`[ESP32ConnectionManager] Received ownership removal acknowledgment from device ${deviceId}`);
-        
+
+        // Resolve the pending ownership removal Promise
+        const pending = this.pendingOwnershipRemovals.get(deviceId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingOwnershipRemovals.delete(deviceId);
+          pending.resolve();
+          console.log(`[ESP32ConnectionManager] Resolved ownership removal Promise for ${deviceId}`);
+        }
+
         // Update device state
         const device = this.connectedDevices.get(deviceId);
         if (device) {
@@ -1144,7 +1206,7 @@ export class ESP32ConnectionManager {
           delete device.ownerPersonId;
           delete device.vcInfo;
         }
-        
+
         // Notify discovery model
         try {
           // Use dynamic import to avoid circular dependency
@@ -1153,7 +1215,7 @@ export class ESP32ConnectionManager {
           if (discoveryModel) {
             // Track device activity
             discoveryModel.trackDeviceActivity(deviceId, 'ownership_remove_ack');
-            
+
             // Emit device update to remove ownership from UI
             discoveryModel.updateDevice(deviceId, {
               ownerId: undefined,
@@ -1263,7 +1325,7 @@ export class ESP32ConnectionManager {
         // Handle command response
         // ESP32 sends type:'led_status' for LED commands
         const response = message as ESP32Response;
-        
+
         // Check if response includes requestId
         const requestId = message.requestId;
         
@@ -1597,17 +1659,46 @@ export class ESP32ConnectionManager {
     }
   }
 
+  // Pending ownership removal acknowledgments
+  private pendingOwnershipRemovals: Map<string, {
+    resolve: () => void,
+    reject: (error: Error) => void,
+    timeout: NodeJS.Timeout
+  }> = new Map();
+
+  // Track devices currently being claimed (to prevent discovery broadcasts from overwriting ownership)
+  private pendingClaims: Set<string> = new Set();
+
+  // Track devices currently being released (to prevent discovery broadcasts from overwriting ownership)
+  private pendingReleases: Set<string> = new Set();
+
   /**
-   * Release ownership of a device (send ownership removal command)
+   * Check if a device is currently being claimed
+   * Used by DeviceDiscoveryModel to ignore stale "unclaimed" broadcasts during ownership claim
+   */
+  public isDeviceBeingClaimed(deviceId: string): boolean {
+    return this.pendingClaims.has(deviceId);
+  }
+
+  /**
+   * Check if a device is currently being released
+   * Used by DeviceDiscoveryModel to ignore stale "claimed" broadcasts during ownership release
+   */
+  public isDeviceBeingReleased(deviceId: string): boolean {
+    return this.pendingReleases.has(deviceId);
+  }
+
+  /**
+   * Release ownership of a device (send ownership removal command and wait for acknowledgment)
    */
   public async releaseDevice(deviceId: string, address?: string, port?: number): Promise<boolean> {
     const device = this.connectedDevices.get(deviceId);
-    
+
     // Always try to send the removal command if we have address and port
     // This ensures owned devices that haven't authenticated in this session still get the command
     const deviceAddress = device?.address || address;
     const devicePort = device?.port || port || 49497;
-    
+
     if (!deviceAddress) {
       debug(`Cannot send removal command to ${deviceId} - no address available`);
       // Still remove from local list
@@ -1617,49 +1708,82 @@ export class ESP32ConnectionManager {
       return false;
     }
 
+    // CRITICAL: Mark device as being released to prevent discovery broadcasts from overwriting ownership
+    this.pendingReleases.add(deviceId);
+    console.log(`[ESP32ConnectionManager] Added ${deviceId} to pendingReleases - discovery broadcasts will be ignored`);
+
     try {
-      // Create DeviceOwnershipRevocation credential that ESP32 expects
-      const revocationCredential = {
-        $type$: 'DeviceOwnershipRevocation',
-        id: `revocation-${deviceId}-${Date.now()}`,
-        issuer: this.ownPersonId,  // Must match current owner
-        issuanceDate: new Date().toISOString(),
-        credentialSubject: {
-          id: deviceId,
-          action: 'revoke_ownership'
-        }
+      // ESP32 expects a simple JSON command on service type 2 (credential service)
+      // Format: { "type": "ownership_remove", "senderPersonId": "<owner_id>" }
+      const removalCommand = {
+        type: 'ownership_remove',
+        senderPersonId: this.ownPersonId,
+        deviceId: deviceId,
+        timestamp: Date.now()
       };
-      
-      debug(`Sending ownership revocation to ${deviceId} at ${deviceAddress}:${devicePort}`);
-      
-      // The ESP32 expects revocation as a VC_INIT with DeviceOwnershipRevocation credential
-      // It verifies ownership by checking the issuer matches the current owner
-      // So we need to send it as an INITIAL packet, not through authenticated channel
-      
-      // Initialize QuicVCConnectionManager if needed
-      if (!this.quicVCManager.isInitialized()) {
-        const appCredential = await this.createAppCredential();
-        await this.quicVCManager.initialize(this.transport as any, this.vcManager, appCredential);
-      }
-      
-      // Send revocation using the QuicVCConnectionManager with custom credential
-      await this.quicVCManager.initiateHandshake(deviceId, deviceAddress, devicePort, revocationCredential);
-      
-      debug(`Ownership revocation sent to ${deviceId}`);
+
+      debug(`Sending ownership removal command to ${deviceId} at ${deviceAddress}:${devicePort}`);
+      console.log(`[ESP32ConnectionManager] Sending ownership_remove command to ${deviceId}:`, removalCommand);
+
+      // Create Promise to wait for acknowledgment
+      const ackPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          this.pendingOwnershipRemovals.delete(deviceId);
+          reject(new Error(`Timeout waiting for ownership_remove_ack from ${deviceId}`));
+        }, 5000); // 5 second timeout
+
+        this.pendingOwnershipRemovals.set(deviceId, { resolve, reject, timeout });
+      });
+
+      // Send as service type 2 (credential service) packet
+      const jsonStr = JSON.stringify(removalCommand);
+      const jsonBytes = new TextEncoder().encode(jsonStr);
+
+      // Create packet with service type prefix
+      const packet = new Uint8Array(jsonBytes.length + 1);
+      packet[0] = 2; // Service type 2 (credential service)
+      packet.set(jsonBytes, 1);
+
+      // Send via transport
+      await this.transport.send(
+        packet,
+        deviceAddress,
+        devicePort
+      );
+
+      debug(`Ownership removal command sent to ${deviceId}`);
       console.log(`[ESP32ConnectionManager] Sent ownership_remove to ${deviceId} at ${deviceAddress}:${devicePort}`);
-      
-      // Remove device from our list immediately (acknowledgment will be handled by handleCredentialMessage)
-      if (device) {
-        this.removeDevice(deviceId);
-      }
+
+      // Wait for acknowledgment from ESP32
+      console.log(`[ESP32ConnectionManager] Waiting for ownership_remove_ack from ${deviceId}...`);
+      await ackPromise;
+      console.log(`[ESP32ConnectionManager] Received ownership_remove_ack, proceeding with connection cleanup`);
+
+      // Close QUIC-VC connection so we can reclaim fresh
+      // CRITICAL: Pass address/port to ensure we close the correct connection
+      this.quicVCManager.disconnect(deviceId, deviceAddress, devicePort);
+      console.log(`[ESP32ConnectionManager] Closed QUIC-VC connection for ${deviceId} at ${deviceAddress}:${devicePort}`);
+
+      // CRITICAL: Remove device from connectedDevices - do not reuse old connections
+      // After releasing ownership, we CANNOT trust anything the ESP32 sends
+      // Device must go through full authentication/discovery again
+      this.removeDevice(deviceId);
+      console.log(`[ESP32ConnectionManager] Removed ${deviceId} from connectedDevices - old state cleared`);
+
+      // Keep device in pendingReleases for 2 more seconds to ignore stale discovery broadcasts
+      setTimeout(() => {
+        this.pendingReleases.delete(deviceId);
+        console.log(`[ESP32ConnectionManager] Removed ${deviceId} from pendingReleases - accepting discovery broadcasts again`);
+      }, 2000);
+
       return true;
     } catch (error) {
       debug(`Error releasing device ${deviceId}:`, error);
-      console.error(`[ESP32ConnectionManager] Failed to send ownership_remove to ${deviceId}:`, error);
-      // Even on error, remove from local list
-      if (device) {
-        this.removeDevice(deviceId);
-      }
+      console.error(`[ESP32ConnectionManager] Failed to release ${deviceId}:`, error);
+      // Even on error, remove from local list - do not trust old state
+      this.removeDevice(deviceId);
+      // Remove from pendingReleases immediately on error
+      this.pendingReleases.delete(deviceId);
       return false;
     }
   }
@@ -1734,14 +1858,14 @@ export class ESP32ConnectionManager {
    */
   public async shutdown(): Promise<void> {
     debug('Shutting down ESP32ConnectionManager...');
-    
+
     // Clear pending commands
     for (const [requestId, pending] of this.pendingCommands) {
       clearTimeout(pending.timeout);
       pending.reject(new Error('Connection manager shutting down'));
     }
     this.pendingCommands.clear();
-    
+
     // Clear command queues
     for (const [deviceId, queue] of this.commandQueues) {
       for (const queuedCommand of queue) {
@@ -1750,20 +1874,20 @@ export class ESP32ConnectionManager {
     }
     this.commandQueues.clear();
     this.processingCommands.clear();
-    
+
     // Close all QUICVC connections
     for (const deviceId of this.connectedDevices.keys()) {
       this.connectionManager.closeConnection(deviceId);
     }
-    
+
     // Clear devices
     this.connectedDevices.clear();
-    
+
     // Remove service handlers
     this.transport.removeService(3);  // LED control
     this.transport.removeService(11); // Command responses
     this.transport.removeService(2);  // Credential service
-    
+
     debug('ESP32ConnectionManager shutdown complete');
   }
 }

@@ -249,23 +249,13 @@ export class QuicVCConnectionManager {
 
         // Check if we already have a connection to this device
         const existingConnection = this.findConnectionByAddress(address, port);
-        if (existingConnection && existingConnection.state === 'established') {
-            console.log(`[QuicVCConnectionManager] Already have established connection to ${deviceId} - reusing it`);
-            return;
-        } else if (existingConnection && existingConnection.state === 'initial') {
-            // Reuse the existing connection created by DISCOVERY frame
-            console.log(`[QuicVCConnectionManager] Reusing existing connection in initial state`);
+        if (existingConnection) {
+            console.log(`[QuicVCConnectionManager] Found existing connection to ${address}:${port} in state: ${existingConnection.state}`);
 
-            // Update the connection with our credential
-            existingConnection.localVC = credential;
-            existingConnection.deviceId = deviceId;
-
-            // Send VC_INIT packet now that we have a credential
-            await this.sendInitialPacket(existingConnection);
-            return;
-        } else if (existingConnection && existingConnection.state !== 'established') {
-            console.log(`[QuicVCConnectionManager] Have connection in ${existingConnection.state} state - closing and recreating`);
-            this.closeConnection(existingConnection, 'Recreating for new operation');
+            // CRITICAL: When claiming/provisioning, always close old connections and start fresh
+            // Old connections may be receiving stale discovery broadcasts that contradict the new ownership state
+            console.log(`[QuicVCConnectionManager] Closing existing connection to ensure clean ownership claim`);
+            this.closeConnection(existingConnection, 'Starting fresh for ownership claim');
         }
         
         // Generate connection IDs
@@ -343,7 +333,6 @@ export class QuicVCConnectionManager {
         );
         
         console.log('[QuicVCConnectionManager] Packet size:', packet.length, 'bytes');
-        console.log('[QuicVCConnectionManager] First 20 bytes:', Array.from(packet.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
         
         // Send packet
         await this.sendPacket(connection, packet);
@@ -501,27 +490,21 @@ export class QuicVCConnectionManager {
      * Handle INITIAL packet with VC_INIT frame or DISCOVERY frame
      */
     private async handleInitialPacket(connection: QuicVCConnection | null, data: Uint8Array, header: QuicVCPacketHeader, rinfo: { address: string, port: number }): Promise<void> {
-        console.log('[QuicVCConnectionManager] Handling INITIAL packet');
         // Extract payload (skip header)
         const payload = this.extractPayload(data, header);
-        console.log('[QuicVCConnectionManager] Payload length:', payload.length);
-        console.log('[QuicVCConnectionManager] First 20 payload bytes:', Array.from(payload.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
 
         // Check if this is a discovery frame first (no connection needed)
         if (payload.length > 3 && payload[0] === 0x30) { // Frame type 0x30 = DISCOVERY
-            console.log('[QuicVCConnectionManager] Frame type 0x30 - handling as discovery');
-
-            // If we have an active connection waiting for VC_RESPONSE, don't return early
-            // The ESP32 broadcasts discovery packets while also processing ownership
-            if (connection && connection.state === 'initial') {
-                console.log('[QuicVCConnectionManager] Connection in initial state - not returning, waiting for VC_RESPONSE');
-                await this.handleDiscoveryPacket(payload, header, rinfo);
-                // Continue processing in case there are more frames in this packet
-            } else {
-                console.log('[QuicVCConnectionManager] No active connection - handling discovery and returning');
-                await this.handleDiscoveryPacket(payload, header, rinfo);
-                return; // Don't create or update connection for discovery
+            // If we have an active connection with a credential (ownership claim in progress),
+            // IGNORE discovery packets entirely - don't let them interfere with the handshake
+            if (connection && connection.state === 'initial' && connection.localVC) {
+                console.log('[QuicVCConnectionManager] Ignoring discovery packet - ownership claim in progress');
+                return;
             }
+
+            // Otherwise, handle discovery normally
+            await this.handleDiscoveryPacket(payload, header, rinfo);
+            return; // Don't create or update connection for discovery
         }
 
         // For non-discovery packets, we need a connection
@@ -530,105 +513,7 @@ export class QuicVCConnectionManager {
             return;
         }
 
-        console.log('[QuicVCConnectionManager] Past initial checks, about to check frame type 0x30 again...');
-
-        // Try to decode as ESP32 discovery format
-        // ESP32 sends: frame_type(1) + length(2) + HTML/JSON
-        try {
-            if (payload.length > 3 && payload[0] === 0x30) { // Frame type 0x30 = DISCOVERY
-                const frameLength = (payload[1] << 8) | payload[2];
-                const jsonStart = 3; // Skip frame header
-
-                if (payload.length >= jsonStart + frameLength) {
-                    const contentBytes = payload.slice(jsonStart, jsonStart + frameLength);
-                    const contentString = new TextDecoder().decode(contentBytes);
-                    // console.log('[QuicVCConnectionManager] Discovery content:', contentString);
-
-                    // Parse JSON (new compact format) or HTML (legacy)
-                    if (contentString.startsWith('{')) {
-                        // Parse compact JSON format (new)
-                        // Format: {"t":"DevicePresence","i":"device-id","s":"online","o":"unclaimed"}
-                        try {
-                            const json = JSON.parse(contentString);
-                            const discoveryData = {
-                                id: json.i || json.id || json.deviceId,
-                                type: json.t === 'DevicePresence' ? 'ESP32' : (json.type || json.deviceType || 'unknown'),
-                                status: json.s || json.status || 'online',
-                                ownership: json.o || json.ownership || 'unclaimed'
-                            };
-                            console.log('[QuicVCConnectionManager] Parsed discovery data from JSON:', discoveryData);
-
-                            // Store device information in the connection
-                            connection.deviceId = discoveryData.id;
-                            connection.deviceType = discoveryData.type;
-                            connection.isOwned = discoveryData.ownership !== 'unclaimed';
-
-                            // Emit discovery event
-                            this.onDeviceDiscovered.emit({
-                                type: 'discovery',
-                                deviceInfo: {
-                                    deviceId: discoveryData.id,
-                                    deviceType: discoveryData.type,
-                                    isOwned: discoveryData.ownership !== 'unclaimed',
-                                    ownership: discoveryData.ownership,
-                                    status: discoveryData.status
-                                },
-                                address: rinfo.address,
-                                port: rinfo.port
-                            });
-                        } catch (e) {
-                            console.log('[QuicVCConnectionManager] Failed to parse JSON:', e.message);
-                        }
-                    } else if (contentString.startsWith('<!DOCTYPE html>')) {
-                        // Parse HTML microdata for device information (legacy - will be removed)
-                        const idMatch = contentString.match(/itemprop="id" content="([^"]+)"/);
-                        const typeMatch = contentString.match(/itemprop="type" content="([^"]+)"/);
-                        const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
-                        const ownershipMatch = contentString.match(/itemprop="ownership" content="([^"]+)"/);
-
-                        if (idMatch) {
-                            const discoveryData = {
-                                id: idMatch[1],
-                                type: typeMatch ? typeMatch[1] : 'unknown',
-                                status: statusMatch ? statusMatch[1] : 'unknown',
-                                ownership: ownershipMatch ? ownershipMatch[1] : 'unknown'
-                            };
-                            console.log('[QuicVCConnectionManager] Parsed discovery data from HTML (legacy):', discoveryData);
-
-                            // Store device information in the connection
-                            connection.deviceId = discoveryData.id;
-                            connection.deviceType = discoveryData.type;
-                            connection.isOwned = discoveryData.ownership !== 'unclaimed';
-
-                            // Emit discovery event for DeviceDiscoveryModel
-                            this.onDeviceDiscovered.emit({
-                                type: 'discovery',
-                                deviceInfo: {
-                                    deviceId: discoveryData.id,
-                                    deviceType: discoveryData.type,
-                                    isOwned: discoveryData.ownership !== 'unclaimed',
-                                    ownership: discoveryData.ownership,
-                                    status: discoveryData.status
-                                },
-                                address: rinfo.address,
-                                port: rinfo.port
-                            });
-                        }
-                    } else {
-                        console.warn('[QuicVCConnectionManager] Unknown discovery format:', contentString.substring(0, 50));
-                    }
-
-                    // This is an ESP32 discovery packet, not a QUICVC handshake
-                    // The device is broadcasting its availability
-                    // We should not try to process this as a VC handshake
-                    return;
-                }
-            }
-        } catch (e) {
-            console.warn('[QuicVCConnectionManager] Failed to parse as ESP32 discovery JSON:', e.message);
-        }
-        
-        // Parse binary QUIC frames instead of JSON
+        // Parse binary QUIC frames
         const frames = this.parseFrames(payload);
         console.log('[QuicVCConnectionManager] Parsed frames:', frames.length, 'frames');
         if (frames.length === 0) {
@@ -727,16 +612,17 @@ export class QuicVCConnectionManager {
     private async handleVCResponseFrame(connection: QuicVCConnection, frame: any): Promise<void> {
         console.log('[QuicVCConnectionManager] Processing VC_RESPONSE frame from ESP32');
         console.log('[QuicVCConnectionManager] VC_RESPONSE frame data:', frame);
-        
+
         // Extract device ID from the frame if not already set
         if (!connection.deviceId && frame.device_id) {
             connection.deviceId = frame.device_id;
             console.log('[QuicVCConnectionManager] Set device ID from VC_RESPONSE:', connection.deviceId);
         }
-        
+
         // Parse the response to check ownership status
-        if (frame.status === 'provisioned' || frame.status === 'already_owned' || frame.status === 'ownership_revoked') {
-            console.log('[QuicVCConnectionManager] ESP32 operation successful:', frame.status);
+        if (frame.status === 'provisioned') {
+            // Device accepted our ownership claim
+            console.log('[QuicVCConnectionManager] ESP32 provisioned successfully');
             console.log('[QuicVCConnectionManager] frame.owner:', frame.owner);
 
             // Update connection state
@@ -748,37 +634,45 @@ export class QuicVCConnectionManager {
                 console.warn('[QuicVCConnectionManager] No frame.owner in response, remoteVC will be null');
             }
 
-            // Complete handshake
+            // Complete handshake and emit onConnectionEstablished
             this.completeHandshake(connection);
-            
-            console.log('[QuicVCConnectionManager] ESP32 operation completed successfully:', frame.status);
-            
-            // Immediately update device ownership to prevent waiting for heartbeat
-            if (frame.status === 'provisioned' && frame.owner && connection.deviceId) {
-                try {
-                    // Import DeviceDiscoveryModel dynamically to avoid circular dependency
-                    const { DeviceDiscoveryModel } = await import('./DeviceDiscoveryModel');
-                    const discoveryModel = DeviceDiscoveryModel.getInstance();
-                    
-                    // Update device ownership immediately
-                    const device = discoveryModel.getDevice(connection.deviceId);
-                    if (device) {
-                        device.ownerId = frame.owner;
-                        device.hasValidCredential = true;
-                        discoveryModel.emitDeviceUpdate(connection.deviceId, { 
-                            ownerId: frame.owner,
-                            hasValidCredential: true 
-                        });
-                        console.log('[QuicVCConnectionManager] Immediately updated device ownership for', connection.deviceId);
-                    }
-                } catch (error) {
-                    console.error('[QuicVCConnectionManager] Failed to update device ownership:', error);
-                }
-            }
-            
-            // DON'T close the connection - we need it for future LED commands!
-            // The connection should remain open for the device's lifetime
+
+            console.log('[QuicVCConnectionManager] ESP32 provisioning completed successfully');
             console.log('[QuicVCConnectionManager] Keeping connection open for future commands');
+        } else if (frame.status === 'already_owned') {
+            // Device is already owned - check if it's us
+            const storedOwner = frame.owner;
+
+            if (storedOwner === this.ownPersonId) {
+                // This is OUR device already - treat as provisioned
+                console.log('[QuicVCConnectionManager] ✅ Device is already owned by current user');
+                console.log('[QuicVCConnectionManager] Device owner:', storedOwner);
+                console.log('[QuicVCConnectionManager] Current user:', this.ownPersonId);
+
+                // Update connection state as if it was provisioned
+                connection.state = 'established';
+                connection.remoteVC = { issuerPersonId: storedOwner } as any;
+
+                // Complete handshake and emit onConnectionEstablished
+                this.completeHandshake(connection);
+
+                console.log('[QuicVCConnectionManager] Device recognized as already owned by us');
+                console.log('[QuicVCConnectionManager] Keeping connection open for future commands');
+            } else {
+                // Device is owned by someone else
+                console.error('[QuicVCConnectionManager] ❌ Device is owned by another user');
+                console.error('[QuicVCConnectionManager] Device owner:', storedOwner);
+                console.error('[QuicVCConnectionManager] Current user:', this.ownPersonId);
+
+                // Close the connection - this device belongs to someone else
+                this.closeConnection(connection, `Owned by different user: ${storedOwner}`)
+            }
+        } else if (frame.status === 'ownership_revoked') {
+            // Ownership was revoked successfully
+            console.log('[QuicVCConnectionManager] Ownership revoked successfully');
+            // Close the connection so we can establish a fresh one when reclaiming
+            console.log('[QuicVCConnectionManager] Closing connection to allow fresh reclaim');
+            this.closeConnection(connection, 'Ownership revoked - ready for reclaim');
         } else if (frame.status === 'revoked') {
             // Ownership revoked - close the connection
             console.log('[QuicVCConnectionManager] Ownership revoked - closing connection');
@@ -800,7 +694,7 @@ export class QuicVCConnectionManager {
             if (payload.length >= jsonStart + frameLength) {
                 const contentBytes = payload.slice(jsonStart, jsonStart + frameLength);
                 const contentString = new TextDecoder().decode(contentBytes);
-                // console.log('[QuicVCConnectionManager] Discovery content:', contentString);
+                console.log('[QuicVCConnectionManager] Discovery content:', contentString);
 
                 // Parse JSON (new compact format) or HTML (legacy)
                 let discoveryData: any = {};
@@ -828,14 +722,10 @@ export class QuicVCConnectionManager {
                         status: statusMatch ? statusMatch[1] : 'online',
                         ownership: ownershipMatch ? ownershipMatch[1] : 'unclaimed'
                     };
-                } else {
-                    console.warn('[QuicVCConnectionManager] Unknown discovery format:', contentString.substring(0, 50));
                 }
 
-                // console.log('[QuicVCConnectionManager] Parsed discovery data:', discoveryData);
-
                 // Emit discovery event without creating a connection
-                this.onDeviceDiscovered.emit({
+                const discoveryEvent = {
                     type: 'discovery',
                     deviceInfo: {
                         deviceId: discoveryData.id || '',
@@ -849,9 +739,9 @@ export class QuicVCConnectionManager {
                     address: rinfo.address,
                     port: rinfo.port,
                     scid: header.scid // Include SCID for consistent device identification
-                });
-
-                // console.log('[QuicVCConnectionManager] Emitted stateless discovery event for:', discoveryData.id);
+                };
+                console.log('[QuicVCConnectionManager] *** EMITTING onDeviceDiscovered event:', discoveryEvent);
+                this.onDeviceDiscovered.emit(discoveryEvent);
             }
         } catch (error) {
             console.error('[QuicVCConnectionManager] Failed to parse discovery packet:', error);
@@ -1591,7 +1481,7 @@ export class QuicVCConnectionManager {
         const headerSize = (header as any).headerLength ||
             // Fallback for backward compatibility
             (1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 8);
-        console.log('[QuicVCConnectionManager] Extracting payload: headerSize =', headerSize, 'dataLength =', data.length, 'payloadLength =', data.length - headerSize);
+        // Payload extraction (header removed)
         return data.slice(headerSize);
     }
     
@@ -1602,7 +1492,7 @@ export class QuicVCConnectionManager {
     
     private parseFrames(data: Uint8Array): any[] {
         console.log('[QuicVCConnectionManager] Parsing frames from', data.length, 'bytes');
-        console.log('[QuicVCConnectionManager] First 20 bytes of frame data:', Array.from(data.slice(0, Math.min(20, data.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+        // Frame parsing
 
         const frames: any[] = [];
         let offset = 0;
@@ -1886,7 +1776,34 @@ export class QuicVCConnectionManager {
     
     private handleHandshakeTimeout(connId: string): void {
         const connection = this.connections.get(connId);
-        if (connection && connection.state !== 'established') {
+        if (!connection) {
+            // Connection already closed or replaced
+            return;
+        }
+
+        if (connection.state !== 'established') {
+            // Before closing, check if there's a NEWER connection for this device
+            // that's already established. If so, just clean up this timeout without emitting events.
+            if (connection.deviceId) {
+                for (const [otherConnId, otherConn] of this.connections) {
+                    if (otherConnId !== connId &&
+                        otherConn.deviceId === connection.deviceId &&
+                        otherConn.state === 'established' &&
+                        otherConn.createdAt > connection.createdAt) {
+                        // There's a newer, established connection - silently clean up this old one
+                        console.log(`[QuicVCConnectionManager] Ignoring timeout for old connection ${connId} - device ${connection.deviceId} has newer established connection`);
+                        // Clear timers
+                        if (connection.handshakeTimeout) clearTimeout(connection.handshakeTimeout);
+                        if (connection.heartbeatInterval) clearInterval(connection.heartbeatInterval);
+                        if (connection.idleTimeout) clearTimeout(connection.idleTimeout);
+                        // Remove from map silently
+                        this.connections.delete(connId);
+                        return;
+                    }
+                }
+            }
+
+            // No newer connection found - safe to close with event
             this.closeConnection(connection, 'Handshake timeout');
         }
     }
@@ -1945,12 +1862,41 @@ export class QuicVCConnectionManager {
         await this.sendProtectedPacket(connection, [streamFrame]);
     }
     
-    disconnect(deviceId: string): void {
-        const connection = Array.from(this.connections.values())
-            .find(c => c.deviceId === deviceId);
-        
-        if (connection) {
-            this.closeConnection(connection, 'User requested');
+    disconnect(deviceId: string, address?: string, port?: number): void {
+        console.log(`[QuicVCConnectionManager] Disconnect called for device ${deviceId} at ${address}:${port}`);
+
+        const connectionsToClose: QuicVCConnection[] = [];
+
+        // If address/port provided, close ALL connections at that address/port
+        // This is the reliable way - we know exactly which physical device to disconnect from
+        if (address && port) {
+            console.log(`[QuicVCConnectionManager] Closing connections by address/port: ${address}:${port}`);
+            for (const conn of this.connections.values()) {
+                if (conn.address === address && conn.port === port) {
+                    console.log(`[QuicVCConnectionManager] Found connection at ${address}:${port} (deviceId: ${conn.deviceId}, state: ${conn.state})`);
+                    connectionsToClose.push(conn);
+                }
+            }
+        } else {
+            // Fallback: try to find by deviceId only
+            console.warn(`[QuicVCConnectionManager] No address/port provided, searching by deviceId only (unreliable)`);
+            for (const conn of this.connections.values()) {
+                if (conn.deviceId === deviceId) {
+                    console.log(`[QuicVCConnectionManager] Found connection by deviceId: ${deviceId} at ${conn.address}:${conn.port}`);
+                    connectionsToClose.push(conn);
+                }
+            }
+        }
+
+        // Close all found connections
+        if (connectionsToClose.length > 0) {
+            console.log(`[QuicVCConnectionManager] Closing ${connectionsToClose.length} connection(s)`);
+            for (const connection of connectionsToClose) {
+                this.closeConnection(connection, 'User requested disconnect');
+            }
+            console.log(`[QuicVCConnectionManager] ✅ Disconnected ${connectionsToClose.length} connection(s) for ${deviceId}`);
+        } else {
+            console.error(`[QuicVCConnectionManager] ❌ No connections found to disconnect for ${deviceId} at ${address}:${port}`);
         }
     }
 }

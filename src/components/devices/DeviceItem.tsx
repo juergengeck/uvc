@@ -59,32 +59,31 @@ export const DeviceItem = React.memo(function DeviceItem({
   const { styles: themedStyles } = useTheme();
   const theme = useTheme();
   const [expanded, setExpanded] = React.useState(false);
-  
-  const lastSeenText = device.lastSeen
-    ? new Date(device.lastSeen).toLocaleTimeString()
-    : 'Never';
-    
+
+  const handleExpandToggle = React.useCallback(() => {
+    setExpanded(prev => !prev);
+  }, []);
+
+  // Memoize expensive computations
+  const lastSeenText = React.useMemo(() =>
+    device.lastSeen ? new Date(device.lastSeen).toLocaleTimeString() : 'Never',
+    [device.lastSeen]
+  );
+
   const statusText = device.online ? 'Online' : 'Offline';
   const connectionText = device.connected ? ' • Connected' : '';
   const savedText = device.isSaved && !device.online ? ' • Saved' : '';
-  
+
   const briefDescription = `${device.type} • ${statusText}${connectionText}${savedText}`;
-  
+
   const switchValue = isOwnedByCurrentUser;
-  const switchDisabled = isOwnedBySomeoneElse; // Removed isLoading to prevent visual sluggishness
-  
-  console.log(`[DeviceItem] Render state for ${device.id}:`, {
-    expanded,
-    switchValue,
-    switchDisabled,
-    isLoading,
-    isOwnedBySomeoneElse,
-    showSwitch: !isLoading  // This matches the actual render logic at line 205
-  });
-  
-  // Removed verbose logging for performance
-  
+  const switchDisabled = isOwnedBySomeoneElse;
+
   const deviceIcon = getDeviceTypeIcon(device.type);
+
+  // Memoize LED control props
+  const shouldEnableLED = isOwnedByCurrentUser && device.connected && !isLoading;
+  const ledHandler = shouldEnableLED ? onToggleLED : undefined;
   
   return (
     <Surface style={themedStyles.card} elevation={1}>
@@ -99,30 +98,17 @@ export const DeviceItem = React.memo(function DeviceItem({
             left={() => (
               <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>
                 {device.type === DeviceType.ESP32 ? (
-                  (() => {
-                    const shouldEnableLED = isOwnedByCurrentUser && device.connected && !isLoading;
-                    console.log('[DeviceItem] LED control conditions:', {
-                      deviceId: device.id,
-                      isOwnedByCurrentUser,
-                      'device.connected': device.connected,
-                      isLoading,
-                      shouldEnableLED,
-                      hasHandler: !!onToggleLED
-                    });
-                    return (
-                      <LEDControl
-                        device={device}
-                        onToggleLED={shouldEnableLED ? onToggleLED : undefined}
-                        isLoading={isLoading}
-                        isPending={isLEDPending}
-                      />
-                    );
-                  })()
+                  <LEDControl
+                    device={device}
+                    onToggleLED={ledHandler}
+                    isLoading={isLoading}
+                    isPending={isLEDPending}
+                  />
                 ) : (
-                  <MaterialCommunityIcons 
-                    name={deviceIcon} 
-                    size={24} 
-                    color={theme.colors?.onSurfaceVariant || '#666'} 
+                  <MaterialCommunityIcons
+                    name={deviceIcon}
+                    size={24}
+                    color={theme.colors?.onSurfaceVariant || '#666'}
                   />
                 )}
               </View>
@@ -154,7 +140,7 @@ export const DeviceItem = React.memo(function DeviceItem({
                 <IconButton
                   icon={expanded ? 'chevron-up' : 'chevron-down'}
                   size={24}
-                  onPress={() => setExpanded(!expanded)}
+                  onPress={handleExpandToggle}
                   disabled={false}
                   style={{ margin: 0 }}
                 />
@@ -237,20 +223,7 @@ export const DeviceItem = React.memo(function DeviceItem({
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                         <Switch
                           value={switchValue}
-                          onValueChange={() => {
-                            console.log(`[DeviceItem] Switch pressed for ${device.id}`);
-                            console.log(`[DeviceItem] Device details:`, {
-                              id: device.id,
-                              type: device.type,
-                              ownerId: device.ownerId,
-                              isOwnedByCurrentUser,
-                              isOwnedBySomeoneElse,
-                              switchValue,
-                              switchDisabled
-                            });
-                            console.log(`[DeviceItem] Calling onToggleOwnership...`);
-                            onToggleOwnership(device);
-                          }}
+                          onValueChange={() => onToggleOwnership(device)}
                           disabled={switchDisabled}
                           style={{ marginRight: 8 }}
                         />

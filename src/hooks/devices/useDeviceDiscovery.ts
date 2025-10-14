@@ -28,6 +28,7 @@ export function useDeviceDiscovery() {
   const discoveryModelRef = useRef<DeviceDiscoveryModel | null>(null);
   const isUpdatingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const devicesRef = useRef<Device[]>([]);
   // Hash of last devices list to avoid redundant state updates
   const devicesHashRef = useRef<string>();
   const loadDevicesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -39,6 +40,28 @@ export function useDeviceDiscovery() {
       debugLog.info('useDeviceDiscovery', 'Component unmounting');
       isMountedRef.current = false;
     };
+  }, []);
+
+  // Fast shallow comparison for device arrays
+  const devicesHaveChanged = useCallback((prev: Device[], next: Device[]): boolean => {
+    if (prev.length !== next.length) return true;
+
+    for (let i = 0; i < prev.length; i++) {
+      const p = prev[i];
+      const n = next[i];
+
+      // Compare key properties only (not all properties to avoid unnecessary re-renders)
+      if (p.id !== n.id ||
+          p.online !== n.online ||
+          p.connected !== n.connected ||
+          p.ownerId !== n.ownerId ||
+          p.lastSeen !== n.lastSeen ||
+          p.blueLedStatus !== n.blueLedStatus) {
+        return true;
+      }
+    }
+
+    return false;
   }, []);
   
   const loadDevicesImmediate = useCallback(async () => {
@@ -58,7 +81,8 @@ export function useDeviceDiscovery() {
       let allDevices: any[] = [];
       const deviceModel = ModelService.getDeviceModel();
       if (!deviceModel || !deviceModel.isInitialized()) {
-        throw new Error('[useDeviceDiscovery] DeviceModel not initialized - app initialization failed');
+        console.warn('[useDeviceDiscovery] DeviceModel not initialized yet - returning empty device list');
+        return; // Return early, will retry on next call
       }
 
       // This will get both discovered devices and owned devices from storage
@@ -157,11 +181,12 @@ export function useDeviceDiscovery() {
           if (hasChanges) {
             debugLog.info('useDeviceDiscovery', 'Updating existing device at index', existingIndex);
 
-            // CRITICAL: Preserve ownerId from current state if DeviceModel doesn't have it yet
-            // This prevents race condition where event listener sets ownerId but DeviceModel
-            // hasn't persisted it yet, causing loadDevices to clear it
+            // CRITICAL: Handle ownerId carefully to support both setting AND clearing
+            // - DeviceModel has explicit ownerId (not null) -> use it (supports both defined and undefined)
+            // - Otherwise preserve from current state (race: event set it but not persisted yet)
             const currentDevice = currentDevices.find(d => d.id === deviceId);
-            const preservedOwnerId = device.ownerId ?? currentDevice?.ownerId ?? existingDevice.ownerId;
+            const hasOwnerIdInModel = 'ownerId' in device && device.ownerId !== null;
+            const ownerId = hasOwnerIdInModel ? device.ownerId : (currentDevice?.ownerId ?? existingDevice.ownerId);
 
             // Update existing device
             deviceList[existingIndex] = {
@@ -174,7 +199,7 @@ export function useDeviceDiscovery() {
               online: isOnline,
               connected: isConnected,
               blueLedStatus: device.blueLedStatus || existingDevice.blueLedStatus || (deviceType === DeviceType.ESP32 || deviceType === 'ESP32' ? 'off' : undefined),
-              ownerId: preservedOwnerId, // Preserve ownerId from current state to avoid race condition
+              ownerId: ownerId,
               isSaved: existingDevice.isSaved // Preserve saved status
             };
           } else {
@@ -183,9 +208,10 @@ export function useDeviceDiscovery() {
           }
         } else {
           // Add new device - map deviceId to id for UI compatibility
-          // CRITICAL: Check current state for ownerId in case it was just set via event
+          // CRITICAL: Handle ownerId - support both setting and clearing
           const currentDevice = currentDevices.find(d => d.id === deviceId);
-          const preservedOwnerId = device.ownerId ?? currentDevice?.ownerId;
+          const hasOwnerIdInModel = 'ownerId' in device && device.ownerId !== null;
+          const ownerId = hasOwnerIdInModel ? device.ownerId : currentDevice?.ownerId;
 
           const newDevice = {
             id: deviceId, // UI expects 'id' not 'deviceId'
@@ -198,7 +224,7 @@ export function useDeviceDiscovery() {
             connected: isConnected,
             enabled: true,
             blueLedStatus: device.blueLedStatus || (deviceType === DeviceType.ESP32 || deviceType === 'ESP32' ? 'off' : undefined),
-            ownerId: preservedOwnerId, // Preserve from current state if available
+            ownerId: ownerId,
             wifiStatus: device.wifiStatus || (device.port > 0 ? 'active' : 'inactive'), // Assume WiFi active if has port
             btleStatus: device.btleStatus || 'inactive' // Default to inactive unless explicitly set
           };
@@ -244,11 +270,14 @@ export function useDeviceDiscovery() {
         return a.name.localeCompare(b.name);
       });
       
-      const newHash = JSON.stringify(devicesWithTimeout);
-      if (devicesHashRef.current !== newHash) {
-        devicesHashRef.current = newHash;
-        setDevices(devicesWithTimeout);
-      }
+      // Only update if devices actually changed
+      setDevices(prev => {
+        if (devicesHaveChanged(prev, devicesWithTimeout)) {
+          devicesRef.current = devicesWithTimeout;
+          return devicesWithTimeout;
+        }
+        return prev;
+      });
       
       // LED status polling removed - should be handled by QUICVC connection layer
     } finally {
@@ -299,27 +328,30 @@ export function useDeviceDiscovery() {
     // 1. Type guard – we only support ESP32
     if (device.type !== DeviceType.ESP32) {
       profiler.endOperation(operationId, { error: 'not_esp32' });
-      throw new Error('LED control is only available for ESP32 devices');
+      console.warn('[toggleBlueLED] LED control is only available for ESP32 devices');
+      return; // Fail silently - not a critical error
     }
 
     const discoveryModel = discoveryModelRef.current;
     if (!discoveryModel) {
       profiler.endOperation(operationId, { error: 'no_discovery_model' });
-      throw new Error('Discovery model not available - app not fully initialized');
+      console.warn('[toggleBlueLED] Discovery model not available yet');
+      return; // Fail silently - initialization still in progress
     }
     const currentUserId = getInstanceOwnerIdHash();
-    
+
     profiler.checkpoint('Got models and user ID');
 
     // 2. Ownership & authentication validations (fail fast)
     if (!device.ownerId) {
       profiler.endOperation(operationId, { error: 'not_owned' });
-      throw new Error(`Device ${device.id} is not owned. Claim it first.`);
+      console.warn(`[toggleBlueLED] Device ${device.id} is not owned - cannot control LED`);
+      return; // Fail silently - user can see device isn't owned in UI
     }
     if (device.ownerId !== currentUserId) {
-      console.log(`[toggleBlueLED] Ownership mismatch - device owner: ${device.ownerId}, current user: ${currentUserId}`);
+      console.warn(`[toggleBlueLED] Ownership mismatch - device owner: ${device.ownerId}, current user: ${currentUserId}`);
       profiler.endOperation(operationId, { error: 'not_owner' });
-      throw new Error(`You are not the owner of device ${device.id}.`);
+      return; // Fail silently - user can see they don't own it in UI
     }
 
     profiler.checkpoint('Ownership validated');
@@ -328,15 +360,18 @@ export function useDeviceDiscovery() {
     profiler.startOperation('get_esp32_manager', { deviceId: device.id });
     const esp32ConnectionManager = await discoveryModel.getESP32ConnectionManager();
     profiler.endOperation('get_esp32_manager');
-    
+
     if (!esp32ConnectionManager) {
       profiler.endOperation(operationId, { error: 'no_connection_manager' });
-      throw new Error('ESP32ConnectionManager not available');
+      console.warn('[toggleBlueLED] ESP32ConnectionManager not available yet');
+      return; // Fail silently - initialization issue
     }
-    
+
     const esp32Device = esp32ConnectionManager.getDevice(device.id);
     if (!esp32Device || !esp32Device.isAuthenticated) {
-      throw new Error(`Device ${device.id} is not authenticated yet. Wait until it is online.`);
+      console.warn(`[toggleBlueLED] Device ${device.id} is not authenticated yet`);
+      profiler.endOperation(operationId, { error: 'not_authenticated' });
+      return; // Fail silently - device not ready
     }
 
     // Mark as processing
@@ -386,7 +421,7 @@ export function useDeviceDiscovery() {
       } else {
         console.error('[toggleBlueLED] LED command failed:', response.error || response.message);
         // Revert optimistic update on failure - restore original status
-        setDevices(prev => prev.map(d => 
+        setDevices(prev => prev.map(d =>
           d.id === device.id ? { ...d, blueLedStatus: originalStatus } : d
         ));
         // Clear pending state on failure
@@ -395,7 +430,8 @@ export function useDeviceDiscovery() {
           return rest;
         });
         profiler.endOperation(operationId, { success: false, error: response.error || response.message });
-        throw new Error(response.error || response.message || 'LED control failed');
+        // Don't throw - just log the error
+        return;
       }
     } catch (err) {
       profiler.endOperation(operationId, { success: false, error: String(err) });
@@ -405,7 +441,7 @@ export function useDeviceDiscovery() {
         stack: err instanceof Error ? err.stack : undefined
       });
       // Revert optimistic update on error - restore original status
-      setDevices(prev => prev.map(d => 
+      setDevices(prev => prev.map(d =>
         d.id === device.id ? { ...d, blueLedStatus: originalStatus } : d
       ));
       // Clear pending state on error
@@ -413,7 +449,8 @@ export function useDeviceDiscovery() {
         const { [device.id]: _, ...rest } = prev;
         return rest;
       });
-      throw err;
+      // Don't throw - external device failure shouldn't crash the app
+      return;
     } finally {
       // Always clear processing state
       processingLEDCommands.current.delete(device.id);
@@ -614,26 +651,26 @@ export function useDeviceDiscovery() {
           });
         }
       },
-      { 
-        name: 'onDeviceUpdated', 
-        handler: (updatedDevice: any) => {
-          if (!updatedDevice || !updatedDevice.deviceId) {
+      {
+        name: 'onDeviceUpdated',
+        handler: (deviceId: string) => {
+          if (!deviceId) {
             console.log('[useDeviceDiscovery] Invalid device update received - missing deviceId');
             return;
           }
-          
-          const deviceId = updatedDevice.deviceId;
-          // Only log significant updates (not LED status changes or heartbeats)
-          const isLedUpdate = updatedDevice.blueLedStatus !== undefined;
-          const isHeartbeat = updatedDevice.lastSeen !== undefined && Object.keys(updatedDevice).length === 2; // Only deviceId and lastSeen
-          if (!isLedUpdate && !isHeartbeat) {
-            console.log('[useDeviceDiscovery] Device update for:', deviceId);
+
+          // Fetch full authoritative state from DeviceDiscoveryModel
+          const updatedDevice = discoveryModel.getDevice(deviceId);
+          if (!updatedDevice) {
+            console.log('[useDeviceDiscovery] Device not found in discovery model:', deviceId);
+            return;
           }
+          console.log('[useDeviceDiscovery] Device update for:', deviceId);
           
           // Update only the specific device that changed
           setDevices(prevDevices => {
-            const existingDevice = prevDevices.find(d => d.id === deviceId);
-            if (!existingDevice) {
+            const existingIndex = prevDevices.findIndex(d => d.id === deviceId);
+            if (existingIndex === -1) {
               // Device not in list - add it now (handles case where onDeviceDiscovered was missed)
               console.log('[useDeviceDiscovery] Device not found in list, adding from update event:', deviceId);
               const newDevice: Device = {
@@ -651,78 +688,39 @@ export function useDeviceDiscovery() {
               };
               return [...prevDevices, newDevice];
             }
-            
-            // Check if device is coming back online
-            if (updatedDevice.online === true && existingDevice.online === false) {
-              console.log(`[useDeviceDiscovery] Device ${deviceId} came back online - heartbeat resumed`);
+
+            const existingDevice = prevDevices[existingIndex];
+
+            // Create new device from authoritative state - no partial merging
+            const updated: Device = {
+              id: updatedDevice.deviceId,
+              name: updatedDevice.name || existingDevice.name,
+              type: updatedDevice.deviceType || existingDevice.type,
+              address: updatedDevice.address || existingDevice.address,
+              port: updatedDevice.port ?? existingDevice.port,
+              lastSeen: updatedDevice.lastSeen || existingDevice.lastSeen,
+              online: updatedDevice.online !== false,
+              connected: updatedDevice.hasValidCredential === true,
+              enabled: existingDevice.enabled,
+              blueLedStatus: updatedDevice.blueLedStatus || existingDevice.blueLedStatus,
+              ownerId: updatedDevice.ownerId
+            };
+
+            // Log significant changes
+            if (existingDevice.ownerId !== updated.ownerId) {
+              console.log(`[useDeviceDiscovery] Ownership changed for ${deviceId}: ${existingDevice.ownerId} -> ${updated.ownerId}`);
             }
-            
-            // Check if this is just a heartbeat update (only lastSeen changed)
-            // The update is a heartbeat ONLY if it has lastSeen but NO other significant fields
-            const isHeartbeatOnly = 
-              updatedDevice.lastSeen !== undefined &&
-              updatedDevice.online === undefined &&
-              updatedDevice.connected === undefined &&
-              !('ownerId' in updatedDevice) && // Check if ownerId field exists, not its value
-              updatedDevice.blueLedStatus === undefined &&
-              updatedDevice.address === undefined &&
-              updatedDevice.port === undefined;
-            
-            if (isHeartbeatOnly) {
-              // Just update lastSeen without triggering re-render
-              existingDevice.lastSeen = updatedDevice.lastSeen;
-              return prevDevices; // Return same array reference - no re-render
+            if (existingDevice.connected !== updated.connected) {
+              console.log(`[useDeviceDiscovery] Connection status changed for ${deviceId}: ${existingDevice.connected} -> ${updated.connected}`);
             }
-            
-            // Update existing device with changed properties
-            return prevDevices.map(device => {
-              if (device.id === deviceId) {
-                // Check if anything visual actually changed
-                const hasVisualChanges = 
-                  (updatedDevice.online !== undefined && device.online !== updatedDevice.online) ||
-                  (updatedDevice.hasValidCredential !== undefined && device.connected !== updatedDevice.hasValidCredential) ||
-                  ('ownerId' in updatedDevice && device.ownerId !== updatedDevice.ownerId) || // Check if ownerId field exists
-                  (updatedDevice.blueLedStatus !== undefined && device.blueLedStatus !== updatedDevice.blueLedStatus);
-                
-                if (!hasVisualChanges) {
-                  // Update in-place for non-visual changes
-                  device.lastSeen = updatedDevice.lastSeen ?? device.lastSeen;
-                  device.address = updatedDevice.address ?? device.address;
-                  device.port = updatedDevice.port ?? device.port;
-                  return device; // Return same object reference
-                }
-                
-                // Visual changes - create new object
-                const updated = {
-                  ...device,
-                  online: updatedDevice.online ?? device.online,
-                  // Only update connected status if hasValidCredential is explicitly provided
-                  connected: updatedDevice.hasValidCredential !== undefined
-                    ? updatedDevice.hasValidCredential
-                    : device.connected,
-                  // Never clear ownerId - only update if new value is defined
-                  ownerId: updatedDevice.ownerId ?? device.ownerId,
-                  blueLedStatus: updatedDevice.blueLedStatus ?? device.blueLedStatus,
-                  lastSeen: updatedDevice.lastSeen ?? device.lastSeen,
-                  address: updatedDevice.address ?? device.address,
-                  port: updatedDevice.port ?? device.port
-                };
-                
-                // Log significant changes (only if actually different)
-                if (device.ownerId !== updated.ownerId) {
-                  console.log(`[useDeviceDiscovery] Ownership changed for ${deviceId}: ${device.ownerId} -> ${updated.ownerId}`);
-                }
-                if (device.connected !== updated.connected) {
-                  console.log(`[useDeviceDiscovery] Connection status changed for ${deviceId}: ${device.connected} -> ${updated.connected}`);
-                }
-                if (device.blueLedStatus !== updated.blueLedStatus) {
-                  console.log(`[useDeviceDiscovery] LED status changed for ${deviceId}: ${device.blueLedStatus} -> ${updated.blueLedStatus}`);
-                }
-                
-                return updated;
-              }
-              return device;
-            });
+            if (existingDevice.online !== updated.online) {
+              console.log(`[useDeviceDiscovery] Online status changed for ${deviceId}: ${existingDevice.online} -> ${updated.online}`);
+            }
+
+            // Replace the device in the array
+            const newDevices = [...prevDevices];
+            newDevices[existingIndex] = updated;
+            return newDevices;
           });
         }
       },
