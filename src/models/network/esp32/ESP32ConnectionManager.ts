@@ -23,6 +23,8 @@ import { QuicVCConnectionManager } from '../QuicVCConnectionManager';
 import profiler from '@src/utils/performanceProfiler';
 import { createCryptoApiFromDefaultKeys, getDefaultKeys } from '@refinio/one.core/lib/keychain/keychain.js';
 import { DeviceDiscoveryModel } from '../DeviceDiscoveryModel';
+import { convertToMicrodata } from '@src/utils/microdataHelpers';
+import type { LEDControlCommand } from '@src/types/device-control-recipes';
 
 const debug = Debug('one:esp32:connection');
 
@@ -40,10 +42,11 @@ export interface ESP32Device {
 }
 
 export interface ESP32Command {
-  type: 'led_control' | 'status' | 'config' | 'data';
+  type: 'led_control' | 'status' | 'config' | 'data' | 'ping';
   command: string;
   deviceId: string;
   timestamp: number;
+  action?: string;  // For LED control: 'blue_on', 'blue_off', 'toggle', 'blink'
   data?: any;
   manual?: boolean;  // For LED control commands
 }
@@ -154,26 +157,28 @@ export class ESP32ConnectionManager {
     // Listen for LED responses from QUIC-VC STREAM frames
     this.quicVCManager.onLEDResponse.listen((deviceId: string, response: any) => {
       console.log(`[ESP32ConnectionManager] Received LED response via QUIC-VC for ${deviceId}:`, response);
-      
+
       // Check if we have a pending command for this request
       if (response.requestId && this.pendingCommands.has(response.requestId)) {
         const pending = this.pendingCommands.get(response.requestId)!;
         clearTimeout(pending.timeout);
         this.pendingCommands.delete(response.requestId);
-        
-        // Create proper response
+
+        // ESP32 sends microdata format with 'state' field (not 'blue_led')
         const esp32Response: ESP32Response = {
           type: 'response',
           status: 'success',
-          message: response.message || 'LED command executed',
-          timestamp: Date.now(),
+          message: 'LED command executed',
+          timestamp: response.timestamp || Date.now(),
+          requestId: response.requestId,
+          command: 'led_control',
           data: {
-            deviceId,
-            blue_led: response.blue_led,
-            manual_control: response.manual_control
+            deviceId: response.deviceId || deviceId,
+            state: response.state,
+            timestamp: response.timestamp
           }
         };
-        
+
         pending.resolve(esp32Response);
         console.log(`[ESP32ConnectionManager] Resolved LED command ${response.requestId} with success`);
       }
@@ -690,22 +695,43 @@ export class ESP32ConnectionManager {
     }
     
     profiler.checkpoint('Creating command packet');
-    
-    // Create command packet with our VC for authentication
-    const commandPacket = {
+
+    // ESP32 expects microdata HTML, not JSON
+    // Convert command to LEDControlCommand object and then to microdata
+    // ESP32 supports: 'on', 'off', 'toggle', 'blink', 'status'
+    let ledState: string;
+    if (command.action === 'blue_on' || command.action === 'on') {
+      ledState = 'on';
+    } else if (command.action === 'blue_off' || command.action === 'off') {
+      ledState = 'off';
+    } else if (command.action === 'toggle') {
+      ledState = 'toggle';
+    } else if (command.action === 'blink') {
+      ledState = 'blink';
+    } else if (command.action === 'status') {
+      ledState = 'status';
+    } else {
+      // Default to 'off' for unknown actions
+      console.warn(`[ESP32ConnectionManager] Unknown LED action: ${command.action}, defaulting to 'off'`);
+      ledState = 'off';
+    }
+
+    const ledCommand: LEDControlCommand = {
+      $type$: 'LEDControlCommand',
+      deviceId: deviceId,
+      state: ledState,
+      timestamp: Date.now(),
       requestId,
-      command,
-      issuer: this.ownPersonId,  // ESP32 expects 'issuer' field
-      timestamp: Date.now()
+      issuer: this.ownPersonId
     };
-    
-    // Create JSON for the command
-    const packetJson = JSON.stringify(commandPacket);
-    debug(`Command packet JSON: ${packetJson}`);
+
+    // Convert to microdata HTML format
+    const microdataHtml = convertToMicrodata(ledCommand);
+    debug(`LED Command Microdata: ${microdataHtml.substring(0, 200)}...`);
     debug(`RequestId included: ${requestId}`);
-    
-    // Prepare JSON bytes for the command (used in both QUIC-VC and error paths)
-    const jsonBytes = new TextEncoder().encode(packetJson);
+
+    // Prepare microdata bytes for transmission
+    const microdataBytes = new TextEncoder().encode(microdataHtml);
     
     try {
       // ESP32 expects STREAM frames (type 0x08) in PROTECTED packets for LED control
@@ -724,19 +750,15 @@ export class ESP32ConnectionManager {
         debug(`Sending LED command as QUIC-VC STREAM frame to ${deviceId}`);
         console.log(`[ESP32ConnectionManager] Using QUIC-VC connection for LED command to ${deviceId}`);
         
-        // Create STREAM frame with proper header:
-        // [frame_type(1)][frame_length(2)][stream_id(1)][data(N)]
+        // Create STREAM frame with RFC 9000 format:
+        // [frame_type(1)][stream_id(varint)][data(N)]
         // Frame type: 0x08 (STREAM)
-        // Frame length: stream_id + data length
-        // Stream ID: 0x01 (LED control stream)
-        const framePayloadLength = 1 + jsonBytes.length; // stream_id + data
-        const frameBuffer = new ArrayBuffer(3 + framePayloadLength);
+        // Stream ID: 3 (LED control stream as per ESP32 spec, encoded as varint)
+        const frameBuffer = new ArrayBuffer(2 + microdataBytes.length);
         const frame = new Uint8Array(frameBuffer);
         frame[0] = 0x08; // STREAM frame type
-        frame[1] = (framePayloadLength >> 8) & 0xFF; // Frame length high byte
-        frame[2] = framePayloadLength & 0xFF; // Frame length low byte
-        frame[3] = 0x01; // Stream ID 1 for LED control
-        frame.set(jsonBytes, 4); // JSON data starts at byte 4
+        frame[1] = 0x03; // Stream ID 3 as varint (single byte for values < 64)
+        frame.set(microdataBytes, 2); // Microdata HTML starts at byte 2
         
         // Send through QuicVCConnectionManager
         await this.quicVCManager.sendProtectedFrame?.(deviceId, frame);
@@ -761,12 +783,12 @@ export class ESP32ConnectionManager {
             if (establishedConnection) {
               console.log(`[ESP32ConnectionManager] Connection established! Proceeding with LED command.`);
               // Retry the command now that connection is established
-              const frameBuffer = new ArrayBuffer(2 + jsonBytes.length);
+              const frameBuffer = new ArrayBuffer(2 + microdataBytes.length);
               const frame = new Uint8Array(frameBuffer);
               frame[0] = 0x08; // STREAM frame type
-              frame[1] = 0x01; // Stream ID 1 for LED control
-              frame.set(jsonBytes, 2);
-              
+              frame[1] = 0x03; // Stream ID 3 as varint
+              frame.set(microdataBytes, 2);
+
               await this.quicVCManager.sendProtectedFrame?.(deviceId, frame);
               debug(`Sent LED command as QUIC-VC STREAM frame after waiting for establishment`);
             } else {
@@ -1175,29 +1197,13 @@ export class ESP32ConnectionManager {
         return; // Important: return early to avoid duplicate handling
       }
       
-      // Handle ownership removal acknowledgment
+      // Handle ownership removal acknowledgment (DEPRECATED - kept for backward compatibility)
+      // NOTE: Current ESP32 firmware does NOT send this ACK
+      // We rely on discovery broadcasts with "unclaimed" status as implicit acknowledgment
       if (message.type === 'ownership_remove_ack') {
         const deviceId = message.device_id || message.deviceId;
 
-        // NOTE: We DO accept ownership_remove_ack from blocklisted devices
-        // This is the ONE exception - we need this ACK to complete the release flow
-        // However, we still validate it came from the device we're releasing
-        const pendingRemoval = this.pendingOwnershipRemovals.get(deviceId);
-        if (!pendingRemoval) {
-          console.warn(`[ESP32ConnectionManager] SECURITY: Received unexpected ownership_remove_ack from ${deviceId} (not pending removal)`);
-          return;
-        }
-
-        console.log(`[ESP32ConnectionManager] Received ownership removal acknowledgment from device ${deviceId}`);
-
-        // Resolve the pending ownership removal Promise
-        const pending = this.pendingOwnershipRemovals.get(deviceId);
-        if (pending) {
-          clearTimeout(pending.timeout);
-          this.pendingOwnershipRemovals.delete(deviceId);
-          pending.resolve();
-          console.log(`[ESP32ConnectionManager] Resolved ownership removal Promise for ${deviceId}`);
-        }
+        console.log(`[ESP32ConnectionManager] Received ownership_remove_ack from ${deviceId} (legacy behavior)`);
 
         // Update device state
         const device = this.connectedDevices.get(deviceId);
@@ -1659,7 +1665,9 @@ export class ESP32ConnectionManager {
     }
   }
 
-  // Pending ownership removal acknowledgments
+  // DEPRECATED: Pending ownership removal acknowledgments (no longer used)
+  // We now rely on discovery broadcasts with "unclaimed" status as implicit ACK
+  // Kept for potential backward compatibility but not actively managed
   private pendingOwnershipRemovals: Map<string, {
     resolve: () => void,
     reject: (error: Error) => void,
@@ -1725,16 +1733,6 @@ export class ESP32ConnectionManager {
       debug(`Sending ownership removal command to ${deviceId} at ${deviceAddress}:${devicePort}`);
       console.log(`[ESP32ConnectionManager] Sending ownership_remove command to ${deviceId}:`, removalCommand);
 
-      // Create Promise to wait for acknowledgment
-      const ackPromise = new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          this.pendingOwnershipRemovals.delete(deviceId);
-          reject(new Error(`Timeout waiting for ownership_remove_ack from ${deviceId}`));
-        }, 5000); // 5 second timeout
-
-        this.pendingOwnershipRemovals.set(deviceId, { resolve, reject, timeout });
-      });
-
       // Send as service type 2 (credential service) packet
       const jsonStr = JSON.stringify(removalCommand);
       const jsonBytes = new TextEncoder().encode(jsonStr);
@@ -1754,10 +1752,12 @@ export class ESP32ConnectionManager {
       debug(`Ownership removal command sent to ${deviceId}`);
       console.log(`[ESP32ConnectionManager] Sent ownership_remove to ${deviceId} at ${deviceAddress}:${devicePort}`);
 
-      // Wait for acknowledgment from ESP32
-      console.log(`[ESP32ConnectionManager] Waiting for ownership_remove_ack from ${deviceId}...`);
-      await ackPromise;
-      console.log(`[ESP32ConnectionManager] Received ownership_remove_ack, proceeding with connection cleanup`);
+      // NOTE: We do NOT wait for an explicit ownership_remove_ack because:
+      // 1. ESP32 firmware deliberately does not send ACK to avoid QUIC parsing conflicts
+      // 2. The ESP32 sends an immediate discovery broadcast with "unclaimed" status
+      // 3. DeviceDiscoveryModel will detect this broadcast and update device state
+      // 4. This approach is more reliable as discovery is the source of truth
+      console.log(`[ESP32ConnectionManager] Ownership removal sent - device will broadcast unclaimed status`);
 
       // Close QUIC-VC connection so we can reclaim fresh
       // CRITICAL: Pass address/port to ensure we close the correct connection
