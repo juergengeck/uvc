@@ -322,7 +322,7 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
    */
   async getAllRooms(): Promise<Array<{ hash: SHA256Hash; room: Room }>> {
     console.log('[OrganisationModel] getAllRooms called, state:', this.currentState);
-    
+
     if (this.currentState !== 'Initialised' || !this.organisationsChannelId) {
       console.warn('[OrganisationModel] Not ready for rooms query');
       return [];
@@ -333,31 +333,50 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
         channelId: this.organisationsChannelId,
         type: 'Room'
       });
-      
+
       console.log('[OrganisationModel] Found', results?.length || 0, 'rooms from channel');
-      
+
       // getObjects returns channel entries with data field containing the hash
       const { getObject } = await import('@refinio/one.core/lib/storage-unversioned-objects.js');
-      
+
       const roomsWithHashes = [];
+      const seenRooms = new Map<string, { hash: SHA256Hash; room: Room; timestamp: number }>();
+
       for (const entry of results || []) {
         try {
           const roomHash = entry.dataHash || entry.data;
           const room = await getObject<Room>(roomHash);
-          
+
           if (room && room.$type$ === 'Room') {
             console.log('[OrganisationModel] Loaded room:', room.name, 'department:', room.department);
-            roomsWithHashes.push({
-              hash: roomHash,
-              room: room
-            });
+
+            // Use name+department as unique key (or add a unique ID field to Room if needed)
+            const uniqueKey = `${room.name}|${room.department}`;
+
+            // Keep only the most recent version (highest modified timestamp)
+            const existing = seenRooms.get(uniqueKey);
+            if (!existing || room.modified > existing.timestamp) {
+              seenRooms.set(uniqueKey, {
+                hash: roomHash,
+                room: room,
+                timestamp: room.modified
+              });
+            }
           }
         } catch (error) {
           console.warn('[OrganisationModel] Error loading room:', error);
         }
       }
-      
-      console.log('[OrganisationModel] Returning', roomsWithHashes.length, 'rooms total');
+
+      // Convert map to array
+      for (const entry of seenRooms.values()) {
+        roomsWithHashes.push({
+          hash: entry.hash,
+          room: entry.room
+        });
+      }
+
+      console.log('[OrganisationModel] Returning', roomsWithHashes.length, 'unique rooms (deduplicated from', results?.length || 0, 'channel entries)');
       return roomsWithHashes;
     } catch (error) {
       console.error('[OrganisationModel] ❌ Error getting rooms:', error);

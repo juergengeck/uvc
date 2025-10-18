@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL RULES
+
+**NEVER WORK IN OR REFERENCE `/Users/gecko/src/flexibel.electron`**
+
+This project is `/Users/gecko/src/uvc`. All code is here. ESP32 code is at `packages/one.core.expo/src/system/esp32/esp32-quicvc-project/`.
+
 ## Project Identity
 
 **uvc.one** - A secure, local-first messaging application built on the ONE platform. P2P communication with end-to-end encryption, local AI processing, and cross-device sync without cloud dependencies.

@@ -704,30 +704,34 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
         console.error('[initModel] ❌ Failed to setup DeviceDiscoveryModel journal channel:', error);
       }
     });
-      
-      // Defer app journal initialization to avoid loading all historical entries during startup
-      console.log('[initModel] 📱 Deferring app journal initialization...');
 
-      deferUntilAfterRender(async () => {
-        console.log('[initModel] 📱 Initializing app journal (deferred)...');
-        const { initializeAppJournal, logAppStart } = await import('../utils/appJournal');
-        const journalChannelId = `app-lifecycle-journal-${personId}`;
-        
-        try {
-          // Create or get the app journal channel
-          await channelManager.createChannel(journalChannelId, personId);
-        } catch (error) {
-          if (!error.message?.includes('already exists')) {
-            console.error('[initModel] Error creating app journal channel:', error);
-          }
+      // Initialize app journal immediately (but don't block on channel history loading)
+      console.log('[initModel] 📱 Initializing app journal...');
+      const { initializeAppJournal, logAppStart } = await import('../utils/appJournal');
+      const journalChannelId = `app-lifecycle-journal-${personId}`;
+
+      try {
+        // Create or get the app journal channel
+        await channelManager.createChannel(journalChannelId, personId);
+      } catch (error) {
+        if (!error.message?.includes('already exists')) {
+          console.error('[initModel] Error creating app journal channel:', error);
         }
-        
-        initializeAppJournal(channelManager, journalChannelId, personId);
-        
-        // Log app start
-        const startupTime = Date.now() - (global.APP_START_TIME || Date.now());
-        await logAppStart(startupTime);
-        console.log('[initModel] ✅ App journal initialized and app start logged (deferred)');
+      }
+
+      // Initialize immediately so screen tracking works
+      initializeAppJournal(channelManager, journalChannelId, personId);
+      console.log('[initModel] ✅ App journal initialized');
+
+      // Defer app start logging to avoid blocking
+      deferUntilAfterRender(async () => {
+        try {
+          const startupTime = Date.now() - (global.APP_START_TIME || Date.now());
+          await logAppStart(startupTime);
+          console.log('[initModel] ✅ App start logged (deferred)');
+        } catch (error) {
+          console.error('[initModel] Error logging app start:', error);
+        }
       });
       
       // Initialize DeviceDiscoveryModel core dependencies immediately

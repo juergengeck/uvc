@@ -19,14 +19,14 @@ import {
  * @returns Participant information with loading and error states
  */
 export function useTopicParticipants(topicId: string | null) {
-    const appModel = useAppModel();
+    const { appModel } = useAppModel();
     const leuteModel = useLeuteModel();
     const topicModel = useTopicModel();
-    
+
     const [participantInfo, setParticipantInfo] = useState<TopicParticipantInfo | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
-    
+
     useEffect(() => {
         if (!topicId || !appModel || !leuteModel || !topicModel) {
             setParticipantInfo(null);

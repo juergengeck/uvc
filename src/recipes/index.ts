@@ -19,7 +19,7 @@ import AIRecipes, {
   AIResponseRecipe, 
   LocalAIConfigRecipe
 } from './AIRecipes';
-import { 
+import {
   TransportConfigRecipe,
   ConnectionInstanceRecipe
 } from './transport';
@@ -27,6 +27,13 @@ import { DiscoveryIDRecipe } from './DiscoveryID';
 import { VerifiableCredentialRecipe } from './VerifiableCredential';
 import { DeviceRecipe, DeviceSettingsRecipe, DeviceListRecipe } from './device';
 import { OrganisationRecipe, DepartmentRecipe, RoomRecipe } from './OrganisationalRecipes';
+import {
+  DeviceIdentityCredentialRecipe,
+  LEDControlCommandRecipe,
+  LEDStatusResponseRecipe,
+  DeviceDiscoveryInfoRecipe,
+  OwnershipRemovalCommandRecipe
+} from '../types/device-control-recipes';
 
 // Verify the recipe array
 console.log('[RECIPES] LLMSettingsRecipes array:', 
@@ -63,13 +70,20 @@ export const ALL_RECIPES: Recipe[] = [
   
   // Discovery
   DiscoveryIDRecipe,
-  
+
   // Device
   VerifiableCredentialRecipe,
   DeviceRecipe,
   DeviceSettingsRecipe,
   DeviceListRecipe,
-  
+
+  // Device Control Commands (QUIC-VC)
+  DeviceIdentityCredentialRecipe,
+  LEDControlCommandRecipe,
+  LEDStatusResponseRecipe,
+  DeviceDiscoveryInfoRecipe,
+  OwnershipRemovalCommandRecipe,
+
   // Organisational hierarchy
   OrganisationRecipe,
   DepartmentRecipe,
@@ -114,6 +128,11 @@ export {
   DeviceRecipe,
   DeviceSettingsRecipe,
   DeviceListRecipe,
+  DeviceIdentityCredentialRecipe,
+  LEDControlCommandRecipe,
+  LEDStatusResponseRecipe,
+  DeviceDiscoveryInfoRecipe,
+  OwnershipRemovalCommandRecipe,
   OrganisationRecipe,
   DepartmentRecipe,
   RoomRecipe

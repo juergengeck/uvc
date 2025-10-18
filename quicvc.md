@@ -3,6 +3,22 @@
 ## Overview
 QUICVC is a transport protocol based on QUIC (RFC 9000) that replaces TLS with Verifiable Credentials for authentication and security. This document outlines the architecture and implementation of the QUICVC stack, with initial focus on local device communications and ESP32 integration.
 
+### Key Design Principle: Microdata for Everything
+
+**All data in QUIC-VC is transmitted as ONE microdata** (HTML format with `itemscope`, `itemtype`, `itemprop` attributes):
+- **Credentials**: DeviceIdentityCredential objects in microdata format
+- **Commands**: Device commands (LED control, etc.) as microdata
+- **Responses**: Device status and responses as microdata
+- **Not JSON**: We do not use JSON for any protocol payloads
+
+**Why Microdata?**
+- Content-addressable: SHA-256 hash of microdata string uniquely identifies the object
+- Cryptographically verifiable: Deterministic format enables signing and verification
+- ONE platform native: Commands and credentials are first-class ONE objects
+- Type-safe: Recipe-based validation at both TypeScript and C levels
+
+This approach makes device communication fully integrated with the ONE platform's verifiable data model, enabling immutable audit trails, cryptographic proof of commands, and seamless storage/versioning of all device interactions.
+
 ## Implementation Status
 - ✅ **Phase 1 Complete**: Basic QUICVC implementation in TypeScript/React Native
 - ✅ VC-based handshake protocol
@@ -60,21 +76,26 @@ QUICVC maintains QUIC's packet format with modifications to the crypto layer:
 ### 3. Verifiable Credential Integration
 
 #### Credential Structure
-```json
-{
-  "id": "unique-credential-id",
-  "iss": "issuer-id",
-  "sub": "subject-id",
-  "dev": "device-id",
-  "typ": "device-type",
-  "mac": "device-mac",
-  "iat": 1234567890,
-  "exp": 1234567890,
-  "own": "ownership-type",
-  "prm": "permissions",
-  "prf": "cryptographic-proof"
-}
+
+Credentials are ONE objects in microdata format. All credential data is stored and transmitted as HTML microdata strings, making them content-addressable and verifiable:
+
+```html
+<div itemscope itemtype="//refin.io/DeviceIdentityCredential">
+  <span itemprop="id">unique-credential-id</span>
+  <a itemprop="issuer" data-type="id">dd005c5a25fac365f2d72a113a754a561a9a587530b5a2f1d1ae0ec3874cf5c3</a>
+  <a itemprop="subject" data-type="id">a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890</a>
+  <span itemprop="deviceId">device-id</span>
+  <span itemprop="deviceType">device-type</span>
+  <span itemprop="deviceMAC">device-mac</span>
+  <span itemprop="issuedAt">1234567890</span>
+  <span itemprop="expiresAt">1234567890</span>
+  <span itemprop="ownership">ownership-type</span>
+  <span itemprop="permissions">permissions</span>
+  <span itemprop="proof">cryptographic-proof</span>
+</div>
 ```
+
+The microdata string's SHA-256 hash serves as the credential's unique identifier. Use `convertObjToMicrodata()` from `one.core` to convert JavaScript objects to microdata, and `convertMicrodataToObject()` to parse microdata strings back to objects.
 
 #### Authentication Flow
 
@@ -183,6 +204,585 @@ For Phase 1:
 - Proxy capabilities for non-QUICVC endpoints
 - Protocol version management
 
+## Protocol Abstraction Layer
+
+### @refinio/quicvc-protocol Package
+
+Located at `packages/quicvc-protocol/`, this package provides RFC 9000 compliant packet and frame abstractions for QUIC-VC, ensuring consistency between TypeScript and ESP32 C implementations.
+
+#### Architecture
+
+```
+@refinio/quicvc-protocol
+├── src/
+│   ├── constants.ts       # QUIC & QUIC-VC constants
+│   ├── varint.ts          # RFC 9000 variable-length integers
+│   ├── packet.ts          # Packet header builders/parsers
+│   ├── frames.ts          # Standard QUIC frames
+│   ├── vc-frames.ts       # QUIC-VC specific frames
+│   └── index.ts           # Public API
+├── codegen/
+│   └── generate-c-headers.ts  # C header generator
+└── c-headers/             # Generated C files
+    ├── quicvc_protocol.h
+    └── quicvc_protocol.c
+```
+
+#### Key Features
+
+1. **Single Source of Truth**: Protocol defined once in TypeScript, used everywhere
+2. **RFC 9000 Compliance**: Proper QUIC packet structure with variable-length integers
+3. **QUIC-VC Extensions**: VC-specific frames (VC_INIT, VC_RESPONSE, etc.)
+4. **C Header Generation**: TypeScript definitions automatically generate matching C headers
+5. **Cross-platform**: Works on React Native, ESP32, Node.js, Web
+
+#### Constants and Types
+
+##### Packet Types (RFC 9000)
+```typescript
+export const QUIC_VERSION_1 = 0x00000001;
+
+export enum QuicPacketType {
+  INITIAL = 0x00,      // Initial packet (VC handshake)
+  HANDSHAKE = 0x02,    // Handshake packet
+  ONE_RTT = 0x04       // Protected 1-RTT packet (short header)
+}
+```
+
+##### QUIC-VC Frame Types
+```typescript
+export enum QuicVCFrameType {
+  // QUIC-VC specific frames
+  VC_INIT = 0x10,      // Replaces CRYPTO+TLS ClientHello
+  VC_RESPONSE = 0x11,  // Replaces CRYPTO+TLS ServerHello
+  VC_ACK = 0x12,       // VC handshake acknowledgment
+  DISCOVERY = 0x01,    // Device discovery (uses PING semantics)
+  HEARTBEAT = 0x20     // Keep-alive with optional status
+}
+
+export enum QuicFrameType {
+  // Standard QUIC frames (RFC 9000)
+  PADDING = 0x00,
+  PING = 0x01,
+  ACK = 0x02,
+  STREAM = 0x08,
+  CONNECTION_CLOSE = 0x1c
+}
+```
+
+#### Variable-Length Integers (RFC 9000 Section 16)
+
+QUIC uses variable-length encoding for integers to save space:
+
+```typescript
+// Encode integer to 1, 2, 4, or 8 bytes
+export function encodeVarint(value: bigint): Uint8Array
+
+// Decode variable-length integer
+export function decodeVarint(data: Uint8Array, offset: number): {
+  value: bigint;
+  bytesRead: number
+}
+
+// Get required size for encoding
+export function getVarintSize(value: bigint): number
+```
+
+**Encoding Format**:
+- First 2 bits indicate length: `00`=1 byte, `01`=2 bytes, `10`=4 bytes, `11`=8 bytes
+- Remaining bits encode the value in network byte order (big-endian)
+- Maximum values: 63, 16383, 1073741823, 4611686018427387903
+
+#### Packet Builders
+
+##### Long Header Packet (INITIAL, HANDSHAKE)
+
+```typescript
+export interface QuicLongHeader {
+  type: 'long';
+  packetType: number;        // INITIAL, HANDSHAKE, etc.
+  version: number;           // QUIC version (0x00000001)
+  dcid: Uint8Array;          // Destination Connection ID
+  scid: Uint8Array;          // Source Connection ID
+  packetNumber: bigint;      // Packet number
+  packetNumberLength: number; // 1, 2, or 4 bytes
+  token?: Uint8Array;        // Optional token (INITIAL packets only)
+}
+
+export function buildLongHeaderPacket(
+  header: QuicLongHeader,
+  payload: Uint8Array
+): Uint8Array
+```
+
+**Long Header Format** (RFC 9000 Section 17.2):
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+
+|1|1|T T|X X X X|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         Version (32)                          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| DCID Len (8)  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|               Destination Connection ID (0..160)            ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| SCID Len (8)  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                 Source Connection ID (0..160)               ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+**Packet Type-Specific Fields** (RFC 9000):
+
+**INITIAL Packets** (Section 17.2.2):
+```
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    Token Length (i)                         ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                          Token (*)                          ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         Length (i)                          ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    Packet Number (8..32)                    ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Packet Payload (*)                   ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+**HANDSHAKE Packets** (Section 17.2.4):
+```
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         Length (i)                          ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    Packet Number (8..32)                    ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Packet Payload (*)                   ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+**Key Differences**:
+- **INITIAL** has Token Length + Token fields (for address validation)
+- **HANDSHAKE** has no Token fields
+- **Both** have Length field (varint encoding packet number + payload length)
+- **Both** have Packet Number field (1-4 bytes, length encoded in first byte bits 0-1)
+
+##### Short Header Packet (PROTECTED, 1-RTT)
+
+```typescript
+export interface QuicShortHeader {
+  type: 'short';
+  dcid: Uint8Array;          // Destination Connection ID
+  packetNumber: bigint;      // Packet number
+  packetNumberLength: number; // 1, 2, or 4 bytes
+}
+
+export function buildShortHeaderPacket(
+  header: QuicShortHeader,
+  payload: Uint8Array
+): Uint8Array
+```
+
+**Short Header Format** (RFC 9000 Section 17.3):
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+
+|0|1|S|R|R|K|P P|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|               Destination Connection ID (0..160)            ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Packet Number (8/16/32)                 ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Protected Payload (*)                   ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+#### Packet Parser
+
+```typescript
+export function parsePacketHeader(packet: Uint8Array): {
+  header: QuicLongHeader | QuicShortHeader;
+  headerLength: number;
+  payload: Uint8Array;
+}
+```
+
+Parses QUIC-VC packets according to RFC 9000 format, distinguishing between long and short headers based on the first bit.
+
+#### Frame Classes
+
+##### STREAM Frame (RFC 9000 Section 19.8)
+
+```typescript
+export class StreamFrame {
+  constructor(
+    public streamId: bigint,
+    public data: Uint8Array,
+    public offset: bigint = 0n,
+    public fin: boolean = false
+  ) {}
+
+  serialize(): Uint8Array;
+  static parse(data: Uint8Array, offset: number): StreamFrame;
+}
+```
+
+**STREAM Frame Format**:
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+
+|0|0|0|0|1|F|L|O|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         Stream ID (i)                       ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         [Offset (i)]                        ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         [Length (i)]                        ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Stream Data (*)                      ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+Flags: `F`=FIN, `L`=Length present, `O`=Offset present
+
+##### VC_INIT Frame (QUIC-VC Extension)
+
+The VC_INIT frame carries credential microdata. Instead of JSON, it transmits the microdata string representing the ONE object:
+
+```typescript
+export class VCInitFrame {
+  constructor(
+    public credentialMicrodata: string,  // HTML microdata string
+    public challenge: string,
+    public timestamp: number
+  ) {}
+
+  serialize(): Uint8Array {
+    // Serialize microdata string to UTF-8 bytes
+    const microdataBytes = new TextEncoder().encode(this.credentialMicrodata);
+    const challengeBytes = new TextEncoder().encode(this.challenge);
+
+    // Frame format: [frame_type(1)] [microdata_len(varint)] [microdata] [challenge_len(varint)] [challenge] [timestamp(8)]
+    // ...
+  }
+
+  static parse(data: Uint8Array, offset: number): VCInitFrame {
+    // Parse frame to extract microdata string
+    // Use convertMicrodataToObject() to validate and extract credential
+    // ...
+  }
+}
+
+// TypeScript object representation (for convenience)
+export interface DeviceIdentityCredential {
+  $type$: 'DeviceIdentityCredential';
+  id: string;           // Credential ID
+  issuer: string;       // Issuer person ID (SHA256IdHash)
+  subject: string;      // Subject person ID (SHA256IdHash)
+  deviceId: string;     // Device identifier
+  deviceType: string;   // Device type
+  deviceMAC: string;    // Device MAC address
+  issuedAt: number;     // Unix timestamp
+  expiresAt: number;    // Unix timestamp
+  ownership: string;    // Ownership type
+  permissions: string;  // Permission string
+  proof: string;        // Cryptographic proof
+}
+```
+
+##### VC_RESPONSE Frame (QUIC-VC Extension)
+
+The VC_RESPONSE frame also carries credential microdata:
+
+```typescript
+export class VCResponseFrame {
+  constructor(
+    public credentialMicrodata: string,  // HTML microdata string
+    public challenge: string,            // Server's challenge
+    public ackChallenge: string,         // Acknowledgment of client's challenge
+    public timestamp: number
+  ) {}
+
+  serialize(): Uint8Array {
+    // Serialize microdata string and response data to UTF-8 bytes
+    const microdataBytes = new TextEncoder().encode(this.credentialMicrodata);
+    const challengeBytes = new TextEncoder().encode(this.challenge);
+    const ackChallengeBytes = new TextEncoder().encode(this.ackChallenge);
+
+    // Frame format: [frame_type(1)] [microdata_len(varint)] [microdata] [challenge_len(varint)] [challenge] [ack_challenge_len(varint)] [ack_challenge] [timestamp(8)]
+    // ...
+  }
+
+  static parse(data: Uint8Array, offset: number): VCResponseFrame {
+    // Parse frame to extract microdata string
+    // Use convertMicrodataToObject() to validate and extract credential
+    // ...
+  }
+}
+```
+
+##### Other Frames
+
+- `AckFrame`: Acknowledge received packets (RFC 9000)
+- `ConnectionCloseFrame`: Graceful connection termination (RFC 9000)
+- `PingFrame`: Connection keep-alive (RFC 9000)
+- `PaddingFrame`: Packet padding (RFC 9000)
+- `VCAckFrame`: Acknowledge VC handshake (QUIC-VC)
+- `DiscoveryFrame`: Device discovery (QUIC-VC)
+- `HeartbeatFrame`: Connection heartbeat with status (QUIC-VC)
+
+#### C Header Generation
+
+The protocol definitions are automatically converted to C headers for ESP32:
+
+```bash
+cd packages/quicvc-protocol
+npm run build
+node codegen/generate-c-headers.ts
+```
+
+**Generated C Constants** (matching TypeScript):
+```c
+// Packet Types
+#define QUICVC_PACKET_TYPE_INITIAL    0x00
+#define QUICVC_PACKET_TYPE_HANDSHAKE  0x02
+#define QUICVC_PACKET_TYPE_ONE_RTT    0x04
+
+// Frame Types
+#define QUICVC_FRAME_VC_INIT      0x10
+#define QUICVC_FRAME_VC_RESPONSE  0x11
+#define QUICVC_FRAME_STREAM       0x08
+#define QUICVC_FRAME_HEARTBEAT    0x20
+
+// Variable-length integer functions
+uint8_t quicvc_encode_varint(uint64_t value, uint8_t *out, size_t out_size);
+quicvc_varint_result_t quicvc_decode_varint(const uint8_t *data, size_t data_len);
+```
+
+#### Usage Example
+
+##### TypeScript (React Native)
+
+```typescript
+import {
+  buildShortHeaderPacket,
+  StreamFrame,
+  VCInitFrame,
+  QuicShortHeader
+} from '@refinio/quicvc-protocol';
+import { convertObjToMicrodata } from '@refinio/one.core';
+
+// Convert credential object to microdata
+const credentialMicrodata = convertObjToMicrodata(myDeviceCredential);
+
+// Create VC handshake packet with microdata
+const vcInitFrame = new VCInitFrame(
+  credentialMicrodata,  // Pass microdata string
+  challenge,
+  Date.now()
+);
+
+const header: QuicLongHeader = {
+  type: 'long',
+  packetType: QuicPacketType.INITIAL,
+  version: QUIC_VERSION_1,
+  dcid: destinationConnId,
+  scid: sourceConnId,
+  packetNumber: 0n,
+  packetNumberLength: 2
+};
+
+const packet = buildLongHeaderPacket(header, vcInitFrame.serialize());
+await udpSocket.send(packet, address, port);
+
+// Create device command as ONE object
+const ledControlCommand = {
+  $type$: 'LEDControlCommand',
+  deviceId: 'esp32-device-001',
+  action: 'set_state',
+  state: 'on',
+  timestamp: Date.now()
+};
+
+// Convert command to microdata
+const commandMicrodata = convertObjToMicrodata(ledControlCommand);
+
+// Create STREAM packet with microdata payload
+const streamFrame = new StreamFrame(
+  3n, // Stream ID
+  new TextEncoder().encode(commandMicrodata)  // Send microdata string
+);
+
+const protectedHeader: QuicShortHeader = {
+  type: 'short',
+  dcid: destinationConnId,
+  packetNumber: 1n,
+  packetNumberLength: 2
+};
+
+const protectedPacket = buildShortHeaderPacket(protectedHeader, streamFrame.serialize());
+await udpSocket.send(protectedPacket, address, port);
+```
+
+##### C (ESP32)
+
+```c
+#include "quicvc_protocol.h"
+#include "microdata_helpers.h"  // ESP32 microdata utilities
+
+// Build microdata for LED control command
+// Microdata format: <div itemscope itemtype="//refin.io/LEDControlCommand">...
+char microdata[512];
+int microdata_len = snprintf(microdata, sizeof(microdata),
+    "<div itemscope itemtype=\"//refin.io/LEDControlCommand\">"
+    "<span itemprop=\"deviceId\">%s</span>"
+    "<span itemprop=\"action\">%s</span>"
+    "<span itemprop=\"state\">%s</span>"
+    "<span itemprop=\"timestamp\">%lld</span>"
+    "</div>",
+    device_id, "set_state", "on", timestamp);
+
+// Build STREAM frame with microdata payload
+uint8_t frame[QUICVC_MAX_PACKET_SIZE];
+size_t frame_len = 0;
+
+// Frame type with LEN flag
+frame[frame_len++] = QUICVC_FRAME_STREAM | QUICVC_STREAM_LEN_BIT;
+
+// Stream ID (varint)
+frame_len += quicvc_encode_varint(3, &frame[frame_len], sizeof(frame) - frame_len);
+
+// Length (varint) - length of microdata string
+frame_len += quicvc_encode_varint(microdata_len, &frame[frame_len], sizeof(frame) - frame_len);
+
+// Payload - microdata string as UTF-8
+memcpy(&frame[frame_len], microdata, microdata_len);
+frame_len += microdata_len;
+
+// Build short header packet
+uint8_t packet[QUICVC_MAX_PACKET_SIZE];
+size_t offset = 0;
+
+// Short header flags: fixed bit + 2-byte packet number
+packet[offset++] = QUICVC_FIXED_BIT | 0x01;
+
+// DCID (8 bytes for ESP32)
+memcpy(&packet[offset], connection_id, 8);
+offset += 8;
+
+// Packet number (2 bytes, big-endian)
+packet[offset++] = 0x00;
+packet[offset++] = 0x01;
+
+// Frame payload
+memcpy(&packet[offset], frame, frame_len);
+offset += frame_len;
+
+// Send packet
+sendto(sock, packet, offset, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+
+// On receive, parse microdata:
+// char *received_microdata = (char *)payload;
+// Parse microdata to extract command fields
+// const char *action = extract_itemprop(received_microdata, "action");
+// const char *state = extract_itemprop(received_microdata, "state");
+```
+
+#### Benefits of Protocol Abstraction
+
+1. **No More Magic Numbers**: Self-documenting code with named constants
+2. **Type Safety**: TypeScript catches errors at compile time
+3. **Consistency**: TypeScript and C use identical packet formats
+4. **RFC 9000 Compliance**: Proper QUIC structure enables future interoperability
+5. **Maintainability**: Change protocol in one place, regenerate C headers
+6. **Testability**: Protocol logic can be unit tested independently
+
+### Benefits of Microdata for Device Communication
+
+#### Why Microdata Instead of JSON?
+
+QUIC-VC uses ONE microdata format (HTML with `itemscope`, `itemtype`, `itemprop` attributes) for all device communication instead of JSON. This provides several critical advantages:
+
+1. **Content Addressability**
+   - The SHA-256 hash of the microdata string uniquely identifies the object
+   - Commands, responses, and credentials can be referenced by their hash
+   - Enables immutable audit trails and verifiable command history
+   - Example: LED command hash = SHA256(microdata string)
+
+2. **Cryptographic Verification**
+   - Microdata format is deterministic - identical data always produces identical hash
+   - No ambiguity from JSON formatting (whitespace, key ordering, number representation)
+   - Commands can be signed and verified using the content hash
+   - Prevents tampering: any modification changes the hash
+
+3. **Type Safety and Validation**
+   - Object types are embedded in the microdata (`itemtype="//refin.io/LEDControlCommand"`)
+   - Recipe-based validation ensures correct structure
+   - Schema evolution without breaking changes
+   - Type checking at both TypeScript and C levels
+
+4. **ONE Platform Integration**
+   - Device commands, credentials, and responses are all ONE objects
+   - Can be stored in ONE storage using their content hash
+   - Full integration with ONE's versioning and identity system
+   - Credentials become first-class verifiable objects
+
+5. **Interoperability**
+   - Microdata is a W3C standard (HTML5 microdata)
+   - Human-readable for debugging (unlike binary formats)
+   - Language-agnostic: parseable in any language with string operations
+   - Future-proof: standard HTML parsing tools work
+
+6. **Security Benefits**
+   - Credentials cannot be modified without detection (hash changes)
+   - Command replay attacks are detectable (timestamp in content hash)
+   - Provenance tracking: who issued what command, when
+   - Non-repudiation: commands are signed with content hash
+
+#### Trade-offs
+
+**Size**: Microdata is ~3-5x larger than minimal JSON
+- LED command JSON: ~100 bytes
+- LED command microdata: ~400 bytes
+- Mitigation: Local network traffic, not bandwidth-constrained
+- ESP32 has sufficient flash (~600 KB free) for template strings
+
+**Parsing Complexity**: Microdata parsing is more complex than JSON
+- React Native: Use `convertMicrodataToObject()` from `one.core`
+- ESP32: Lightweight C parser using simple string operations
+- No need for full HTML parser - ONE microdata has strict format
+- Reference: `packages/one.core.expo/src/microdata-to-object.ts`
+
+**Performance**: Slightly slower than binary protocols
+- Local network latency dominates (WiFi ~1-2ms)
+- Parse time negligible compared to network time
+- Benefit: Deterministic hashing enables caching
+
+#### Example Comparison
+
+**JSON Approach (What We Don't Do)**:
+```json
+{"type":"led","state":"on","device":"esp32-001"}
+```
+- Not content-addressable
+- No built-in verification
+- Ambiguous encoding (key order, whitespace)
+- Not a ONE object
+
+**Microdata Approach (What We Use)**:
+```html
+<div itemscope itemtype="//refin.io/LEDControlCommand"><span itemprop="deviceId">esp32-001</span><span itemprop="action">set_state</span><span itemprop="state">on</span><span itemprop="timestamp">1234567890</span></div>
+```
+- Content hash: `SHA256(microdata) = a3f5b8c...`
+- Verifiable, immutable, and typed
+- Seamlessly integrates with ONE platform
+- Can be stored, versioned, and referenced by hash
+
+**Conclusion**: The size and parsing overhead are acceptable trade-offs for the security, verifiability, and ONE platform integration that microdata provides.
+
 ## Current Implementation (TypeScript/React Native)
 
 ### QuicVCConnectionManager
@@ -242,30 +842,28 @@ enum QuicVCFrameType {
 ### Connection Flow Implementation
 
 1. **Client Initiates** (INITIAL packet)
-   ```json
-   {
-     "type": "VC_INIT",
-     "credential": { /* DeviceIdentityCredential */ },
-     "challenge": "random-32-byte-hex",
-     "timestamp": 1234567890
-   }
-   ```
+   - VC_INIT frame contains:
+     - `credentialMicrodata`: Full HTML microdata string of DeviceIdentityCredential
+     - `challenge`: Random 32-byte hex string
+     - `timestamp`: Unix timestamp
+   - Example credential microdata (compacted to single line for transmission):
+     ```html
+     <div itemscope itemtype="//refin.io/DeviceIdentityCredential"><span itemprop="id">cred-123</span><a itemprop="issuer" data-type="id">dd005c5a25...</a>...</div>
+     ```
 
 2. **Server Responds** (HANDSHAKE packet)
-   ```json
-   {
-     "type": "VC_RESPONSE",
-     "credential": { /* Server's DeviceIdentityCredential */ },
-     "challenge": "server-challenge",
-     "ackChallenge": "client-challenge-ack",
-     "timestamp": 1234567891
-   }
-   ```
+   - VC_RESPONSE frame contains:
+     - `credentialMicrodata`: Server's DeviceIdentityCredential as microdata
+     - `challenge`: Server's challenge
+     - `ackChallenge`: Server's acknowledgment of client's challenge
+     - `timestamp`: Unix timestamp
+   - Server validates client credential using `convertMicrodataToObject()` and credential verification
 
 3. **Secure Communication** (PROTECTED packets)
    - All subsequent packets use derived application keys
    - Heartbeats maintain connection liveness
-   - Stream frames carry application data
+   - Stream frames carry application data as microdata strings
+   - Device commands and responses are ONE objects in microdata format
 
 ## Implementation Timeline
 
@@ -545,10 +1143,12 @@ esp_err_t quicvc_parse_packet(quicvc_connection_t *conn,
 ```typescript
 import { QuicVCConnectionManager } from '@src/models/network/QuicVCConnectionManager';
 import { VCManager } from '@src/models/network/vc/VCManager';
+import { convertObjToMicrodata, convertMicrodataToObject } from '@refinio/one.core';
 
-// Initialize QUICVC
+// Initialize QUICVC with credential as microdata
 const quicVC = QuicVCConnectionManager.getInstance(ownPersonId);
-await quicVC.initialize(vcManager, myDeviceCredential);
+const credentialMicrodata = convertObjToMicrodata(myDeviceCredential);
+await quicVC.initialize(vcManager, credentialMicrodata);
 
 // Connect to a device
 await quicVC.connect('esp32-device-001', '192.168.1.100', 49498);
@@ -558,26 +1158,38 @@ quicVC.onConnectionEstablished.listen((deviceId, vcInfo) => {
     console.log(`Connected to ${deviceId}, owner: ${vcInfo.issuerPersonId}`);
 });
 
-// Send data
-const command = { type: 'led_control', state: 'on' };
-await quicVC.sendData('esp32-device-001', 
-    new TextEncoder().encode(JSON.stringify(command))
+// Send device command as ONE object
+const ledCommand = {
+    $type$: 'LEDControlCommand',
+    deviceId: 'esp32-device-001',
+    action: 'set_state',
+    state: 'on',
+    timestamp: Date.now()
+};
+
+// Convert to microdata and send
+const commandMicrodata = convertObjToMicrodata(ledCommand);
+await quicVC.sendData('esp32-device-001',
+    new TextEncoder().encode(commandMicrodata)
 );
 
-// Handle incoming data
+// Handle incoming data - parse microdata
 quicVC.onPacketReceived.listen((deviceId, data) => {
-    const message = new TextDecoder().decode(data);
-    console.log(`Received from ${deviceId}: ${message}`);
+    const microdataString = new TextDecoder().decode(data);
+
+    // Parse microdata to ONE object
+    const responseObj = convertMicrodataToObject(microdataString);
+    console.log(`Received ${responseObj.$type$} from ${deviceId}:`, responseObj);
 });
 ```
 
 ### ESP32 Integration (Planned)
 ```c
-// Initialize QUICVC
+// Initialize QUICVC with credential microdata
 quicvc_config_t config = {
     .port = 49498,
     .device_id = "esp32-device-001",
-    .credential = &my_device_credential
+    .credential_microdata = my_device_credential_microdata  // Microdata string
 };
 quicvc_init(&config);
 
@@ -585,15 +1197,36 @@ quicvc_init(&config);
 quicvc_connection_t conn;
 if (quicvc_accept(&conn) == ESP_OK) {
     // Connection established after VC verification
-    printf("Connected to owner: %s\n", conn.remote_vc.issuer);
+    // Parse remote credential microdata to extract issuer
+    const char *issuer = extract_itemprop(conn.remote_credential_microdata, "issuer");
+    printf("Connected to owner: %s\n", issuer);
 }
 
-// Receive and process commands
-uint8_t buffer[1024];
-size_t len = sizeof(buffer);
-if (quicvc_recv(&conn, buffer, &len, 1000) == ESP_OK) {
-    // Process received data
-    process_command(buffer, len);
+// Receive and process commands (microdata payload)
+char microdata_buffer[1024];
+size_t len = sizeof(microdata_buffer);
+if (quicvc_recv(&conn, microdata_buffer, &len, 1000) == ESP_OK) {
+    // Parse microdata to extract command
+    const char *cmd_type = extract_itemtype(microdata_buffer);
+    const char *action = extract_itemprop(microdata_buffer, "action");
+    const char *state = extract_itemprop(microdata_buffer, "state");
+
+    // Process command
+    if (strcmp(cmd_type, "LEDControlCommand") == 0) {
+        process_led_command(action, state);
+    }
+
+    // Send response as microdata
+    char response_microdata[256];
+    snprintf(response_microdata, sizeof(response_microdata),
+        "<div itemscope itemtype=\"//refin.io/LEDStatusResponse\">"
+        "<span itemprop=\"deviceId\">%s</span>"
+        "<span itemprop=\"state\">%s</span>"
+        "<span itemprop=\"timestamp\">%lld</span>"
+        "</div>",
+        config.device_id, state, get_timestamp_ms());
+
+    quicvc_send(&conn, response_microdata, strlen(response_microdata));
 }
 ```
 

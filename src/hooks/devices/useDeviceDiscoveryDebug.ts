@@ -8,11 +8,11 @@ import { useEffect } from 'react';
 import { useAppModel } from '@src/hooks/useAppModel';
 
 export function useDeviceDiscoveryDebug() {
-  const appModel = useAppModel();
-  
+  const { appModel } = useAppModel();
+
   useEffect(() => {
     if (!appModel) return;
-    
+
     const transport = appModel.transportManager?.getTransport();
     if (!transport) return;
     

@@ -1,21 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
-import { 
-  Text, 
-  Appbar, 
-  List, 
-  RadioButton, 
-  Button, 
+import {
+  Text,
+  List,
+  RadioButton,
+  Button,
   Card,
-  ActivityIndicator,
-  Divider,
-  Portal,
-  Dialog,
-  TextInput
+  ActivityIndicator
 } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@src/providers/app/AppTheme';
 import { useAppModel } from '@src/hooks/useAppModel';
+import { useModelState } from '@src/hooks/useModelState';
 import type { Organisation, Department, Room } from '@OneObjectInterfaces';
 import type { SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
 
@@ -34,32 +30,37 @@ export default function RoomAssignmentScreen() {
     deviceName: string;
     deviceType: string;
   }>();
-  
+
   const { theme, styles: themedStyles } = useTheme();
-  const { appModel } = useAppModel();  // Destructure properly!
+  const { appModel } = useAppModel();
   const organisationModel = appModel?.organisationModel;
-  
+
+  // Use useModelState to wait for OrganisationModel to be ready
+  const { isReady: isOrgModelReady, isLoading: isOrgModelLoading } = useModelState(
+    organisationModel,
+    'OrganisationModel'
+  );
+
   const [selectedRoom, setSelectedRoom] = useState<SHA256Hash | null>(null);
   const [availableRooms, setAvailableRooms] = useState<RoomWithPath[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Load available rooms
+
+  // Load available rooms only when model is ready
   useEffect(() => {
     const loadRooms = async () => {
-      if (!organisationModel) {
-        console.error('[RoomAssignment] OrganisationModel not available - this should not happen!');
-        setIsLoading(false);
+      if (!isOrgModelReady || !organisationModel) {
+        setIsLoadingRooms(false);
         return;
       }
       
       try {
-        setIsLoading(true);
-        
+        setIsLoadingRooms(true);
+
         // Get all rooms from the model
         const rooms = await organisationModel.getAllRooms();
         console.log('[RoomAssignment] Loaded', rooms.length, 'rooms from model');
-        
+
         // Simply show all rooms with their names
         const simpleRooms = rooms.map(r => ({
           hash: r.hash,
@@ -68,20 +69,20 @@ export default function RoomAssignmentScreen() {
           organisation: null as any,
           path: r.room.name
         }));
-        
+
         // Sort by room name
         simpleRooms.sort((a, b) => a.room.name.localeCompare(b.room.name));
-        
+
         setAvailableRooms(simpleRooms);
       } catch (error) {
         console.error('[RoomAssignment] Error loading rooms:', error);
       } finally {
-        setIsLoading(false);
+        setIsLoadingRooms(false);
       }
     };
-    
+
     loadRooms();
-  }, [organisationModel]);
+  }, [isOrgModelReady, organisationModel]);
   
   const handleAssign = useCallback(async () => {
     if (!selectedRoom || !organisationModel) return;
@@ -114,17 +115,15 @@ export default function RoomAssignmentScreen() {
   
   
   
+  // Combined loading state: wait for model AND room data
+  const isLoading = isOrgModelLoading || isLoadingRooms;
+
   return (
     <View style={themedStyles?.container || { flex: 1, backgroundColor: theme?.colors?.background || '#fff' }}>
-      <Appbar.Header>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Assign to Room" />
-      </Appbar.Header>
-      
-      {!organisationModel ? (
+      {!isOrgModelReady || !organisationModel ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text variant="headlineSmall" style={{ color: theme?.colors?.error, marginBottom: 8 }}>System Error</Text>
-          <Text variant="bodyMedium" style={{ textAlign: 'center' }}>Organisation management is not available. Please restart the app.</Text>
+          <ActivityIndicator size="large" />
+          <Text style={{ marginTop: 16 }}>Loading organisation management...</Text>
         </View>
       ) : isLoading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -155,42 +154,14 @@ export default function RoomAssignmentScreen() {
               <Text variant="bodyMedium" style={{ marginTop: 8 }}>
                 Please create an organisation structure first before assigning devices to rooms.
               </Text>
-              <Text variant="bodySmall" style={{ marginTop: 8, color: theme.colors?.onSurfaceVariant }}>
-                Model exists: {organisationModel ? 'Yes' : 'No'}
-              </Text>
-              <Button 
-                mode="outlined" 
+              <Button
+                mode="contained"
                 onPress={() => {
-                  console.log('[RoomAssignment] Manual refresh triggered');
-                  setAvailableRooms([]); // Clear first
-                  // Trigger reload by toggling a state
-                  const loadRooms = async () => {
-                    if (!organisationModel) {
-                      console.log('[RoomAssignment] No model for manual refresh');
-                      return;
-                    }
-                    try {
-                      console.log('[RoomAssignment] Manual refresh: calling getAllRooms');
-                      const rooms = await organisationModel.getAllRooms();
-                      console.log('[RoomAssignment] Manual refresh: got', rooms.length, 'rooms');
-                      const simpleRooms = rooms.map(r => ({
-                        hash: r.hash,
-                        room: r.room,
-                        department: null as any,
-                        organisation: null as any,
-                        path: r.room.name
-                      }));
-                      simpleRooms.sort((a, b) => a.room.name.localeCompare(b.room.name));
-                      setAvailableRooms(simpleRooms);
-                    } catch (error) {
-                      console.error('[RoomAssignment] Manual refresh error:', error);
-                    }
-                  };
-                  loadRooms();
+                  router.push('/(screens)/devices/create-organisation');
                 }}
                 style={{ marginTop: 12 }}
               >
-                Refresh Rooms
+                Create Organisation
               </Button>
             </Card.Content>
           </Card>

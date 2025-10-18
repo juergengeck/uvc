@@ -17,7 +17,7 @@ export const SendInvite: React.FC<SendInviteProps> = ({ personId, onInviteSent }
   const [message, setMessage] = useState("I'd like to connect with you");
   const [title, setTitle] = useState("Contact Request");
   const [isSending, setIsSending] = useState(false);
-  const appModel = useAppModel();
+  const { appModel } = useAppModel();
 
   const handleSendInvite = async () => {
     if (!personId) {

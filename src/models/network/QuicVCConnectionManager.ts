@@ -32,6 +32,27 @@ import { createCryptoHash } from '@refinio/one.core/lib/system/crypto-helpers.js
 import * as expoCrypto from 'expo-crypto';
 import * as tweetnacl from 'tweetnacl';
 import Debug from 'debug';
+import { parseFromMicrodata } from '@src/utils/microdataHelpers';
+
+// QUIC-VC protocol abstractions
+import {
+    QuicPacketType,
+    QuicFrameType,
+    QuicVCFrameType,
+    buildLongHeaderPacket,
+    buildShortHeaderPacket,
+    parsePacketHeader as parseQuicPacketHeader,
+    VCInitFrame,
+    VCResponseFrame,
+    StreamFrame,
+    DiscoveryFrame,
+    HeartbeatFrame,
+    parseFrame,
+    decodeVarint,
+    encodeVarint,
+    type QuicLongHeader,
+    type QuicShortHeader
+} from '@refinio/quicvc-protocol';
 
 const debug = Debug('one:quic:vc:connection');
 
@@ -43,17 +64,7 @@ export enum QuicVCPacketType {
     RETRY = 0x03         // Retry with different parameters
 }
 
-// QUICVC frame types
-export enum QuicVCFrameType {
-    VC_INIT = 0x10,      // Client credential presentation
-    VC_RESPONSE = 0x11,  // Server credential response
-    VC_ACK = 0x12,       // Acknowledge VC exchange
-    STREAM = 0x08,       // Stream data (QUIC standard)
-    ACK = 0x02,          // Acknowledgment (QUIC standard)
-    HEARTBEAT = 0x20,    // Custom heartbeat frame
-    DISCOVERY = 0x30,    // Device discovery announcement
-    CONNECTION_CLOSE = 0x1C // Connection close frame
-}
+// QuicVCFrameType is now imported from @refinio/quicvc-protocol
 
 export interface QuicVCPacketHeader {
     type: QuicVCPacketType;
@@ -92,7 +103,8 @@ export interface QuicVCConnection {
     initialKeys: CryptoKeys | null;
     handshakeKeys: CryptoKeys | null;
     applicationKeys: CryptoKeys | null;
-    
+    sessionKey: Uint8Array | null;  // ESP32-style session key for XOR encryption
+
     // Service type handlers (embedded in STREAM frames)
     serviceHandlers: Map<number, (data: Uint8Array, deviceId: string) => void>;
     
@@ -122,14 +134,17 @@ export class QuicVCConnectionManager {
     private vcManager: VCManager | null = null;
     private ownPersonId: SHA256IdHash<Person>;
     private ownVC: DeviceIdentityCredential | null = null;
-    
+
     // Configuration
     private readonly QUICVC_PORT = 49497; // All QUICVC communication on this port
     private readonly QUICVC_VERSION = 0x00000001; // Version 1
     private readonly HANDSHAKE_TIMEOUT = 5000; // 5 seconds
     private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds (as per ESP32 spec)
     private readonly IDLE_TIMEOUT = 120000; // 2 minutes (as per ESP32 spec)
-    private readonly CONNECTION_ID_LENGTH = 16; // bytes
+    private readonly CONNECTION_ID_LENGTH = 8; // bytes (ESP32 uses 8-byte DCID in short headers)
+
+    // Encryption configuration (for debugging)
+    private static ENABLE_ENCRYPTION = true; // Set to false to disable encryption for debugging
     
     // Events
     public readonly onConnectionEstablished = new OEvent<(deviceId: string, vcInfo: VerifiedVCInfo) => void>();
@@ -139,6 +154,7 @@ export class QuicVCConnectionManager {
     public readonly onPacketReceived = new OEvent<(deviceId: string, data: Uint8Array) => void>();
     public readonly onError = new OEvent<(deviceId: string, error: Error) => void>();
     public readonly onLEDResponse = new OEvent<(deviceId: string, response: any) => void>();
+    public readonly onOwnershipRemovalAck = new OEvent<(deviceId: string, response: any) => void>();
     public readonly onDeviceDiscovered = new OEvent<(event: any) => void>();
     
     private constructor(ownPersonId: SHA256IdHash<Person>) {
@@ -280,14 +296,18 @@ export class QuicVCConnectionManager {
             initialKeys: null,
             handshakeKeys: null,
             applicationKeys: null,
+            sessionKey: null,  // Will be derived when connection is established
+            serviceHandlers: new Map(),
             handshakeTimeout: null,
             heartbeatInterval: null,
             idleTimeout: null,
             createdAt: Date.now(),
             lastActivity: Date.now()
         };
-        
-        const connId = this.getConnectionId(dcid);
+
+        // CRITICAL: Store connection by SCID (not DCID) because ESP32 will use our SCID as its DCID in responses
+        // This allows findConnectionByIds() to match incoming packets correctly
+        const connId = this.getConnectionId(scid);
         this.connections.set(connId, connection);
         console.log(`[QuicVCConnectionManager] Created connection ${connId} for ${deviceId} at ${address}:${port}`);
         console.log(`[QuicVCConnectionManager] Connection details: DCID=${Array.from(dcid).map(b => b.toString(16).padStart(2, '0')).join(' ')}, SCID=${Array.from(scid).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
@@ -364,6 +384,18 @@ export class QuicVCConnectionManager {
                 connection = this.findConnectionByAddress(rinfo.address, rinfo.port);
                 if (connection) {
                     console.log('[QuicVCConnectionManager] Found connection by address/port for ESP32 response');
+
+                    // CRITICAL: If this is an INITIAL packet with DISCOVERY frame and connection is ESTABLISHED,
+                    // this is likely a discovery broadcast AFTER ownership release.
+                    // Don't reuse the established connection - treat as fresh discovery.
+                    if (header.type === QuicVCPacketType.INITIAL && connection.state === 'established') {
+                        const payload = this.extractPayload(data, header);
+                        if (payload.length > 3 && payload[0] === 0x30) { // DISCOVERY frame
+                            console.log('[QuicVCConnectionManager] INITIAL packet with DISCOVERY frame on established connection - treating as fresh discovery broadcast');
+                            // Reset connection to null so it's handled as discovery without reusing established connection
+                            connection = null;
+                        }
+                    }
                 } else {
                     // console.log('[QuicVCConnectionManager] No connection found by address/port either');
                     // Log all existing connections for debugging
@@ -471,6 +503,7 @@ export class QuicVCConnectionManager {
             initialKeys: null,
             handshakeKeys: null,
             applicationKeys: null,
+            sessionKey: null,  // Will be derived when connection is established
             serviceHandlers: new Map(), // Initialize service handlers
             handshakeTimeout: null,
             heartbeatInterval: null,
@@ -514,7 +547,7 @@ export class QuicVCConnectionManager {
         }
 
         // Parse binary QUIC frames
-        const frames = this.parseFrames(payload);
+        const frames = this.parseFrames(payload, QuicVCPacketType.INITIAL);
         console.log('[QuicVCConnectionManager] Parsed frames:', frames.length, 'frames');
         if (frames.length === 0) {
             console.warn('[QuicVCConnectionManager] No frames found in INITIAL packet');
@@ -630,6 +663,14 @@ export class QuicVCConnectionManager {
             if (frame.owner) {
                 connection.remoteVC = { issuerPersonId: frame.owner } as any;
                 console.log('[QuicVCConnectionManager] Set connection.remoteVC to:', connection.remoteVC);
+
+                // Derive session key from owner Person ID for ESP32 encryption
+                try {
+                    connection.sessionKey = await this.deriveSessionKey(frame.owner);
+                    console.log('[QuicVCConnectionManager] Derived session key for ESP32 encryption');
+                } catch (error) {
+                    console.error('[QuicVCConnectionManager] Failed to derive session key:', error);
+                }
             } else {
                 console.warn('[QuicVCConnectionManager] No frame.owner in response, remoteVC will be null');
             }
@@ -652,6 +693,14 @@ export class QuicVCConnectionManager {
                 // Update connection state as if it was provisioned
                 connection.state = 'established';
                 connection.remoteVC = { issuerPersonId: storedOwner } as any;
+
+                // Derive session key from owner Person ID for ESP32 encryption
+                try {
+                    connection.sessionKey = await this.deriveSessionKey(storedOwner);
+                    console.log('[QuicVCConnectionManager] Derived session key for ESP32 encryption');
+                } catch (error) {
+                    console.error('[QuicVCConnectionManager] Failed to derive session key:', error);
+                }
 
                 // Complete handshake and emit onConnectionEstablished
                 this.completeHandshake(connection);
@@ -709,18 +758,18 @@ export class QuicVCConnectionManager {
                         status: json.s || 'online',
                         ownership: json.o || 'unclaimed'
                     };
-                } else if (contentString.startsWith('<!DOCTYPE html>')) {
-                    // Parse HTML microdata for device information (legacy - will be removed)
-                    const idMatch = contentString.match(/itemprop="id" content="([^"]+)"/);
-                    const typeMatch = contentString.match(/itemprop="type" content="([^"]+)"/);
+                } else if (contentString.startsWith('<!DOCTYPE html>') || contentString.startsWith('<html')) {
+                    // Parse HTML microdata for device information
+                    const deviceIdMatch = contentString.match(/itemprop="deviceId" content="([^"]+)"/);
+                    const deviceTypeMatch = contentString.match(/itemprop="deviceType" content="([^"]+)"/);
                     const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
                     const ownershipMatch = contentString.match(/itemprop="ownership" content="([^"]+)"/);
 
                     discoveryData = {
-                        id: idMatch ? idMatch[1] : '',
-                        type: typeMatch ? typeMatch[1] : 'unknown',
+                        id: deviceIdMatch ? deviceIdMatch[1] : '',
+                        type: deviceTypeMatch ? (deviceTypeMatch[1] === '1' ? 'ESP32' : deviceTypeMatch[1]) : 'ESP32',
                         status: statusMatch ? statusMatch[1] : 'online',
-                        ownership: ownershipMatch ? ownershipMatch[1] : 'unclaimed'
+                        ownership: ownershipMatch ? (ownershipMatch[1] === '0' ? 'unclaimed' : 'owned') : 'unclaimed'
                     };
                 }
 
@@ -753,15 +802,56 @@ export class QuicVCConnectionManager {
      */
     private async handleDiscoveryFrame(connection: QuicVCConnection | null, frame: any, rinfo: { address: string, port: number }): Promise<void> {
         console.log('[QuicVCConnectionManager] Processing DISCOVERY frame');
-        
-        // Parse the discovery data (ESP32 sends JSON in the frame payload)
+
+        // Parse the discovery data - supports both JSON and HTML microdata
+        // NEVER throw - gracefully handle malformed data
         try {
-            const discoveryData = typeof frame.payload === 'string' 
-                ? JSON.parse(frame.payload)
-                : JSON.parse(new TextDecoder().decode(frame.payload));
-            
+            const contentString = typeof frame.payload === 'string'
+                ? frame.payload
+                : new TextDecoder().decode(frame.payload);
+
+            let discoveryData: any = {};
+
+            // Try JSON first (new compact format)
+            if (contentString.startsWith('{')) {
+                try {
+                    const json = JSON.parse(contentString);
+                    discoveryData = {
+                        device_id: json.i || json.device_id || '',
+                        device_type: json.t === 'DevicePresence' ? 'ESP32' : (json.device_type || json.type || 'ESP32'),
+                        status: json.s || json.status || 'online',
+                        ownership: json.o || json.ownership || 'unclaimed'
+                    };
+                } catch (jsonError) {
+                    console.warn('[QuicVCConnectionManager] Discovery payload looks like JSON but failed to parse - ignoring');
+                    return; // Silent return - don't throw
+                }
+            } else if (contentString.startsWith('<!DOCTYPE html>') || contentString.startsWith('<html')) {
+                // Parse HTML microdata for device information
+                // Support both "id" and "deviceId" property names
+                const deviceIdMatch = contentString.match(/itemprop="(?:deviceId|id)" content="([^"]+)"/);
+                // Support both "type" and "deviceType" property names
+                const deviceTypeMatch = contentString.match(/itemprop="(?:deviceType|type)" content="([^"]+)"/);
+                const statusMatch = contentString.match(/itemprop="status" content="([^"]+)"/);
+                const ownershipMatch = contentString.match(/itemprop="ownership" content="([^"]+)"/);
+
+                discoveryData = {
+                    device_id: deviceIdMatch ? deviceIdMatch[1] : '',
+                    device_type: deviceTypeMatch ? (deviceTypeMatch[1] === '1' ? 'ESP32' : deviceTypeMatch[1]) : 'ESP32',
+                    status: statusMatch ? statusMatch[1] : 'online',
+                    // Support both numeric (0/1) and string (unclaimed/claimed/owned) formats
+                    ownership: ownershipMatch ?
+                        (ownershipMatch[1] === '0' || ownershipMatch[1] === 'unclaimed' ? 'unclaimed' : 'owned') :
+                        'unclaimed'
+                };
+            } else {
+                // Unknown format - silently ignore
+                console.log('[QuicVCConnectionManager] Discovery frame has unknown format - ignoring');
+                return; // Silent return - don't throw
+            }
+
             console.log('[QuicVCConnectionManager] Discovery data:', discoveryData);
-            
+
             // Extract device information
             const deviceInfo = {
                 deviceId: discoveryData.device_id || '',
@@ -774,12 +864,12 @@ export class QuicVCConnectionManager {
                 port: rinfo.port,
                 lastSeen: Date.now()
             };
-            
+
             // Update connection with device info if we have one
             if (connection) {
                 connection.deviceId = deviceInfo.deviceId;
             }
-            
+
             // Emit discovery event for the DeviceDiscoveryModel to handle
             this.onDeviceDiscovered.emit({
                 type: 'discovery',
@@ -796,6 +886,13 @@ export class QuicVCConnectionManager {
 
             if (deviceInfo.ownership === 'unclaimed' && connection) {
                 console.log('[QuicVCConnectionManager] Device is unclaimed, connection ready for claiming');
+                // If connection was previously established, clear session key since device has no owner
+                if (connection.state === 'established' && connection.sessionKey) {
+                    console.log('[QuicVCConnectionManager] Device became unclaimed - clearing session key and resetting state');
+                    connection.sessionKey = null;
+                    connection.state = 'initial';
+                    connection.remoteVC = null;
+                }
                 // Connection remains in 'initial' state until user claims via UI
             } else if (deviceInfo.ownership === 'claimed' && connection) {
                 // For claimed devices, authentication may be needed if we're the owner
@@ -804,7 +901,8 @@ export class QuicVCConnectionManager {
             }
 
         } catch (error) {
-            console.error('[QuicVCConnectionManager] Failed to parse discovery frame:', error);
+            // Silently handle all errors - never throw for malformed external data
+            console.warn('[QuicVCConnectionManager] Failed to process discovery frame - ignoring:', error.message || error);
         }
     }
     
@@ -846,7 +944,7 @@ export class QuicVCConnectionManager {
         const payload = this.extractPayload(data, header);
 
         // ESP32 sends frames in binary format, not JSON
-        const frames = this.parseFrames(payload);
+        const frames = this.parseFrames(payload, QuicVCPacketType.HANDSHAKE);
         console.log('[QuicVCConnectionManager] HANDSHAKE packet contains', frames.length, 'frames');
 
         if (frames.length === 0) {
@@ -900,52 +998,104 @@ export class QuicVCConnectionManager {
      * Handle encrypted PROTECTED packets
      */
     private async handleProtectedPacket(connection: QuicVCConnection, data: Uint8Array, header: QuicVCPacketHeader): Promise<void> {
-        // For ESP32, it might send VC_RESPONSE in PROTECTED packets
-        // Try to parse without decryption first (ESP32 might not encrypt yet)
+        console.log('[QuicVCConnectionManager] Handling PROTECTED packet, connection state:', connection.state);
+
+        // For ESP32 with session key encryption (XOR cipher)
+        if (connection.state === 'established' && connection.sessionKey) {
+            console.log('[QuicVCConnectionManager] Decrypting PROTECTED packet with session key');
+            console.log('[QuicVCConnectionManager] Session key (first 16 bytes):',
+                Array.from(connection.sessionKey.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+            // Extract encrypted payload
+            let payload = this.extractPayload(data, header);
+            console.log('[QuicVCConnectionManager] Encrypted payload (first 50 bytes):',
+                Array.from(payload.slice(0, Math.min(50, payload.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+            // Decrypt with XOR cipher (starts at byte 0 of payload - header already removed)
+            const decrypted = this.decryptPayload(payload, connection.sessionKey, 0);
+            console.log('[QuicVCConnectionManager] Decrypted payload (first 50 bytes):',
+                Array.from(decrypted.slice(0, Math.min(50, decrypted.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+            // Parse frames from decrypted payload
+            let frames = this.parseFrames(decrypted, QuicVCPacketType.PROTECTED);
+            console.log('[QuicVCConnectionManager] Parsed', frames.length, 'frames from decrypted payload');
+
+            // ESP32 might send service packets directly (service_type byte + JSON) without frame headers
+            // If no frames parsed, try parsing as raw service packet
+            if (frames.length === 0 && decrypted.length > 1) {
+                console.log('[QuicVCConnectionManager] No frames found - trying ESP32 service packet format');
+                console.log('[QuicVCConnectionManager] Service type byte:', '0x' + decrypted[0].toString(16).padStart(2, '0'));
+
+                const serviceType = decrypted[0];
+                const jsonPayload = decrypted.slice(1);
+
+                try {
+                    const jsonStr = new TextDecoder().decode(jsonPayload);
+                    console.log('[QuicVCConnectionManager] Decoded JSON:', jsonStr);
+                    const data = JSON.parse(jsonStr);
+
+                    // Create a synthetic STREAM frame
+                    frames = [{
+                        type: QuicFrameType.STREAM,
+                        streamId: serviceType,
+                        data
+                    }];
+                    console.log('[QuicVCConnectionManager] Created synthetic STREAM frame for service type', serviceType);
+                } catch (e) {
+                    console.error('[QuicVCConnectionManager] Failed to parse as service packet:', e);
+                }
+            }
+
+            // Process frames
+            for (const frame of frames) {
+                console.log('[QuicVCConnectionManager] Processing frame type:', frame.type);
+                switch (frame.type) {
+                    case QuicVCFrameType.HEARTBEAT:
+                        this.handleHeartbeatFrame(connection, frame);
+                        break;
+                    case QuicFrameType.STREAM:
+                        // STREAM frames contain service type and data
+                        this.handleStreamFrame(connection, frame);
+                        break;
+                    case QuicVCFrameType.VC_RESPONSE:
+                        // ESP32 might send VC_RESPONSE in PROTECTED packets during provisioning
+                        console.log('[QuicVCConnectionManager] Found VC_RESPONSE in PROTECTED packet');
+                        await this.handleVCResponseFrame(connection, frame);
+                        break;
+                    case QuicFrameType.ACK:
+                        // Handle acknowledgments
+                        console.log('[QuicVCConnectionManager] Received ACK frame');
+                        break;
+                    default:
+                        console.warn('[QuicVCConnectionManager] Unknown frame type:', frame.type);
+                }
+            }
+
+            // Reset idle timeout
+            this.resetIdleTimeout(connection);
+            return;
+        }
+
+        // Fallback: Try to parse without decryption (for testing or unencrypted responses)
+        console.log('[QuicVCConnectionManager] No session key or connection not established - trying unencrypted');
         const payload = this.extractPayload(data, header);
-        const frames = this.parseFrames(payload);
-        
-        // Check if it contains VC_RESPONSE (ESP32 ownership response)
+        const frames = this.parseFrames(payload, QuicVCPacketType.PROTECTED);
+
+        // Check if it contains VC_RESPONSE (ESP32 ownership response during provisioning)
         const vcResponseFrame = frames.find(frame => frame.type === QuicVCFrameType.VC_RESPONSE);
         if (vcResponseFrame) {
-            console.log('[QuicVCConnectionManager] Found VC_RESPONSE in PROTECTED packet from ESP32');
+            console.log('[QuicVCConnectionManager] Found VC_RESPONSE in unencrypted PROTECTED packet');
             await this.handleVCResponseFrame(connection, vcResponseFrame);
             return;
         }
-        
-        // Otherwise, handle as normal encrypted PROTECTED packet
-        if (connection.state !== 'established' || !connection.applicationKeys) {
-            debug('Cannot handle protected packet - connection not established');
+
+        // If we get here and the connection isn't established, something's wrong
+        if (connection.state !== 'established') {
+            console.warn('[QuicVCConnectionManager] Received PROTECTED packet but connection not established and no VC_RESPONSE found');
             return;
         }
-        
-        // Decrypt payload
-        const decrypted = await this.decryptPacket(data, header, connection.applicationKeys);
-        if (!decrypted) {
-            debug('Failed to decrypt packet');
-            return;
-        }
-        
-        // Parse frames from decrypted data
-        const decryptedFrames = this.parseFrames(decrypted);
-        
-        for (const frame of decryptedFrames) {
-            switch (frame.type) {
-                case QuicVCFrameType.HEARTBEAT:
-                    this.handleHeartbeatFrame(connection, frame);
-                    break;
-                case QuicVCFrameType.STREAM:
-                    // STREAM frames contain service type and data
-                    this.handleStreamFrame(connection, frame);
-                    break;
-                case QuicVCFrameType.ACK:
-                    // Handle acknowledgments
-                    break;
-            }
-        }
-        
-        // Reset idle timeout
-        this.resetIdleTimeout(connection);
+
+        console.warn('[QuicVCConnectionManager] PROTECTED packet could not be decrypted or parsed');
     }
     
     /**
@@ -971,18 +1121,54 @@ export class QuicVCConnectionManager {
         if (!connection.applicationKeys) {
             throw new Error('No application keys available');
         }
-        
-        // Serialize frames
-        const payload = JSON.stringify(frames);
-        
+
+        // Serialize frames properly using QUIC frame format
+        // Each frame should be a StreamFrame, HeartbeatFrame, etc.
+        const serializedFrames: Uint8Array[] = [];
+        for (const frame of frames) {
+            if (frame.type === QuicFrameType.STREAM || frame.type === QuicVCFrameType.STREAM) {
+                // Create proper StreamFrame
+                const streamFrame = new StreamFrame(
+                    BigInt(frame.streamId || 0),
+                    frame.data instanceof Uint8Array ? frame.data : new Uint8Array(frame.data || []),
+                    BigInt(frame.offset || 0),
+                    frame.fin || false
+                );
+                serializedFrames.push(streamFrame.serialize());
+            } else if (frame.type === QuicVCFrameType.HEARTBEAT) {
+                // Create proper HeartbeatFrame
+                const heartbeatFrame = new HeartbeatFrame({
+                    timestamp: frame.timestamp || Date.now(),
+                    device_id: connection.deviceId,
+                    status: frame.status
+                });
+                serializedFrames.push(heartbeatFrame.serialize());
+            } else {
+                // Fallback to JSON for unknown frame types (temporary)
+                console.warn(`[QuicVCConnectionManager] Unknown frame type ${frame.type}, falling back to JSON`);
+                const jsonPayload = JSON.stringify(frame);
+                const jsonBytes = new TextEncoder().encode(jsonPayload);
+                serializedFrames.push(jsonBytes);
+            }
+        }
+
+        // Concatenate all serialized frames into single payload
+        const totalLength = serializedFrames.reduce((sum, frame) => sum + frame.length, 0);
+        const payload = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const frame of serializedFrames) {
+            payload.set(frame, offset);
+            offset += frame.length;
+        }
+
         // Create and encrypt packet
         const packet = await this.createEncryptedPacket(
             QuicVCPacketType.PROTECTED,
             connection,
-            payload,
+            Buffer.from(payload).toString('utf-8'), // Convert to string for encryption
             connection.applicationKeys
         );
-        
+
         await this.sendPacket(connection, packet);
     }
     
@@ -1061,6 +1247,68 @@ export class QuicVCConnectionManager {
         };
     }
     
+    /**
+     * Derive ESP32-style session key from owner Person ID
+     * Matches ESP32 implementation: SHA256("quicvc-esp32-v1" + issuer + "esp32-session-key")
+     */
+    private async deriveSessionKey(ownerId: string): Promise<Uint8Array> {
+        const salt = "quicvc-esp32-v1";
+        const suffix = "esp32-session-key";
+        const combined = salt + ownerId + suffix;
+
+        console.log('[QuicVCConnectionManager] Deriving session key from owner ID:', ownerId, '(length:', ownerId.length, ')');
+
+        // Use expo-crypto SHA256
+        const hash = await expoCrypto.digestStringAsync(
+            expoCrypto.CryptoDigestAlgorithm.SHA256,
+            combined,
+            { encoding: expoCrypto.CryptoEncoding.HEX }
+        );
+
+        // Convert hex string to Uint8Array (32 bytes)
+        const keyBytes = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+            keyBytes[i] = parseInt(hash.substr(i * 2, 2), 16);
+        }
+
+        console.log('[QuicVCConnectionManager] Session key derived (first 16 bytes):',
+            Array.from(keyBytes.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+        return keyBytes;
+    }
+
+    /**
+     * XOR encryption/decryption (symmetric)
+     * Matches ESP32 implementation: output[i] = input[i] ^ session_key[i % 32]
+     *
+     * IMPORTANT: ESP32 extracts payload first (after header), then encrypts starting at payload[0].
+     * This means the key offset must start at 0 relative to the payload, not relative to the packet.
+     */
+    private encryptPayload(payload: Uint8Array, sessionKey: Uint8Array, startOffset: number): Uint8Array {
+        if (!QuicVCConnectionManager.ENABLE_ENCRYPTION) {
+            console.log('[QuicVCConnectionManager] Encryption disabled for debugging');
+            return payload;
+        }
+
+        const encrypted = new Uint8Array(payload);
+        // Encrypt starting at startOffset (byte 11 for PROTECTED packets)
+        // Key offset starts at 0 relative to the start of encryption, matching ESP32
+        let keyOffset = 0;
+        for (let i = startOffset; i < payload.length; i++) {
+            encrypted[i] = payload[i] ^ sessionKey[keyOffset % sessionKey.length];
+            keyOffset++;
+        }
+        return encrypted;
+    }
+
+    /**
+     * XOR decryption (same as encryption for XOR cipher)
+     */
+    private decryptPayload(payload: Uint8Array, sessionKey: Uint8Array, startOffset: number): Uint8Array {
+        // XOR is symmetric, so decryption is the same as encryption
+        return this.encryptPayload(payload, sessionKey, startOffset);
+    }
+
     /**
      * Derive application keys (1-RTT keys)
      */
@@ -1166,99 +1414,97 @@ export class QuicVCConnectionManager {
     }
     
     private createPacket(type: QuicVCPacketType, connection: QuicVCConnection, payload: string, frameType?: QuicVCFrameType): Uint8Array {
-        // Create proper packet format with frame structure for ESP32 compatibility
-        const header = {
-            type,
-            version: this.QUICVC_VERSION,
-            dcid: connection.dcid,
-            scid: connection.scid,
-            packetNumber: connection.nextPacketNumber++
-        };
+        // Use protocol abstractions for packet construction
+        const packetNumber = connection.nextPacketNumber++;
 
-        // Serialize header
-        const headerBytes = this.serializeHeader(header);
-
-        // For INITIAL packets, create proper frame structure that ESP32 expects
-        let frameBytes: Uint8Array;
-        if (type === QuicVCPacketType.INITIAL && frameType !== undefined) {
-            // Create frame: frame_type(1) + frame_length(2) + frame_data
+        // Create frame bytes based on frame type
+        let framePayload: Uint8Array;
+        if (frameType !== undefined) {
+            // Use VC-specific frame types with proper structure
             const payloadBytes = new TextEncoder().encode(payload);
-            frameBytes = new Uint8Array(1 + 2 + payloadBytes.length);
 
-            // Frame type (1 byte)
-            frameBytes[0] = frameType;
-
-            // Frame length (2 bytes, big-endian)
-            const frameLength = payloadBytes.length;
-            frameBytes[1] = (frameLength >> 8) & 0xFF;
-            frameBytes[2] = frameLength & 0xFF;
-
-            // Frame data
-            frameBytes.set(payloadBytes, 3);
+            // Create frame with frame_type(1) + frame_length(varint) + frame_data
+            const lengthVarint = encodeVarint(BigInt(payloadBytes.length));
+            framePayload = new Uint8Array(1 + lengthVarint.length + payloadBytes.length);
+            framePayload[0] = frameType;
+            framePayload.set(lengthVarint, 1);
+            framePayload.set(payloadBytes, 1 + lengthVarint.length);
         } else {
-            // For other packet types, use payload directly
-            frameBytes = new TextEncoder().encode(payload);
+            // Plain payload
+            framePayload = new TextEncoder().encode(payload);
         }
 
-        // Update the length field in the header with actual payload length
-        // For INITIAL packets: length field is at offset = flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + token_len(1)
-        // Length field format: 2-byte varint encoding (payload_length + packet_number_length)
-        if (type === QuicVCPacketType.INITIAL || type === QuicVCPacketType.HANDSHAKE) {
-            const pnLength = 2; // We use 2-byte packet numbers
-            const totalPayloadLength = frameBytes.length + pnLength;
-
-            // Find the offset to the length field in the header
-            let lengthOffset = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length;
-            if (type === QuicVCPacketType.INITIAL) {
-                lengthOffset += 1; // Skip token length field for INITIAL packets
-            }
-
-            // Write 2-byte varint (0x40 | (length >> 8), length & 0xFF)
-            // Max length is 16383 for 2-byte varint
-            if (totalPayloadLength <= 16383) {
-                headerBytes[lengthOffset] = 0x40 | ((totalPayloadLength >> 8) & 0x3F);
-                headerBytes[lengthOffset + 1] = totalPayloadLength & 0xFF;
-            } else {
-                console.warn('[QuicVCConnectionManager] Payload too large for 2-byte varint, truncating');
-                headerBytes[lengthOffset] = 0x7F;
-                headerBytes[lengthOffset + 1] = 0xFF;
-            }
+        // Build packet using protocol abstractions
+        if (type === QuicVCPacketType.PROTECTED) {
+            // Short header for PROTECTED packets
+            const header: QuicShortHeader = {
+                type: 'short',
+                dcid: connection.dcid,
+                packetNumber,
+                packetNumberLength: 2
+            };
+            return buildShortHeaderPacket(header, framePayload);
+        } else {
+            // Long header for INITIAL/HANDSHAKE packets
+            const header: QuicLongHeader = {
+                type: 'long',
+                packetType: type as number, // Maps to QuicPacketType enum
+                version: this.QUICVC_VERSION,
+                dcid: connection.dcid,
+                scid: connection.scid,
+                packetNumber,
+                packetNumberLength: 2,
+                token: type === QuicVCPacketType.INITIAL ? new Uint8Array(0) : undefined
+            };
+            return buildLongHeaderPacket(header, framePayload);
         }
-
-        // Combine header and frames
-        const packet = new Uint8Array(headerBytes.length + frameBytes.length);
-        packet.set(headerBytes, 0);
-        packet.set(frameBytes, headerBytes.length);
-
-        return packet;
     }
     
     /**
      * Create a PROTECTED packet with binary frame data
+     * Applies ESP32-style XOR encryption if session key is available
      */
     private createProtectedPacket(connection: QuicVCConnection, frameData: Uint8Array): Uint8Array {
-        // Create header for PROTECTED packet
-        const header = {
-            type: QuicVCPacketType.PROTECTED,
-            version: this.QUICVC_VERSION,
+        // Build PROTECTED packet using protocol abstractions
+        const packetNumber = connection.nextPacketNumber++;
+
+        const header: QuicShortHeader = {
+            type: 'short',
             dcid: connection.dcid,
-            scid: connection.scid,
-            packetNumber: connection.nextPacketNumber++
+            packetNumber,
+            packetNumberLength: 2
         };
-        
-        // Serialize header
-        const headerBytes = this.serializeHeader(header);
-        
-        // For PROTECTED packets, use the frame data as-is (it's already properly formatted)
-        // The frameData already contains the frame type and payload
-        
-        // Combine header and frame data
-        const packet = new Uint8Array(headerBytes.length + frameData.length);
-        packet.set(headerBytes, 0);
-        packet.set(frameData, headerBytes.length);
-        
-        console.log(`[QuicVCConnectionManager] Created PROTECTED packet: header ${headerBytes.length} bytes, frame ${frameData.length} bytes, total ${packet.length} bytes`);
-        
+
+        // Build packet with short header
+        let packet = buildShortHeaderPacket(header, frameData);
+
+        // Packet is already built with header + frameData
+
+        // Apply ESP32-style XOR encryption if we have a session key
+        if (connection.sessionKey && QuicVCConnectionManager.ENABLE_ENCRYPTION) {
+            // For PROTECTED packets (short header): flags(1) + dcid(length) + pn(2)
+            // Encryption starts after these fields
+            // ESP32 expects encryption to start at byte 11 (1 + 8 + 2 for 8-byte DCID)
+            // But our DCID is 16 bytes, so adjust accordingly
+            const encryptionOffset = 1 + connection.dcid.length + 2; // flags + dcid + packet_number
+
+            console.log(`[QuicVCConnectionManager] Applying XOR encryption starting at byte ${encryptionOffset}`);
+            console.log(`[QuicVCConnectionManager] DCID length: ${connection.dcid.length}, expected: 8`);
+            console.log(`[QuicVCConnectionManager] Session key (first 16 bytes):`,
+                Array.from(connection.sessionKey.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            console.log(`[QuicVCConnectionManager] Packet before encryption (first 50 bytes):`,
+                Array.from(packet.slice(0, Math.min(50, packet.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+            packet = this.encryptPayload(packet, connection.sessionKey, encryptionOffset);
+
+            console.log(`[QuicVCConnectionManager] Packet after encryption (first 50 bytes):`,
+                Array.from(packet.slice(0, Math.min(50, packet.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+        } else if (!connection.sessionKey) {
+            console.warn('[QuicVCConnectionManager] No session key available for encryption - sending unencrypted PROTECTED packet');
+        }
+
+        console.log(`[QuicVCConnectionManager] Created PROTECTED packet: frame ${frameData.length} bytes, total ${packet.length} bytes`);
+
         return packet;
     }
     
@@ -1277,112 +1523,83 @@ export class QuicVCConnectionManager {
         
         return packet;
     }
-    
-    private serializeHeader(header: QuicVCPacketHeader): Uint8Array {
-        // QUIC spec-compliant header serialization per RFC 9000
-        // For INITIAL packets: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + token_len(varint) + token + length(varint) + pn(1-4)
-        // For other long headers: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + length(varint) + pn(1-4)
 
-        // Calculate packet number length (use 2 bytes for now as per QUIC spec)
-        const pnLength = 2;
-        const pnLengthBits = pnLength - 1; // 0=1byte, 1=2bytes, 2=4bytes
+    // serializeHeader method removed - now using buildLongHeaderPacket/buildShortHeaderPacket from @refinio/quicvc-protocol
 
-        // Flags byte: bit 7 = long header (1), bits 5-4 = packet type for QUIC v1, bits 1-0 = packet number length - 1
-        let flags: number;
-        switch (header.type) {
-            case QuicVCPacketType.INITIAL:
-                flags = 0xC0 | pnLengthBits;  // Long header + INITIAL packet type + PN length
-                break;
-            case QuicVCPacketType.HANDSHAKE:
-                flags = 0xD0 | pnLengthBits;  // Long header + HANDSHAKE packet type + PN length
-                break;
-            case QuicVCPacketType.PROTECTED:
-                flags = 0x40 | pnLengthBits;  // Short header + PN length
-                break;
-            case QuicVCPacketType.RETRY:
-                flags = 0xF0;  // Long header + RETRY packet type (no PN length)
-                break;
-            default:
-                flags = 0x80 | (header.type & 0x03) | pnLengthBits;  // Fallback
-        }
-
-        // For INITIAL packets, calculate total size including token and length fields
-        let totalSize: number;
-        if (header.type === QuicVCPacketType.INITIAL) {
-            // flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + token_len(1) + length(2) + pn(2)
-            totalSize = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 1 + 2 + pnLength;
-        } else if (header.type === QuicVCPacketType.PROTECTED) {
-            // Short header: flags(1) + dcid + pn(2)
-            totalSize = 1 + header.dcid.length + pnLength;
-        } else {
-            // Other long headers: flags(1) + version(4) + dcid_len(1) + dcid + scid_len(1) + scid + length(2) + pn(2)
-            totalSize = 1 + 4 + 1 + header.dcid.length + 1 + header.scid.length + 2 + pnLength;
-        }
-
-        const buffer = new ArrayBuffer(totalSize);
-        const view = new DataView(buffer);
-        let offset = 0;
-
-        view.setUint8(offset++, flags);
-
-        if (header.type !== QuicVCPacketType.PROTECTED) {
-            // Version (4 bytes, big-endian) - only for long headers
-            view.setUint32(offset, header.version, false); offset += 4;
-        }
-
-        // DCID length and data (long header) or just DCID (short header)
-        if (header.type !== QuicVCPacketType.PROTECTED) {
-            view.setUint8(offset++, header.dcid.length);
-        }
-        new Uint8Array(buffer, offset, header.dcid.length).set(header.dcid);
-        offset += header.dcid.length;
-
-        if (header.type !== QuicVCPacketType.PROTECTED) {
-            // SCID length and data (only for long headers)
-            view.setUint8(offset++, header.scid.length);
-            new Uint8Array(buffer, offset, header.scid.length).set(header.scid);
-            offset += header.scid.length;
-
-            // For INITIAL packets, add token length field (variable-length integer, using 1 byte = 0)
-            if (header.type === QuicVCPacketType.INITIAL) {
-                view.setUint8(offset++, 0x00); // Token length = 0 (no token)
-                // No token bytes to write
-            }
-
-            // Length field (variable-length integer) - placeholder, will be set by caller with payload length
-            // For now, use 2-byte varint (0x40 | length)
-            // This will need to be updated with actual payload length by createPacket
-            view.setUint8(offset++, 0x40); // 2-byte varint prefix
-            view.setUint8(offset++, 0x00); // Placeholder for actual length
-        }
-
-        // Packet number (variable length based on pnLength)
-        const pn = Number(header.packetNumber & 0xFFFFn); // Use lower 16 bits
-        if (pnLength === 1) {
-            view.setUint8(offset, pn & 0xFF);
-        } else if (pnLength === 2) {
-            view.setUint16(offset, pn & 0xFFFF, false); // big-endian
-        } else if (pnLength === 4) {
-            view.setUint32(offset, pn, false); // big-endian
-        }
-
-        return new Uint8Array(buffer);
-    }
-    
     private parsePacketHeader(data: Uint8Array): QuicVCPacketHeader | null {
         if (data.length < 10) return null; // Minimum header size
+
+        // Use protocol library for all packets - ESP32 now sends RFC 9000 compliant varint encoding
+        const { header, headerLength, payload } = parseQuicPacketHeader(data);
+
+        // Convert protocol header to our format
+        if (header.type === 'short') {
+            return {
+                type: QuicVCPacketType.PROTECTED,
+                version: 0,
+                dcid: header.dcid,
+                scid: new Uint8Array(0), // Empty SCID for short header
+                packetNumber: header.packetNumber,
+                headerLength
+            };
+        } else {
+            // Long header
+            const packetType = header.packetType === 0 ? QuicVCPacketType.INITIAL :
+                             header.packetType === 2 ? QuicVCPacketType.HANDSHAKE :
+                             QuicVCPacketType.PROTECTED;
+
+            return {
+                type: packetType,
+                version: header.version,
+                dcid: header.dcid,
+                scid: header.scid,
+                packetNumber: header.packetNumber,
+                headerLength
+            };
+        }
+    }
+
+    /** @deprecated Fallback parser removed - ESP32 now sends RFC 9000 compliant packets */
+    private parsePacketHeaderFallback(data: Uint8Array): QuicVCPacketHeader | null {
+        if (data.length < 10) return null;
 
         const view = new DataView(data.buffer, data.byteOffset);
         let offset = 0;
 
-        // Parse flags byte
         const flags = view.getUint8(offset++);
         const longHeader = (flags & 0x80) !== 0;
-        const fixedBit = (flags & 0x40) !== 0;
 
         if (!longHeader) {
-            console.warn('[QuicVCConnectionManager] Short header not supported');
-            return null;
+            // Short header - ESP32 uses 8-byte DCID
+            const dcidLen = 8;
+            if (data.length < 1 + dcidLen + 1) return null;
+
+            const dcid = new Uint8Array(data.buffer, data.byteOffset + offset, dcidLen);
+            offset += dcidLen;
+
+            const pnLength = (flags & 0x03) + 1;
+            let packetNumber = BigInt(0);
+
+            if (offset + pnLength > data.length) return null;
+
+            if (pnLength === 1) {
+                packetNumber = BigInt(view.getUint8(offset));
+            } else if (pnLength === 2) {
+                packetNumber = BigInt(view.getUint16(offset, false));
+            } else if (pnLength === 4) {
+                packetNumber = BigInt(view.getUint32(offset, false));
+            }
+
+            offset += pnLength;
+
+            return {
+                type: QuicVCPacketType.PROTECTED,
+                version: 0,
+                dcid,
+                scid: new Uint8Array(0),
+                packetNumber,
+                headerLength: offset
+            };
         }
 
         // For QUIC v1, the packet type is in bits 5-4 of the flags byte
@@ -1424,40 +1641,68 @@ export class QuicVCConnectionManager {
         // Check if we have enough data for packet number
         if (type === QuicVCPacketType.INITIAL) {
             // For INITIAL packets from ESP32
-            // Token length (variable-length integer, but ESP32 uses 1 byte with value 0)
+            // Structure: [flags][version][dcid_len][dcid][scid_len][scid][token_len][token?][length][packet_num][payload]
+
+            // Token length (1 byte for ESP32, value is 0)
             if (data.length > offset) {
                 const tokenLen = view.getUint8(offset++);
-                offset += tokenLen; // Skip token bytes if any
+                offset += tokenLen; // Skip token bytes if any (usually 0 for ESP32)
             }
 
-            // ESP32 might send a length field or might not
-            // Check if there's more data that looks like a length field
-            if (data.length >= offset + 2) {
-                // Check if next bytes look like a reasonable length (< 1500 for typical MTU)
-                const possibleLength = view.getUint16(offset, false);
-                if (possibleLength > 0 && possibleLength < 1500) {
-                    // This looks like a length field
-                    offset += 2;
-                }
+            // Length field (2 bytes, big-endian) - length of (packet_number + payload)
+            // ESP32 ALWAYS sends this field
+            if (data.length < offset + 2) {
+                console.error('[QuicVCConnectionManager] INITIAL packet too short for length field');
+                return null;
             }
 
-            // ESP32 might not send packet number for simple responses
-            // Check if there's at least 1 byte left that could be packet number
-            if (data.length > offset) {
-                // Try to read 1-byte packet number
-                packetNumber = BigInt(view.getUint8(offset));
-                headerLength = offset + 1;
-            } else {
-                // No packet number, payload starts at current offset
-                headerLength = offset;
+            const payloadLength = view.getUint16(offset, false); // Big-endian
+            offset += 2; // Skip length field
+
+            console.log(`[QuicVCConnectionManager] INITIAL packet length field: ${payloadLength} bytes (packet number + frames)`);
+
+            // Packet number (1 byte for ESP32)
+            if (data.length <= offset) {
+                console.error('[QuicVCConnectionManager] INITIAL packet too short for packet number');
+                return null;
             }
+
+            packetNumber = BigInt(view.getUint8(offset));
+            offset += 1; // Skip packet number
+            headerLength = offset; // Payload starts here
+
+            console.log(`[QuicVCConnectionManager] INITIAL packet parsed: packetNumber=${packetNumber}, headerLength=${headerLength}`);
 
             return { type, version, dcid, scid, packetNumber, headerLength };
         } else if (type === QuicVCPacketType.HANDSHAKE) {
             // For HANDSHAKE packets from ESP32 (which contain VC_RESPONSE)
-            // ESP32 sends frames directly after the header without packet number
-            // The payload starts immediately after SCID
-            headerLength = offset;
+            // RFC 9000 Section 17.2.4: HANDSHAKE packets have Length and Packet Number fields
+            // Structure: [flags][version][dcid_len][dcid][scid_len][scid][length][packet_num][payload]
+            // (No Token field, unlike INITIAL packets)
+
+            // Length field (2 bytes, big-endian) - length of (packet_number + payload)
+            if (data.length < offset + 2) {
+                console.error('[QuicVCConnectionManager] HANDSHAKE packet too short for length field');
+                return null;
+            }
+
+            const payloadLength = view.getUint16(offset, false); // Big-endian
+            offset += 2; // Skip length field
+
+            console.log(`[QuicVCConnectionManager] HANDSHAKE packet length field: ${payloadLength} bytes (packet number + frames)`);
+
+            // Packet number (1 byte for ESP32)
+            if (data.length <= offset) {
+                console.error('[QuicVCConnectionManager] HANDSHAKE packet too short for packet number');
+                return null;
+            }
+
+            packetNumber = BigInt(view.getUint8(offset));
+            offset += 1; // Skip packet number
+            headerLength = offset; // Payload starts here
+
+            console.log(`[QuicVCConnectionManager] HANDSHAKE packet parsed: packetNumber=${packetNumber}, headerLength=${headerLength}`);
+
             return { type, version, dcid, scid, packetNumber, headerLength };
         } else {
             // For other packet types, try to read packet number if available
@@ -1490,57 +1735,230 @@ export class QuicVCConnectionManager {
         return this.extractPayload(data, header);
     }
     
-    private parseFrames(data: Uint8Array): any[] {
-        console.log('[QuicVCConnectionManager] Parsing frames from', data.length, 'bytes');
-        // Frame parsing
+    private parseFrames(data: Uint8Array, packetType?: QuicVCPacketType): any[] {
+        console.log('[QuicVCConnectionManager] Parsing frames from', data.length, 'bytes, packet type:', packetType !== undefined ? QuicVCPacketType[packetType] : 'unknown');
+        console.log('[QuicVCConnectionManager] Raw frame data (first 50 bytes):',
+            Array.from(data.slice(0, Math.min(50, data.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
 
+        // Frame parsing
         const frames: any[] = [];
         let offset = 0;
 
         try {
             while (offset < data.length) {
-                if (offset + 3 > data.length) break; // Need at least frame_type + length
+                if (offset + 2 > data.length) {
+                    console.log('[QuicVCConnectionManager] Not enough data for frame header at offset', offset, '- stopping');
+                    break; // Need at least frame_type + 1 byte for varint length
+                }
 
                 const frameType = data[offset];
-                const length = (data[offset + 1] << 8) | data[offset + 2];
-                offset += 3;
+                offset += 1;
 
-                console.log('[QuicVCConnectionManager] Frame type: 0x' + frameType.toString(16).padStart(2, '0'), 'length:', length);
-                
+                // RFC 9000 STREAM frames (types 0x08-0x0F) have a different format:
+                // [type_with_flags][stream_id_varint][offset_varint?][length_varint?][data]
+                // We need to parse them differently from other frames
+                const isStreamFrame = (frameType >= 0x08 && frameType <= 0x0F);
+
+                if (isStreamFrame) {
+                    console.log('[QuicVCConnectionManager] Detected RFC 9000 STREAM frame type: 0x' + frameType.toString(16).padStart(2, '0'));
+                    console.log('[QuicVCConnectionManager] Data at offset', offset, '(first 10 bytes):', Array.from(data.slice(offset, offset + 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+                    // Extract flags from frame type
+                    const hasFin = (frameType & 0x01) !== 0;
+                    const hasLen = (frameType & 0x02) !== 0;
+                    const hasOff = (frameType & 0x04) !== 0;
+
+                    // Parse stream ID (varint)
+                    const streamIdResult = decodeVarint(data, offset);
+                    if (streamIdResult.bytesRead === 0) {
+                        console.warn('[QuicVCConnectionManager] Failed to decode stream ID varint');
+                        break;
+                    }
+                    const streamId = Number(streamIdResult.value);
+                    console.log('[QuicVCConnectionManager] Parsed stream_id:', streamId, '(bytes read:', streamIdResult.bytesRead + ')');
+                    offset += streamIdResult.bytesRead;
+
+                    // Parse offset if present (varint)
+                    let streamOffset = 0;
+                    if (hasOff) {
+                        const offsetResult = decodeVarint(data, offset);
+                        if (offsetResult.bytesRead === 0) {
+                            console.warn('[QuicVCConnectionManager] Failed to decode stream offset varint');
+                            break;
+                        }
+                        streamOffset = Number(offsetResult.value);
+                        offset += offsetResult.bytesRead;
+                    }
+
+                    // Parse length if present (varint), otherwise read to end of packet
+                    let dataLength;
+                    if (hasLen) {
+                        const lengthResult = decodeVarint(data, offset);
+                        if (lengthResult.bytesRead === 0) {
+                            console.warn('[QuicVCConnectionManager] Failed to decode stream length varint');
+                            break;
+                        }
+                        dataLength = Number(lengthResult.value);
+                        console.log('[QuicVCConnectionManager] Parsed length:', dataLength, '(bytes read:', lengthResult.bytesRead + ')');
+                        offset += lengthResult.bytesRead;
+                    } else {
+                        // Length extends to end of packet
+                        dataLength = data.length - offset;
+                    }
+
+                    console.log('[QuicVCConnectionManager] STREAM frame: stream_id=' + streamId + ', offset=' + streamOffset + ', length=' + dataLength + ', FIN=' + hasFin);
+                    console.log('[QuicVCConnectionManager] Stream data starts at offset', offset, '(first 10 bytes):', Array.from(data.slice(offset, offset + 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+
+                    if (offset + dataLength > data.length) {
+                        console.warn('[QuicVCConnectionManager] STREAM data extends beyond packet');
+                        break;
+                    }
+
+                    const streamData = data.slice(offset, offset + dataLength);
+                    offset += dataLength;
+
+                    // Parse the stream data as JSON or microdata
+                    let frame: any = { type: QuicFrameType.STREAM, streamId, offset: streamOffset, data: null };
+                    const dataStr = new TextDecoder().decode(streamData);
+
+                    // Try JSON first
+                    try {
+                        const parsedData = JSON.parse(dataStr);
+                        frame.data = parsedData;
+                        console.log('[QuicVCConnectionManager] Parsed STREAM frame data as JSON:', parsedData);
+                    } catch (jsonError) {
+                        // If not JSON, try microdata (ESP32 responses)
+                        if (dataStr.includes('<div') && dataStr.includes('itemscope')) {
+                            console.log('[QuicVCConnectionManager] Trying to parse as microdata...');
+                            try {
+                                const parsedData = parseFromMicrodata(dataStr);
+                                frame.data = parsedData;
+                                console.log('[QuicVCConnectionManager] Parsed STREAM frame data as microdata:', parsedData);
+                            } catch (microdataError) {
+                                console.error('[QuicVCConnectionManager] Failed to parse as microdata:', microdataError.message);
+                                console.error('[QuicVCConnectionManager] Stream data (first 20 bytes):', Array.from(streamData.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+                                console.error('[QuicVCConnectionManager] Stream data as string:', dataStr.substring(0, 200));
+                                throw new Error(`Failed to parse STREAM frame data: ${microdataError.message}`);
+                            }
+                        } else {
+                            console.error('[QuicVCConnectionManager] CRITICAL: STREAM frame data is not valid JSON or microdata');
+                            console.error('[QuicVCConnectionManager] Stream data (first 20 bytes):', Array.from(streamData.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+                            console.error('[QuicVCConnectionManager] Stream data as string:', dataStr.substring(0, 100));
+                            throw new Error(`Failed to parse STREAM frame data as JSON: ${jsonError.message}`);
+                        }
+                    }
+
+                    frames.push(frame);
+                    continue;
+                }
+
+                // Non-STREAM frames use the old format: [type][varint_length][payload]
+                // Decode varint length (RFC 9000 compliant)
+                const lengthResult = decodeVarint(data, offset);
+                if (lengthResult.bytesRead === 0) {
+                    console.warn('[QuicVCConnectionManager] Failed to decode varint length at offset', offset);
+                    break;
+                }
+                const length = Number(lengthResult.value);
+                const lengthBytes = lengthResult.bytesRead;
+
+                console.log('[QuicVCConnectionManager] Frame at offset', offset - 1, '- Type: 0x' + frameType.toString(16).padStart(2, '0'), 'Length:', length, '(varint bytes:', lengthBytes + ') Data length:', data.length);
+
+                offset += lengthBytes;
+
                 if (offset + length > data.length) {
-                    console.warn('[QuicVCConnectionManager] Frame length extends beyond payload - ignoring rest of packet');
+                    console.warn('[QuicVCConnectionManager] Frame length', length, 'extends beyond payload (available:', data.length - offset, 'bytes) - ignoring rest of packet');
+                    console.warn('[QuicVCConnectionManager] This suggests corrupted data or wrong encoding');
                     break; // Stop parsing but return what we have so far
                 }
-                
+
                 const framePayload = data.slice(offset, offset + length);
                 offset += length;
-                
+
                 // For now, try to parse frame payload as JSON if it looks like VC data
                 let frame: any = { type: frameType, payload: framePayload };
-                
+
                 // Parse specific frame types
                 if (frameType === QuicVCFrameType.VC_INIT || frameType === QuicVCFrameType.VC_RESPONSE) {
                     try {
-                        const jsonData = JSON.parse(new TextDecoder().decode(framePayload));
-                        frame = { ...frame, ...jsonData, type: frameType };
+                        const payloadString = new TextDecoder().decode(framePayload);
+
+                        // Try HTML parsing first (new format)
+                        if (payloadString.startsWith('<!DOCTYPE html>') || payloadString.startsWith('<html')) {
+                            // Parse HTML microdata
+                            const htmlData: any = {};
+
+                            // Extract all itemprop values using regex
+                            const metaRegex = /<meta\s+itemprop="([^"]+)"\s+content="([^"]+)"/g;
+                            let match;
+                            while ((match = metaRegex.exec(payloadString)) !== null) {
+                                const [, prop, value] = match;
+                                // Convert type to number if it looks like a number
+                                htmlData[prop] = /^\d+$/.test(value) ? parseInt(value, 10) : value;
+                            }
+
+                            frame = { ...frame, ...htmlData, type: frameType };
+                            console.log('[QuicVCConnectionManager] Parsed HTML VC_RESPONSE:', htmlData);
+                        } else {
+                            // Fallback to JSON parsing (old format)
+                            const jsonData = JSON.parse(payloadString);
+                            frame = { ...frame, ...jsonData, type: frameType };
+                        }
                     } catch (e) {
-                        console.warn('[QuicVCConnectionManager] Frame payload is not JSON:', e.message);
+                        console.warn('[QuicVCConnectionManager] Frame payload is not JSON or HTML:', e.message);
+                    }
+                } else if (frameType === QuicVCFrameType.DISCOVERY) {
+                    // DISCOVERY frames contain HTML or JSON payload that should NOT be parsed as more frames
+                    // In INITIAL packets: Stop parsing (discovery broadcasts only contain discovery data)
+                    // In HANDSHAKE packets: Continue parsing (may contain VC_RESPONSE after discovery)
+                    frames.push(frame);
+
+                    if (packetType === QuicVCPacketType.INITIAL) {
+                        console.log('[QuicVCConnectionManager] DISCOVERY frame in INITIAL packet - stopping frame parsing (payload contains HTML/JSON, not frames)');
+                        break;  // Stop parsing - discovery payload is not frames
+                    } else {
+                        console.log('[QuicVCConnectionManager] DISCOVERY frame in', packetType !== undefined ? QuicVCPacketType[packetType] : 'unknown', 'packet - continuing to parse remaining frames');
+                        // Continue parsing - there may be more frames (like VC_RESPONSE) after this
                     }
                 } else if (frameType === QuicVCFrameType.STREAM) {
-                    // STREAM frames have stream ID as first byte, then data
-                    if (framePayload.length > 0) {
-                        const streamId = framePayload[0];
-                        const streamData = framePayload.slice(1);
-                        
-                        // Try to parse stream data as JSON (ESP32 sends JSON for LED responses)
-                        try {
+                    // STREAM frames contain JSON with streamId and data fields
+                    // Format: {"streamId": 3, "data": {...}}
+                    try {
+                        const jsonStr = new TextDecoder().decode(framePayload);
+                        const streamFrame = JSON.parse(jsonStr);
+
+                        if (streamFrame.streamId !== undefined && streamFrame.data !== undefined) {
+                            // Parse the nested data field if it's a JSON string
+                            let parsedData = streamFrame.data;
+                            if (typeof streamFrame.data === 'string') {
+                                try {
+                                    parsedData = JSON.parse(streamFrame.data);
+                                } catch (e) {
+                                    // If parsing fails, keep as string
+                                }
+                            }
+
+                            frame = {
+                                type: frameType,
+                                streamId: streamFrame.streamId,
+                                data: parsedData
+                            };
+                            console.log('[QuicVCConnectionManager] Parsed STREAM frame:', {
+                                streamId: streamFrame.streamId,
+                                data: parsedData
+                            });
+                        } else {
+                            // Fallback to old format: stream ID as first byte
+                            const streamId = framePayload[0];
+                            const streamData = framePayload.slice(1);
                             const jsonData = JSON.parse(new TextDecoder().decode(streamData));
                             frame = { type: frameType, streamId, data: jsonData };
-                            console.log('[QuicVCConnectionManager] Parsed STREAM frame:', { streamId, data: jsonData });
-                        } catch (e) {
-                            // If not JSON, keep as binary
-                            frame = { type: frameType, streamId, data: streamData };
+                            console.log('[QuicVCConnectionManager] Parsed STREAM frame (legacy format):', { streamId, data: jsonData });
                         }
+                    } catch (e) {
+                        console.warn('[QuicVCConnectionManager] Failed to parse STREAM frame:', e.message);
+                        // Keep as binary if parsing fails completely
+                        frame = { type: frameType, streamId: 0, data: framePayload };
                     }
                 } else if (frameType === QuicVCFrameType.HEARTBEAT) {
                     // Heartbeat frames contain JSON data
@@ -1575,27 +1993,71 @@ export class QuicVCConnectionManager {
         // STREAM frame format:
         // { type: STREAM, streamId: serviceType, data: serviceData }
         const streamId = frame.streamId;
-        
-        console.log('[QuicVCConnectionManager] Handling STREAM frame:', { 
-            streamId, 
+
+        console.log('[QuicVCConnectionManager] Handling STREAM frame:', {
+            streamId,
             data: frame.data,
             deviceId: connection.deviceId,
             connectionState: connection.state
         });
-        
-        // Check if this is an LED response (streamId 0x01)
-        if (streamId === 0x01 && frame.data && typeof frame.data === 'object') {
-            // This is an LED control response from ESP32
-            if (frame.data.type === 'led_response' && frame.data.requestId) {
-                console.log('[QuicVCConnectionManager] Received LED response:', {
+
+        // Check if this is an ownership removal acknowledgment (streamId 2 = credential service)
+        if (streamId === 2 && frame.data) {
+            // The ESP32 sends HTML microdata for ownership removal acks
+            // Parse microdata if it's a string, otherwise use as-is if it's an object
+            let responseData = frame.data;
+
+            if (typeof frame.data === 'string' || frame.data instanceof Uint8Array) {
+                // Try to parse as microdata
+                try {
+                    const htmlStr = typeof frame.data === 'string' ? frame.data : new TextDecoder().decode(frame.data);
+                    console.log('[QuicVCConnectionManager] Parsing microdata response:', htmlStr.substring(0, 200));
+
+                    // Extract status from microdata (simple regex extraction)
+                    // Format: <span itemprop="status">ownership_removed</span>
+                    const statusMatch = htmlStr.match(/<span itemprop="status">([^<]+)<\/span>/);
+                    const status = statusMatch ? statusMatch[1] : null;
+
+                    if (status === 'ownership_removed') {
+                        responseData = { type: 'ownership_remove_ack', status };
+                        console.log('[QuicVCConnectionManager] Parsed ownership_removed status from microdata');
+                    }
+                } catch (e) {
+                    console.warn('[QuicVCConnectionManager] Failed to parse microdata:', e);
+                }
+            }
+
+            // Check if this is an ownership removal ack (either JSON or parsed from microdata)
+            if (responseData && typeof responseData === 'object' && responseData.type === 'ownership_remove_ack') {
+                console.log('[QuicVCConnectionManager] Received ownership_remove_ack:', {
+                    data: responseData,
+                    deviceId: connection.deviceId
+                });
+
+                // Emit ownership removal ack event for ESP32ConnectionManager to handle
+                if (connection.deviceId) {
+                    console.log('[QuicVCConnectionManager] Emitting onOwnershipRemovalAck for device:', connection.deviceId);
+                    this.onOwnershipRemovalAck.emit(connection.deviceId, responseData);
+                } else {
+                    console.error('[QuicVCConnectionManager] Cannot emit ownership removal ack - no deviceId on connection');
+                }
+                return;
+            }
+        }
+
+        // Check if this is an LED response (streamId 3 = LED control service)
+        if (streamId === 3 && frame.data && typeof frame.data === 'object') {
+            // ESP32 sends microdata responses with $type$ field
+            if (frame.data.$type$ === 'LEDStatusResponse' && frame.data.requestId) {
+                console.log('[QuicVCConnectionManager] Received LED status:', {
                     data: frame.data,
                     deviceId: connection.deviceId,
                     hasDeviceId: !!connection.deviceId
                 });
-                
+
                 // If no deviceId on connection, try to get it from the response
-                if (!connection.deviceId && frame.data.device_id) {
-                    connection.deviceId = frame.data.device_id;
+                if (!connection.deviceId && frame.data.deviceId) {
+                    connection.deviceId = frame.data.deviceId;
                     console.log('[QuicVCConnectionManager] Set deviceId from LED response:', connection.deviceId);
                 } else if (!connection.deviceId) {
                     // Last resort: derive from connection's SCID (ESP32 MAC)
@@ -1605,7 +2067,7 @@ export class QuicVCConnectionManager {
                     connection.deviceId = `esp32-${mac.replace(/:/g, '').toLowerCase()}`;
                     console.log('[QuicVCConnectionManager] Derived deviceId from connection SCID:', connection.deviceId);
                 }
-                
+
                 // Emit LED response event for ESP32ConnectionManager to handle
                 if (connection.deviceId) {
                     console.log('[QuicVCConnectionManager] Emitting onLEDResponse for device:', connection.deviceId);
@@ -1638,9 +2100,9 @@ export class QuicVCConnectionManager {
         if (!connection || connection.state !== 'established') {
             throw new Error(`No established connection to ${deviceId}`);
         }
-        
+
         const streamFrame = {
-            type: QuicVCFrameType.STREAM,
+            type: QuicFrameType.STREAM,
             streamId: serviceType, // Use streamId to carry service type
             data: Buffer.from(data).toString('base64'), // Base64 for JSON transport
             timestamp: Date.now()
@@ -1784,14 +2246,21 @@ export class QuicVCConnectionManager {
         if (connection.state !== 'established') {
             // Before closing, check if there's a NEWER connection for this device
             // that's already established. If so, just clean up this timeout without emitting events.
-            if (connection.deviceId) {
-                for (const [otherConnId, otherConn] of this.connections) {
-                    if (otherConnId !== connId &&
-                        otherConn.deviceId === connection.deviceId &&
-                        otherConn.state === 'established' &&
-                        otherConn.createdAt > connection.createdAt) {
+            // Check by both deviceId AND address/port (deviceId might not be set yet in initial state)
+            for (const [otherConnId, otherConn] of this.connections) {
+                if (otherConnId !== connId &&
+                    otherConn.state === 'established' &&
+                    otherConn.createdAt > connection.createdAt) {
+
+                    // Match by deviceId if both have it
+                    const deviceIdMatch = connection.deviceId && otherConn.deviceId === connection.deviceId;
+
+                    // Match by address/port as fallback (for connections in initial state without deviceId)
+                    const addressMatch = connection.address === otherConn.address && connection.port === otherConn.port;
+
+                    if (deviceIdMatch || addressMatch) {
                         // There's a newer, established connection - silently clean up this old one
-                        console.log(`[QuicVCConnectionManager] Ignoring timeout for old connection ${connId} - device ${connection.deviceId} has newer established connection`);
+                        console.log(`[QuicVCConnectionManager] Ignoring timeout for old connection ${connId} - found newer established connection at ${otherConn.address}:${otherConn.port}`);
                         // Clear timers
                         if (connection.handshakeTimeout) clearTimeout(connection.handshakeTimeout);
                         if (connection.heartbeatInterval) clearInterval(connection.heartbeatInterval);
@@ -1847,13 +2316,13 @@ export class QuicVCConnectionManager {
     async sendData(deviceId: string, data: Uint8Array): Promise<void> {
         const connection = Array.from(this.connections.values())
             .find(c => c.deviceId === deviceId && c.state === 'established');
-        
+
         if (!connection) {
             throw new Error(`No established connection to ${deviceId}`);
         }
-        
+
         const streamFrame = {
-            type: QuicVCFrameType.STREAM,
+            type: QuicFrameType.STREAM,
             streamId: 0, // Single stream for now
             offset: 0,
             data: Array.from(data)

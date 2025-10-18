@@ -571,27 +571,8 @@ export class DeviceDiscoveryModel {
   private handleQuicVCPacket(data: Uint8Array, rinfo: UdpRemoteInfo): void {
     if (data.length < 2) return;
 
-    // Check if this is a long header packet (bit 7 = 1)
-    const isLongHeader = (data[0] & 0x80) !== 0;
-    if (!isLongHeader) {
-      // console.log('[DeviceDiscoveryModel] Short header packet - not supported for discovery');
-      return;
-    }
-
-    // For long header packets, packet type is in bits 0-1 (QUIC spec)
-    const packetType = data[0] & 0x03;
-    
-    // QUICVC packet types
-    const INITIAL = 0x00;
-    const HANDSHAKE = 0x01;
-    const PROTECTED = 0x02;
-    const RETRY = 0x03;
-    
-    // console.log('[DeviceDiscoveryModel] Received QUICVC packet type', packetType, 'from', rinfo.address);
-    
-    // First, always forward to QuicVCConnectionManager for handshake processing
+    // Always forward to QuicVCConnectionManager first (handles both long and short headers)
     if (this._quicVCManager) {
-      // console.log(`[DeviceDiscoveryModel] Forwarding packet to QuicVCConnectionManager`);
       try {
         this._quicVCManager.handleQuicVCPacket(data, rinfo);
       } catch (error) {
@@ -600,6 +581,22 @@ export class DeviceDiscoveryModel {
     } else {
       console.warn('[DeviceDiscoveryModel] QuicVCConnectionManager not available');
     }
+
+    // Check if this is a long header packet (bit 7 = 1)
+    const isLongHeader = (data[0] & 0x80) !== 0;
+    if (!isLongHeader) {
+      // Short header packets (PROTECTED data) are forwarded above but not processed for discovery
+      return;
+    }
+
+    // For long header packets, packet type is in bits 0-1 (QUIC spec)
+    const packetType = data[0] & 0x03;
+
+    // QUICVC packet types
+    const INITIAL = 0x00;
+    const HANDSHAKE = 0x01;
+    const PROTECTED = 0x02;
+    const RETRY = 0x03;
     
     // Then check if it's also discovery data (ESP32 embeds discovery in some packets)
     if (packetType === INITIAL) {
@@ -702,10 +699,15 @@ export class DeviceDiscoveryModel {
         return;
       }
 
-      // Ignore "claimed" broadcasts when device is being released
-      if (isBeingReleased && discoveryData.ownership === 'claimed') {
-        console.warn(`[DeviceDiscoveryModel] Ignoring "claimed" discovery broadcast for ${deviceId} - device is currently being released`);
-        return;
+      // During ownership release: accept "unclaimed" broadcasts (that's the ACK!) but ignore stale "claimed" broadcasts
+      if (isBeingReleased) {
+        if (discoveryData.ownership === 'unclaimed') {
+          console.log(`[DeviceDiscoveryModel] ✅ Received "unclaimed" broadcast during release for ${deviceId} - this confirms ownership removal succeeded`);
+          // Continue processing - this is the implicit ACK we're waiting for
+        } else {
+          console.warn(`[DeviceDiscoveryModel] Ignoring stale "${discoveryData.ownership}" broadcast for ${deviceId} - device is being released`);
+          return;
+        }
       }
 
       // Check if device already exists
@@ -717,10 +719,22 @@ export class DeviceDiscoveryModel {
         existing.port = port;
         existing.lastSeen = Date.now();
         existing.online = true;
-        // Don't touch ownership - that's managed by authentication flow
+
+        // CRITICAL: Clear ownership if device broadcasts as "unclaimed"
+        // This is the implicit ACK for ownership removal
+        if (discoveryData.ownership === 'unclaimed' && existing.ownerId) {
+          console.log(`[DeviceDiscoveryModel] ✅ Device ${deviceId} now broadcasting as unclaimed - clearing ownership`);
+          existing.ownerId = undefined;
+          existing.hasValidCredential = false;
+        }
 
         // Emit update
         this.onDeviceDiscovered.emit(existing);
+
+        // Also emit onDeviceUpdated for ownership removal watchers
+        if (discoveryData.ownership === 'unclaimed') {
+          this.onDeviceUpdated.emit(deviceId);
+        }
       } else {
         // New device - create with discovery info
         const device = {

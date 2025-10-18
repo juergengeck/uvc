@@ -144,15 +144,15 @@ export class QuicModel extends Model {
         // Check if this is a long header packet (bit 7 = 1)
         const isLongHeader = (data[0] & 0x80) !== 0;
 
-        // For long header packets, packet type is in bits 4-5
-        // For short header packets, we don't support them yet
+        // Determine packet type based on header format
         let packetType = -1;
         if (isLongHeader) {
-          packetType = data[0] & 0x03; // Bits 0-1 contain packet type (QUIC spec)
+          // Long header: packet type is in bits 0-1 (INITIAL=0x00, HANDSHAKE=0x01, 0-RTT=0x02, RETRY=0x03)
+          packetType = data[0] & 0x03;
         } else {
-          // Short header packets not supported for QUICVC discovery
-          // console.log(`[QuicModel] Short header packet received - not supported`);
-          return;
+          // Short header: always 1-RTT PROTECTED packet (application data after handshake)
+          // ESP32 uses short headers for LED responses and all post-handshake communication
+          packetType = 0x02; // PROTECTED
         }
 
         // console.log(`[QuicModel] Packet type: ${packetType} (first byte: 0x${data[0].toString(16)})`);

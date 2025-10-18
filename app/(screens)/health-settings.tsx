@@ -56,8 +56,8 @@ export default function HealthSettingsScreen() {
   const router = useRouter();
   const { theme, styles: themedStyles } = useAppTheme();
   const paperTheme = useTheme();
-  const appModel = useAppModel();
-  
+  const { appModel } = useAppModel();
+
   // Storage key for paired devices
   const PAIRED_DEVICES_KEY = 'health_paired_devices';
   

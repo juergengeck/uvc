@@ -55,9 +55,9 @@ export default function AddDeviceScreen() {
   const router = useRouter();
   const { theme, styles: themedStyles } = useAppTheme();
   const paperTheme = useTheme();
-  const appModel = useAppModel();
+  const { appModel } = useAppModel();
   const btleServiceRef = React.useRef<typeof btleService>(btleService);
-  
+
   // State
   const [scanning, setScanning] = useState(false);
   const [refreshing, setRefreshing] = useState(false);

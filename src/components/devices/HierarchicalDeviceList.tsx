@@ -163,8 +163,14 @@ export const HierarchicalDeviceList: React.FC = () => {
             // Load devices for this room
             if (roomData.room.devices && Array.isArray(roomData.room.devices)) {
               // Get ESP32 devices to match against
-              const esp32Manager = ESP32ConnectionManager.getInstance();
-              const connectedDevices = esp32Manager ? esp32Manager.getDevices() : [];
+              let connectedDevices: any[] = [];
+              try {
+                const esp32Manager = ESP32ConnectionManager.getInstance();
+                connectedDevices = esp32Manager ? esp32Manager.getDevices() : [];
+              } catch (error) {
+                // ESP32ConnectionManager not initialized yet - no devices available
+                console.log('[HierarchicalDeviceList] ESP32ConnectionManager not initialized yet');
+              }
 
               for (const deviceIdOrHash of roomData.room.devices) {
                 // First check if it's a device ID (string) from ESP32
@@ -224,8 +230,14 @@ export const HierarchicalDeviceList: React.FC = () => {
       });
 
       // Get all connected ESP32 devices
-      const esp32Manager = ESP32ConnectionManager.getInstance();
-      const connectedDevices = esp32Manager ? esp32Manager.getDevices() : [];
+      let connectedDevices: any[] = [];
+      try {
+        const esp32Manager = ESP32ConnectionManager.getInstance();
+        connectedDevices = esp32Manager ? esp32Manager.getDevices() : [];
+      } catch (error) {
+        // ESP32ConnectionManager not initialized yet - no devices available
+        console.log('[HierarchicalDeviceList] ESP32ConnectionManager not initialized yet');
+      }
 
       // Find which devices are already assigned to rooms
       const assignedDeviceIds = new Set<string>();

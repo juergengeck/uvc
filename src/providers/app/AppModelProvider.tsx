@@ -58,7 +58,13 @@ export function AppModelProvider({ children }: PropsWithChildren) {
 
     // Check current auth state
     const currentState = authenticator.authState?.currentState;
-    
+
+    // Verify authState exists
+    if (!authenticator.authState) {
+      console.error('[AppModelProvider] authenticator.authState is undefined!');
+      return;
+    }
+
     if (currentState === 'logged_in') {
       // Already logged in - check if model is available
       const existingModel = getModel();
@@ -81,9 +87,9 @@ export function AppModelProvider({ children }: PropsWithChildren) {
       
       // Listen for the model ready event
       const unsubscribe = onModelReady.on(handleModelReady);
-      
+
       // Also listen for auth state changes
-      const authUnsubscribe = authenticator.authState?.onStateChange?.listen((_, newState) => {
+      const authUnsubscribe = authenticator.authState.onStateChange.listen((_, newState) => {
         if (newState === 'logged_in') {
           console.log('[AppModelProvider] User logged in - waiting for model initialization');
         } else if (newState === 'logged_out') {
@@ -95,13 +101,11 @@ export function AppModelProvider({ children }: PropsWithChildren) {
           });
         }
       });
-      
+
       // Cleanup listeners on unmount
       return () => {
         unsubscribe();
-        if (authUnsubscribe) {
-          authUnsubscribe();
-        }
+        authUnsubscribe();
       };
     }
   }, []);

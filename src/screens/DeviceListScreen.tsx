@@ -34,7 +34,7 @@ export function DeviceListScreen() {
   const { styles: themedStyles } = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const appModel = useAppModel();
+  const { appModel } = useAppModel();  // Properly destructure
   const organisationModel = appModel?.organisationModel;
   const { isReady: isOrgModelReady } = useModelState(organisationModel, 'OrganisationModel');
   
@@ -832,16 +832,25 @@ ${device.ownerId ? `Owner: ${device.ownerId.substring(0, 10)}...` : ''}`,
   }, [t]);
   
   const handleAddToRoom = useCallback((device: Device) => {
+    // Check if OrganisationModel is ready before navigating
+    if (!isOrgModelReady || !organisationModel) {
+      Alert.alert(
+        t('error.title'),
+        'Organisation management is still initializing. Please wait a moment and try again.'
+      );
+      return;
+    }
+
     // Navigate to room selection or open a modal
     router.push({
       pathname: '/(screens)/devices/room-assignment',
-      params: { 
+      params: {
         deviceId: device.id,
         deviceName: device.name,
         deviceType: device.type
       }
     });
-  }, [router]);
+  }, [router, isOrgModelReady, organisationModel, t]);
   
   const handleRetryAuthentication = useCallback(async (device: Device) => {
     if (device.type !== DeviceType.ESP32) return;

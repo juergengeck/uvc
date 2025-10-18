@@ -1,0 +1,24 @@
+{
+  "name": "@refinio/quicvc-protocol",
+  "version": "0.1.0",
+  "description": "QUIC-VC protocol abstractions - QUIC with Verifiable Credentials instead of TLS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "quic",
+    "protocol",
+    "esp32",
+    "iot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

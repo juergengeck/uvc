@@ -8,7 +8,7 @@ import { requireStringId } from '@src/utils/ids';
 import type { VerifiedVCInfo } from '@src/models/network/vc/VCManager';
 
 export function TestQuicVCScreen() {
-    const appModel = useAppModel();
+    const { appModel } = useAppModel();
     const [quicVC, setQuicVC] = useState<QuicVCConnectionManager | null>(null);
     const [isInitialized, setIsInitialized] = useState(false);
     const [connections, setConnections] = useState<Array<{deviceId: string, status: string}>>([]);

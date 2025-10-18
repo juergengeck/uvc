@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Model } from '@refinio/one.models/lib/models/Model.js';
+import type { StateMachine } from '@refinio/one.models/lib/misc/StateMachine.js';
 
 interface UseModelStateResult {
   isReady: boolean;
@@ -7,15 +8,26 @@ interface UseModelStateResult {
   isLoading: boolean;
 }
 
+// Type guard to check if it's a StateMachine
+function isStateMachine(model: any): model is StateMachine<any, any> {
+  return model && typeof model.currentState !== 'undefined' && typeof model.onStateChange === 'function';
+}
+
+// Type guard to check if it's a Model
+function isModel(model: any): model is Model {
+  return model && model.state && typeof model.state.currentState !== 'undefined';
+}
+
 /**
  * Hook to handle model state management consistently across components.
  * Tracks initialization state and provides loading/error states.
- * 
- * @param model The model instance to track
- * @param modelName Name of the model for logging (e.g. 'Questionnaire', 'StudyShare')
+ * Supports both Model (with .state.currentState) and StateMachine (with .currentState)
+ *
+ * @param model The model instance to track (Model or StateMachine)
+ * @param modelName Name of the model for logging (e.g. 'Questionnaire', 'StudyShare', 'OrganisationModel')
  * @returns Object containing isReady, error, and isLoading states
  */
-export function useModelState(model: Model | null | undefined, modelName: string): UseModelStateResult {
+export function useModelState(model: Model | StateMachine<any, any> | null | undefined, modelName: string): UseModelStateResult {
   // Always declare state hooks first, regardless of model existence
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,14 +59,22 @@ export function useModelState(model: Model | null | undefined, modelName: string
 
       try {
         const now = Date.now();
-        
+
         // Optimize: If we recently checked and model was ready, skip repeated checks
-        if (lastKnownStateRef.current === 'Initialised' && 
+        if (lastKnownStateRef.current === 'Initialised' &&
             (now - lastCheckTimeRef.current) < CHECK_DEBOUNCE) {
           return; // Skip redundant state check
         }
-        
-        const currentState = model.state.currentState;
+
+        // Get currentState based on model type
+        let currentState: string;
+        if (isStateMachine(model)) {
+          currentState = model.currentState;
+        } else if (isModel(model)) {
+          currentState = model.state.currentState;
+        } else {
+          throw new Error('Model does not have a valid state property');
+        }
         lastCheckTimeRef.current = now;
         
         // Only log if state changed to reduce noise
@@ -78,13 +98,21 @@ export function useModelState(model: Model | null | undefined, modelName: string
     // Initial check
     checkModelState();
 
-    // Set up state change listener if model exists
+    // Set up state change listener based on model type
     if (model) {
-      unsubscribe = model.state.onStateChange(() => {
-        console.log(`[${modelName}] State changed - triggering check`);
-        lastKnownStateRef.current = null; // Force recheck on state change
-        checkModelState();
-      });
+      if (isStateMachine(model)) {
+        unsubscribe = model.onStateChange(() => {
+          console.log(`[${modelName}] State changed - triggering check`);
+          lastKnownStateRef.current = null; // Force recheck on state change
+          checkModelState();
+        });
+      } else if (isModel(model) && model.state.onStateChange) {
+        unsubscribe = model.state.onStateChange(() => {
+          console.log(`[${modelName}] State changed - triggering check`);
+          lastKnownStateRef.current = null; // Force recheck on state change
+          checkModelState();
+        });
+      }
     }
 
     // Cleanup function

@@ -318,14 +318,7 @@ export default function ScreensLayout() {
                         options={{
                             headerTitle: 'Assign to Room',
                             headerLargeTitle: false,
-                            headerLeft: () => (
-                                <IconButton
-                                    icon="arrow-left"
-                                    onPress={() => router.back()}
-                                    size={24}
-                                    style={{ margin: 0 }}
-                                />
-                            ),
+                            headerLeft: undefined, // Remove redundant back arrow
                         }}
                     />
 

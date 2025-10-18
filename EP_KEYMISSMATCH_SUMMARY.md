@@ -21,8 +21,8 @@ Successfully implemented comprehensive debugging for EP-KEYMISSMATCH errors betw
    - Protocol message flow tracking
    - Connection lifecycle debugging
 
-### **one.baypass Side (Desktop App)**
-1. **Detailed EP-KEYMISSMATCH Debugging** (`../flexibel.electron/packages/package/src/misc/ConnectionEstablishment/protocols/ExchangePersonIds.ts`)
+### **Desktop App Side**
+1. **Detailed EP-KEYMISSMATCH Debugging** (Connection establishment protocols)
    - Comprehensive logging in `verifyAndExchangePersonId` function
    - Expected vs received key comparison
    - Endpoint-by-endpoint key checking
@@ -33,7 +33,7 @@ Successfully implemented comprehensive debugging for EP-KEYMISSMATCH errors betw
    - Safe endpoint key clearing
    - Detailed logging of clearing operations
 
-3. **React Debugging Component** (`../flexibel.electron/one.baypass/src/components/EPKeyMismatchDebugger.tsx`)
+3. **React Debugging Component**
    - User-friendly debugging interface
    - One-click key clearing for Person IDs
    - Test invitation generation
@@ -48,8 +48,8 @@ Successfully implemented comprehensive debugging for EP-KEYMISSMATCH errors betw
 
 ### **Comprehensive Error Analysis**
 - Three main scenarios identified and debuggable:
-  1. **Key Regeneration**: Lama generates new keys each session
-  2. **Stale Keys**: one.baypass has cached old keys
+  1. **Key Regeneration**: Mobile app generates new keys each session
+  2. **Stale Keys**: Desktop app has cached old keys
   3. **Protocol Format**: Key encoding/format differences
 
 ### **Resolution Tools**
@@ -60,12 +60,12 @@ Successfully implemented comprehensive debugging for EP-KEYMISSMATCH errors betw
 ## 📋 **Usage Workflow**
 
 1. **Start both applications** with enhanced logging
-2. **Monitor session key tracking** in Lama
+2. **Monitor session key tracking** in mobile app
 3. **Attempt connection** and capture detailed logs
 4. **Analyze key fingerprints** from both sides
 5. **Apply appropriate solution**:
-   - Clear stale keys in one.baypass
-   - Fix key persistence in Lama
+   - Clear stale keys in desktop app
+   - Fix key persistence in mobile app
    - Investigate protocol format issues
 
 ## 🎉 **Expected Outcomes**
@@ -76,7 +76,7 @@ Successfully implemented comprehensive debugging for EP-KEYMISSMATCH errors betw
 - **Controlled testing** with generated invitations
 
 ### **Long-term Solutions**
-- **Proper key persistence** implementation in Lama
+- **Proper key persistence** implementation in mobile app
 - **Key rotation protocol** between applications
 - **Consistent crypto implementations** across platforms
 

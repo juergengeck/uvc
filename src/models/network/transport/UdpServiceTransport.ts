@@ -192,13 +192,16 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
         
         // Check if this is a QUICVC packet (bit 7 = 1 indicates long header)
         const isLongHeader = (firstByte & 0x80) !== 0;
+
+        // For long header packets, check packet type in lower 2 bits (QUIC spec)
+        // For short header packets (bit 7 = 0), we don't support them yet
         if (isLongHeader && data.length > 20) {
-          // This looks like a QUICVC long header packet, emit raw message for QuicModel to handle
-          const packetType = (firstByte & 0x30) >> 4; // Packet type is in bits 4-5
-          const packetTypeName = packetType === 0 ? 'INITIAL' :
-                                 packetType === 1 ? 'HANDSHAKE' :
-                                 packetType === 2 ? '0-RTT' : 'RETRY';
-          // console.log(`[UdpServiceTransport] Detected QUICVC ${packetTypeName} packet from ${rinfo.address}:${rinfo.port}`);
+          // Packet type is in bits 0-1, NOT bits 4-5 (QUIC spec RFC 9000)
+          const packetType = firstByte & 0x03;
+          const packetTypeName = packetType === 0x00 ? 'INITIAL' :
+                                 packetType === 0x01 ? 'HANDSHAKE' :
+                                 packetType === 0x02 ? 'PROTECTED' : 'RETRY';
+          console.log(`[UdpServiceTransport] Detected QUICVC ${packetTypeName} packet from ${rinfo.address}:${rinfo.port}`);
           debug(`Received QUICVC packet from ${rinfo.address}:${rinfo.port}`);
           this.emit('message', data, rinfo);
           return;

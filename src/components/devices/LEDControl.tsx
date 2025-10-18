@@ -59,21 +59,21 @@ export const LEDControl = React.memo(function LEDControl({ device, onToggleLED, 
             if (isProcessing) {
               return;
             }
-            
+
             try {
               // Blue LED pressed
               if (!onToggleLED) {
                 return;
               }
-              
+
               setIsProcessing(true);
-              
+
               await trackAction('toggle_blue_led', {
                 currentState: device.blueLedStatus,
                 isOnline: device.online,
                 isConnected: device.connected
               });
-              
+
               // Call handler
               await onToggleLED(device);
             } catch (error) {
