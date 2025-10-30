@@ -15,11 +15,16 @@ module.exports = {
     unstable_enableSymlinks: false,
     extraNodeModules: {
       buffer: require.resolve('buffer'),
+      // Redirect Node.js modules to empty stubs
+      dgram: path.resolve(__dirname, 'src/stubs/empty-module.js'),
+      crypto: require.resolve('expo-crypto'),
     },
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@src': path.resolve(__dirname, 'src'),
       '@app': path.resolve(__dirname, 'app'),
     },
+    // Block Node.js-specific files from being bundled (if they exist)
+    blockList: [],
   },
 };
