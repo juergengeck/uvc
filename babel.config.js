@@ -1,19 +1,20 @@
 const path = require('path');
 
 module.exports = function (api) {
-  // Use the current node environment instead of forever caching
-  api.cache.using(() => process.env.NODE_ENV);
+  // Cache based on env + platform so web builds don't alias react-native
+  const platform = api.caller((caller) => caller && caller.platform);
+  api.cache.using(() => `${process.env.NODE_ENV}-${platform}`);
 
   // Set the environment
   const env = api.env();
-  const isDevClient = env === 'development-client';
+  const isWeb = platform === 'web';
 
   return {
     presets: [
       [
         'babel-preset-expo',
         {
-          native: true,
+          native: !isWeb,
           jsxRuntime: 'automatic'
         }
       ]
@@ -29,10 +30,15 @@ module.exports = function (api) {
             '@app': './app',
             '@src': './src',
             '@': './src',
-            'llama.rn': './node_modules/llama.rn',
-            'react-native': './node_modules/react-native'
+            // Only alias react-native on native platforms; on web, let Metro
+            // resolve to react-native-web via its built-in mapping
+            ...(!isWeb && {
+              'react-native': './node_modules/react-native'
+            })
           },
           extensions: [
+            '.web.ts',
+            '.web.tsx',
             '.ios.ts',
             '.android.ts',
             '.ts',

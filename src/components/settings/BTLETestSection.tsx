@@ -111,7 +111,7 @@ export const BTLETestSection: React.FC = () => {
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-      const { UnifiedBLEManager } = await import('@refinio/one.btle');
+      const { UnifiedBLEManager } = await import('@refinio/connection.btle');
       const unifiedManager = new UnifiedBLEManager({
         enableLogging: false
         // Remove restoreStateIdentifier - it causes undefined device errors

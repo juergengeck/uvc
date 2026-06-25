@@ -126,7 +126,7 @@
     "owner": "geckothesane",
     "_internal": {
       "isDebug": false,
-      "projectRoot": "/Users/gecko/src/lama",
+      "projectRoot": "/Users/gecko/src/uvc",
       "dynamicConfigPath": null,
       "staticConfigPath": "./app.json",
       "packageJsonPath": "./package.json"

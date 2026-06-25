@@ -27,7 +27,7 @@ export default function BTLETestScreen() {
 
   const testImportOnly = async () => {
     try {
-      const btleModule = await import('@refinio/one.btle');
+      const btleModule = await import('@refinio/connection.btle');
       addLog('✅ Module import successful');
       addLog(`Available exports: ${Object.keys(btleModule).join(', ')}`);
       

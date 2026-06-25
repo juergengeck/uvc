@@ -129,9 +129,6 @@ function withBLEConfiguration(config) {
 // Main plugin export
 module.exports = function withUVCConfig(config) {
   return withPlugins(config, [
-    // Setup modules
-    withLlamaRnSetup,
-    
     // Add BLE support
     withBLEConfiguration,
   ]);

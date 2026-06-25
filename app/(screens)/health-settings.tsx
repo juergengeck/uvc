@@ -36,8 +36,8 @@ import { useTranslation } from 'react-i18next';
 import { useTheme as useAppTheme } from '@src/providers/app/AppTheme';
 import { createThemedStyles } from '@src/constants/ThemeStyles';
 // Health integration imports will be added when packages are available
-// import { UnifiedBLEManager } from '@refinio/one.btle';
-// import { BLEDevice } from '@refinio/one.btle';
+// import { UnifiedBLEManager } from '@refinio/connection.btle';
+// import { BLEDevice } from '@refinio/connection.btle';
 // import { BLEHealthIntegration } from '@refinio/one.health';
 // import { HealthDataService } from '@refinio/one.health';
 import { useAppModel } from '@src/hooks/useAppModel';

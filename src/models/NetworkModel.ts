@@ -15,7 +15,7 @@ import type { UdpSocket, UdpSocketOptions } from './network/UdpModel';
 import { DeviceDiscoveryModel } from './network/DeviceDiscoveryModel';
 import type { IQuicTransport } from './network/interfaces';
 import type { DeviceSettingsService } from '@src/services/DeviceSettingsService';
-import { btleService } from '@refinio/one.btle';
+import { btleService } from '@refinio/connection.btle';
 
 export class NetworkModel {
     private _quicModel!: QuicModel;

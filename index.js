@@ -29,16 +29,8 @@ import '@refinio/one.core/lib/system/load-expo';
 // Force crypto initialization to ensure PRNG is set up before any crypto operations
 import { init as initCrypto } from '@refinio/one.core/lib/system/expo/crypto-helpers';
 
-// Create an initialization promise
-const cryptoInitPromise = initCrypto().then(() => {
-  console.log('✅ Crypto helpers initialized with PRNG');
-}).catch(error => {
-  console.error('❌ Failed to initialize crypto helpers:', error);
-  // Don't throw - let the app continue but crypto operations might fail
-});
-
-// Export the promise so other modules can wait for it if needed
-global.__cryptoInitPromise = cryptoInitPromise;
+// Synchronously initialize crypto - this must complete before any ONE.core functions are called
+initCrypto();
 
 console.log('✅ one.core platform and feature detection loaded successfully');
 

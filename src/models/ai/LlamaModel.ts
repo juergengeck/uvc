@@ -10,14 +10,17 @@ import { getLlamaRNEnvironmentInfo } from '../../utils/llamaRNDebug';
 // Use native crypto instead of crypto-js
 import { v4 as uuidv4 } from 'uuid';
 
-// Import modern llama.rn API
-import { initLlama, LlamaContext, releaseAllLlama } from 'llama.rn';
+// Import modern llama.rn API - DISABLED (llama.rn removed)
+// import { initLlama, LlamaContext, releaseAllLlama } from 'llama.rn';
+const initLlama = undefined;
+const LlamaContext = undefined;
+const releaseAllLlama = undefined;
 
 // Still check native module for compatibility
 const RNLlama = NativeModules.RNLlama;
 
 // Check which API is available
-const useModernAPI = typeof initLlama === 'function';
+const useModernAPI = false; // Disabled - llama.rn removed
 
 // Debug logging for module availability
 console.log('[LlamaModel] Checking llama.rn module availability:');
@@ -27,13 +30,12 @@ console.log('[LlamaModel] - typeof releaseAllLlama:', typeof releaseAllLlama);
 console.log('[LlamaModel] - RNLlama available:', !!RNLlama);
 
 if (!useModernAPI && !RNLlama) {
-  const LINKING_ERROR = 
-    `Neither modern llama.rn API nor native module 'RNLlama' is available.\n` +
-    `- Make sure 'llama.rn' is correctly installed and linked.\n` +
+  const LINKING_WARNING =
+    `[LlamaModel] llama.rn is not available - AI features will be disabled.\n` +
+    `- To enable AI features, install and link 'llama.rn'.\n` +
     `- If using Fabric (New Architecture), ensure the module supports it and codegen ran.\n` +
-    `- Rebuild your app after changes (pod install, npm install).\n` +
-    `- Check for build errors during the native build process.`;
-  console.error(LINKING_ERROR);
+    `- Rebuild your app after changes (pod install, npm install).`;
+  console.warn(LINKING_WARNING);
 } else {
   console.log(`[LlamaModel] Using ${useModernAPI ? 'modern llama.rn API' : 'legacy RNLlama Native Module'}`);
 }
@@ -416,10 +418,13 @@ export class LlamaModel {
       
       // Try to load model info for capabilities
       try {
-        console.log(`[LlamaModel:${this.instanceId}] Loading model info...`);
-        const { loadLlamaModelInfo } = await import('llama.rn');
-        const modelInfo = await loadLlamaModelInfo(modelPath);
-        console.log(`[LlamaModel:${this.instanceId}] Model info loaded:`, JSON.stringify(modelInfo, null, 2).substring(0, 500));
+        // llama.rn removed - using default metadata
+        console.log(`[LlamaModel:${this.instanceId}] Loading model info (llama.rn not available)...`);
+        // const { loadLlamaModelInfo } = await import('llama.rn');
+        // const modelInfo = await loadLlamaModelInfo(modelPath);
+        // console.log(`[LlamaModel:${this.instanceId}] Model info loaded:`, JSON.stringify(modelInfo, null, 2).substring(0, 500));
+
+        const modelInfo = null; // No llama.rn available
         
         // Extract useful metadata
         if (modelInfo && typeof modelInfo === 'object') {

@@ -136,6 +136,7 @@ tasks/ .windsurfrules
 build-*.ipa
 build-*.apk
 build-*.aab
+android-custom-modules/.gradle/
 
 # Task files
 # tasks.json

@@ -6,7 +6,7 @@
 import { EventEmitter } from 'events';
 import { btleService } from '../BLETurboModule';
 // These will be imported once packages are installed
-// import { UnifiedBLEManager } from '@refinio/one.btle';
+// import { UnifiedBLEManager } from '@refinio/connection.btle';
 // import { BLEHealthIntegration, HealthStorageService } from '@refinio/one.health';
 
 export interface HealthDevice {

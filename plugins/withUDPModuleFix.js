@@ -31,7 +31,7 @@ function withUDPModuleFix(config) {
         defs.uniq!
 
         # Only touch build settings for our C++ native modules
-        cxx_targets = ['llama-rn', 'react-native-udp-direct', 'UDPDirectModule', 'UDPModule']
+        cxx_targets = ['react-native-udp-direct', 'UDPDirectModule', 'UDPModule']
         if cxx_targets.include?(target.name)
           # Ensure modern C++ is enabled and libc++ is used (fixes <tuple> not found)
           config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
