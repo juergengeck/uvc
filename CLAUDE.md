@@ -134,7 +134,9 @@ const socket = appModel.createUdpSocket({ type: 'udp4' });
 
 ## Project Structure
 
-### Key Directories
+### Monorepo Architecture
+This is a **monorepo** containing multiple packages. The main React Native app is at the root, with additional packages in `packages/`:
+
 ```
 app/                        # Expo Router screens
 ├── (auth)/                # Authentication flows
@@ -156,12 +158,32 @@ src/
 └── platform/           # Platform-specific code
 
 packages/
-├── refinio.api/         # API package (new)
-└── refinio.cli/         # CLI package (new)
+├── quicvc-protocol/     # Protocol definitions for QUIC-VC
+├── react-native-udp-direct/  # Native UDP module
+├── one.core.expo/       # Core platform with ESP32 firmware
+├── one.models/          # ONE platform models
+├── one.btle/           # Bluetooth Low Energy support
+├── one.vc/             # Verifiable credentials
+├── one.audit/          # Audit logging
+├── refinio.api/        # Node.js API server (ESM, uses QUICVC transport)
+└── refinio.cli/        # Node.js CLI client
 
-vendor/                  # Local ONE platform dependencies
+vendor/                  # Local ONE platform dependencies (tarballs)
 └── [one.core, one.models, one.btle tarballs]
 ```
+
+### Key Packages
+
+**refinio.api** - Instance-based API server for ONE platform
+- Uses QUIC with verifiable credentials (QUICVC) for transport
+- Provides CRUD operations for ONE objects
+- ESM modules (`"type": "module"`)
+- See `packages/refinio.api/CLAUDE.md` for detailed docs
+- Commands: `npm run build`, `npm start`, `npm run dev`
+
+**one.core.expo** - Contains ESP32 firmware
+- ESP32 code location: `packages/one.core.expo/src/system/esp32/esp32-quicvc-project/`
+- QUICVC protocol implementation for embedded devices
 
 ### Critical Files
 - [src/initialization/index.ts](src/initialization/index.ts) - App initialization sequence
@@ -176,6 +198,32 @@ vendor/                  # Local ONE platform dependencies
 - [package.json](package.json) - Dependencies and scripts
 
 ## Development Guidelines
+
+### Core Principles (from .cursorrules)
+
+**Fail Fast Philosophy:**
+- No fallbacks, no mitigation, no delays
+- Throw immediately when problems occur
+- Fix root causes, don't hide failures
+- Work in a controlled environment - fail fast so we can fix properly
+- Defensive programming is adverse to code quality
+
+**Use What Exists:**
+- Prefer ONE.core and ONE.models over custom implementations
+- Check `one.leute/` reference implementation before creating new features
+- Read source code in `one.core/src/recipes.ts`, `one.core/src/instance.ts`, `one.core/src/util/object.ts`
+- Avoid redundant implementations - search thoroughly first
+
+**No Assumptions:**
+- Investigate thoroughly before implementing
+- Don't make assumptions about how things work
+- Look at actual file locations before assuming import paths
+- Verify data integrity after operations
+
+**Expo Prebuild Protection:**
+- **NEVER** directly edit `ios/` or `android/` folders (ephemeral, regenerated)
+- Modify config plugins in `plugins/` directory instead
+- Use Expo's Config Plugin system for native customizations
 
 ### Model State Management
 Always use the `useModelState` hook for models:
@@ -198,22 +246,54 @@ function MyComponent({ model }) {
 ### ONE Platform Object Relationships
 Follow correct creation sequence for Person/Profile/Someone objects:
 
-```typescript
-// 1. Create Person object
-const person = await Person.create(...);
+**Critical Understanding:**
+- `Person` - UUID and core identity representation
+- `Profile` - Contact information and communication details (must include `OneInstanceEndpoint` for proper connection mapping)
+- `Someone` - Comprehensive representation of a real person with all their information
 
-// 2. Create Profile for the Person
+**Creation Sequence:**
+```typescript
+// 1. Check if Person exists first (normal case, not error)
+let person = await getPerson(personId).catch(() => null);
+if (!person) {
+  person = await Person.create(...);
+}
+
+// 2. Create Profile with OneInstanceEndpoint (REQUIRED for knownPeerMap)
+const oneInstanceEndpoint = {
+  $type$: 'OneInstanceEndpoint' as const,
+  personId: remotePersonId,
+  url: 'wss://commserver.edda.one',
+  instanceId: remoteInstanceId,
+  instanceKeys: keys[0],
+  personKeys: keys[0]
+};
+
 const profile = await ProfileModel.constructWithNewProfile(
-  personId, localPersonId, 'default', 
-  [oneInstanceEndpoint], [signKey]
+  personId, localPersonId, 'default',
+  [oneInstanceEndpoint],  // MUST include endpoint for proper peer resolution
+  [signKey]
 );
 
 // 3. Create Someone object
 const someone = await SomeoneModel.constructWithNewSomeone(person);
 
-// 4. Add to contacts
+// 4. Add to contacts (takes Someone ID, not Person ID)
 await leuteModel.addSomeoneElse(someone.idHash);
+
+// 5. VERIFY data integrity
+const retrievedSomeone = await leuteModel.getSomeone(personId);
+if (!retrievedSomeone) {
+  throw new Error('Failed to retrieve Someone after creation');
+}
 ```
+
+**Common Pitfalls:**
+- `addSomeoneElse` only adds ID to contacts list, doesn't create Someone
+- Profile MUST include `OneInstanceEndpoint` or `knownPeerMap` won't populate
+- Without endpoint, connection shows `remotePersonId: '0'.repeat(64)` instead of actual ID
+- Always verify relationships after creation - don't assume they worked
+- Handle existing Person as normal case, not error condition
 
 ### Native Module Usage
 Access UDP and native features through model layer:
@@ -230,7 +310,7 @@ const socket = await quicModel.createUdpSocket({ type: 'udp4' });
 ```
 
 ### TypeScript with ONE Platform
-Handle type mismatches with wrapper adapters:
+Handle type mismatches with wrapper adapters (prefer adapters over type assertions):
 
 ```typescript
 // Event wrapper for type compatibility
@@ -239,9 +319,25 @@ const wrappedEvent = {
     return channelManager.onUpdated.listen((channelInfoIdHash, channelId, channelOwner, timeOfEarliestChange) => {
       callback(timeOfEarliestChange);
     });
+  },
+  emit: (timeOfEarliestChange: Date) => {
+    console.warn('Unexpected call to emit on wrapper event');
   }
 } as OEvent<(timeOfEarliestChange: Date) => void>;
+
+// Property initialization patterns
+public modelName!: ModelType;        // Definite assignment - initialized at runtime
+private _optional?: OptionalType;    // Optional - may be undefined
+
+// StateMachine with exact state/event literals
+state: StateMachine<"Uninitialised" | "Initialised", "shutdown" | "init">
 ```
+
+**Common TypeScript Issues:**
+- Always verify actual file locations in `node_modules/@refinio/` before assuming import paths
+- Use wrapper interfaces/adapters rather than excessive type casting
+- Add debug logging around model initialization and event handling
+- Network models (QuicModel, DeviceDiscoveryModel) are in `./network/` subdirectory
 
 ### Using the Reference Implementation
 **Always check `one.leute/` for implementation patterns before creating new features:**
@@ -263,6 +359,50 @@ const wrappedEvent = {
 - **Contact management** - See `one.leute/src/hooks/contact/`
 - **Authentication flows** - See `one.leute/src/components/onboarding/`
 - **Settings/configuration** - See `one.leute/src/root/settings/`
+
+## Working with Monorepo Packages
+
+### Package Development Commands
+
+**Main App:**
+```bash
+npm start              # Start Expo dev server
+npm test               # Run Jest tests
+npm run prebuild:clean # Rebuild native modules (required after native changes)
+```
+
+**refinio.api (Node.js API Server):**
+```bash
+cd packages/refinio.api
+npm run build         # Compile TypeScript
+npm run dev           # Watch mode
+npm start             # Start server (node dist/index.js)
+```
+
+**quicvc-protocol:**
+```bash
+cd packages/quicvc-protocol
+npm run build         # Compile TypeScript
+npm run watch         # Watch mode
+```
+
+**ESP32 Firmware:**
+- Location: `packages/one.core.expo/src/system/esp32/esp32-quicvc-project/`
+- Uses ESP-IDF build system
+- Implements QUICVC protocol for embedded devices
+
+### Package Dependencies
+- Main app imports from `@refinio/quicvc-protocol` (protocol definitions)
+- `refinio.api` uses ESM modules (`"type": "module"` in package.json)
+- All packages import from `@refinio/one.core` and `@refinio/one.models`
+- Vendor tarballs in `vendor/` provide local ONE platform dependencies
+
+### Building Vendored Packages
+Vendored packages in `vendor/` are built from source packages in `packages/`:
+- `packages/one.core.expo/`, `packages/one.models/`, `packages/one.btle/` contain source code
+- Build these packages and create tarballs for `vendor/` directory
+- Main app installs from `vendor/` tarballs via `file:` references in package.json
+- This allows local development and modifications to ONE platform packages
 
 ## Common Patterns
 
@@ -421,3 +561,13 @@ This prompt ensures focused reviews on critical issues without unnecessary comme
 - ESP32 code: `packages/one.core.expo/src/system/esp32/esp32-quicvc-project/`
 - Main repo: `/Users/gecko/src/uvc`
 - ONE platform core: `vendor/` tarballs
+
+**Type Safety Notes:**
+- SHA256Hash and SHA256IdHash are branded string types - they're just strings but with type safety
+- Always use one.core helpers when available - don't reimplement existing utilities
+
+**Development Philosophy:**
+- Fail fast, fix root causes, no mitigation or delays
+- Use what exists (ONE.core, ONE.models, one.leute reference)
+- Investigate thoroughly before implementing
+- Never edit `ios/` or `android/` folders directly (use config plugins instead)
