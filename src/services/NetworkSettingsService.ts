@@ -17,12 +17,14 @@ export class NetworkSettingsService {
   private static _instance: NetworkSettingsService | null = null;
   private _deviceSettingsService: any = null;
   private _commServerReadyLogged = false;
+  private _headlessAuthorityUrlFallback: string | null = null;
 
   // Events for network state changes
   public readonly onNetworkStateChanged = new OEvent<(isConnected: boolean) => void>();
   public readonly onConnectionsChanged = new OEvent<() => void>();
   public readonly onDeviceDiscoveryChanged = new OEvent<() => void>();
   public readonly onCommServerUrlChanged = new OEvent<(url: string) => void>();
+  public readonly onHeadlessAuthorityUrlChanged = new OEvent<(url: string) => void>();
 
   /**
    * Private constructor - use getInstance() instead
@@ -512,6 +514,62 @@ export class NetworkSettingsService {
   public async resetCommServerUrl(): Promise<void> {
     const defaultUrl = 'wss://comm10.dev.refinio.one';
     await this.setCommServerUrl(defaultUrl);
+  }
+
+  /**
+   * Get current Pi/headless authority URL from settings.
+   * Falls back to an in-memory value when PropertyTree is unavailable.
+   */
+  public getHeadlessAuthorityUrl(): string {
+    if (this._headlessAuthorityUrlFallback) {
+      return this._headlessAuthorityUrlFallback;
+    }
+
+    const appModel = ModelService.getModel();
+    if (appModel?.propertyTree) {
+      try {
+        const savedUrl = appModel.propertyTree.getValue('headlessAuthorityUrl');
+        if (typeof savedUrl === 'string' && savedUrl) {
+          this._headlessAuthorityUrlFallback = savedUrl;
+          return savedUrl;
+        }
+      } catch (error) {
+        console.warn('[NetworkSettingsService] Could not get headless authority URL from property tree:', error);
+      }
+    }
+
+    return 'http://uvc-pi.local:3000';
+  }
+
+  /**
+   * Set Pi/headless authority URL in settings.
+   * Uses PropertyTree when available and otherwise persists for the current session.
+   */
+  public async setHeadlessAuthorityUrl(url: string): Promise<void> {
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      throw new Error('Headless authority URL must start with http:// or https://');
+    }
+
+    this._headlessAuthorityUrlFallback = normalizedUrl;
+
+    const appModel = ModelService.getModel();
+    if (appModel?.propertyTree) {
+      try {
+        await appModel.propertyTree.setValue('headlessAuthorityUrl', normalizedUrl);
+      } catch (error) {
+        console.warn('[NetworkSettingsService] Failed to persist headless authority URL, keeping session value only:', error);
+      }
+    }
+
+    this.onHeadlessAuthorityUrlChanged.emit(normalizedUrl);
+  }
+
+  /**
+   * Reset Pi/headless authority URL to the demonstrator default.
+   */
+  public async resetHeadlessAuthorityUrl(): Promise<void> {
+    await this.setHeadlessAuthorityUrl('http://uvc-pi.local:3000');
   }
 
   /**

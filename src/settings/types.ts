@@ -7,6 +7,7 @@ export interface NetworkSettingsGroup {
   $type$: 'Settings.network';
   eddaDomain: string;
   commServerUrl?: string;
+  headlessAuthorityUrl?: string;
   autoConnect?: boolean;
   [key: string]: unknown;
 }

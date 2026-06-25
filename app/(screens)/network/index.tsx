@@ -46,6 +46,20 @@ export default function NetworkSettingsScreen() {
             right={props => <List.Icon {...props} icon="chevron-right" />}
           />
         </View>
+
+        <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
+          {t('settings.network.authority.section', { defaultValue: 'TRUST AUTHORITY' }).toUpperCase()}
+        </Text>
+        <View style={themedStyles.settingsSection}>
+          <List.Item
+            title={t('settings.network.authority.title', { defaultValue: 'Pi Trust Authority' })}
+            description={t('settings.network.authority.description', { defaultValue: 'Inspect Raspberry Pi headless state, discovered devices, and demonstrator configuration' })}
+            onPress={() => router.push('/(screens)/network/authority')}
+            style={[themedStyles.settingsItem, themedStyles.settingsItemLast]}
+            left={props => <List.Icon {...props} icon="server-network" />}
+            right={props => <List.Icon {...props} icon="chevron-right" />}
+          />
+        </View>
         
         {/* Connections Section */}
         <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>

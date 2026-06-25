@@ -200,6 +200,7 @@ export class SettingsManager implements ISettingsManager {
     const networkSettings: NetworkSettingsGroup = {
       $type$: 'Settings.network',
       eddaDomain: 'https://edda.dev.refinio.one', // Test against development instance
+      headlessAuthorityUrl: 'http://uvc-pi.local:3000',
       autoConnect: false
     };
 
@@ -270,6 +271,7 @@ export class SettingsManager implements ISettingsManager {
     return {
       $type$: 'Settings.network',
       eddaDomain: 'https://edda.dev.refinio.one', // Test against development instance
+      headlessAuthorityUrl: 'http://uvc-pi.local:3000',
       autoConnect: false
     };
   }

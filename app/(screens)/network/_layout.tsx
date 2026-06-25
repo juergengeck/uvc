@@ -57,6 +57,14 @@ export default function NetworkLayout() {
         }}
       />
       <Stack.Screen 
+        name="authority" 
+        options={{
+          title: t('settings.network.authority.title', { defaultValue: 'Pi Trust Authority' }),
+          headerShown: true,
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen 
         name="connection" 
         options={{
           title: t('settings.network.connections.title', { defaultValue: 'Connections' }),
