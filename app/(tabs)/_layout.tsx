@@ -164,6 +164,23 @@ export default function TabsLayout() {
             tabBarIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="devices" size={size} color={theme.colors.primary} />
             ),
+            headerRight: () => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <IconButton
+                  icon="cctv"
+                  size={24}
+                  onPress={() => router.push('/(screens)/devices/camera-feeds')}
+                  iconColor={theme.colors.primary}
+                />
+                <IconButton
+                  icon="cog"
+                  size={24}
+                  onPress={() => router.push('/(screens)/settings')}
+                  iconColor={theme.colors.primary}
+                  style={{ marginLeft: 4, marginRight: 8 }}
+                />
+              </View>
+            ),
           }}
         />
       </Tabs>

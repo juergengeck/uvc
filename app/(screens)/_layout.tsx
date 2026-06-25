@@ -339,6 +339,22 @@ export default function ScreensLayout() {
                     />
 
                     <Stack.Screen
+                        name="devices/camera-feeds"
+                        options={{
+                            headerTitle: 'Camera Feeds',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
                         name="devices/create-room"
                         options={{
                             headerTitle: 'Create Room',

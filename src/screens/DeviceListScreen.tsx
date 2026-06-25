@@ -815,21 +815,8 @@ export function DeviceListScreen() {
   }, [removeDeviceWithCredentials, handleRefresh, t]);
   
   const handleViewDetails = useCallback((device: Device) => {
-    const lastSeen = device.lastSeen 
-      ? new Date(device.lastSeen).toLocaleString() 
-      : 'Never';
-      
-    Alert.alert(
-      device.name,
-      `ID: ${device.id}
-Type: ${device.type}
-Address: ${device.address}:${device.port}
-Status: ${device.connected ? 'Online' : 'Offline'}
-Last seen: ${lastSeen}
-${device.ownerId ? `Owner: ${device.ownerId.substring(0, 10)}...` : ''}`,
-      [{ text: t('common:ok') }]
-    );
-  }, [t]);
+    router.push(`/(screens)/device-detail/${device.id}`);
+  }, [router]);
   
   const handleAddToRoom = useCallback((device: Device) => {
     // Check if OrganisationModel is ready before navigating

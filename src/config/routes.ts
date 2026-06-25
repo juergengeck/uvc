@@ -30,6 +30,7 @@ type Routes = {
     addContact: string;
     editContact: string;
     contactDetails: string;
+    deviceCameraFeeds: string;
     deviceList: string;
     deviceDetail: string;
     networkDiscovery: string;
@@ -69,6 +70,7 @@ export const routes: Routes = {
     addContact: '/(screens)/contacts/add-contact',
     editContact: '/(screens)/contacts/edit',
     contactDetails: '/(screens)/contacts/someone',
+    deviceCameraFeeds: '/(screens)/devices/camera-feeds',
     deviceList: '/(screens)/device-list',
     deviceDetail: '/(screens)/device-detail',
     networkDiscovery: '/(screens)/network/discovery',

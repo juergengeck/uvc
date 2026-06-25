@@ -23,6 +23,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from 'react-native-paper';
+import { Esp32CamFeedCard } from '@src/components/devices/Esp32CamFeedCard';
 
 interface DeviceInfo {
   id: string;
@@ -519,6 +520,16 @@ export const DeviceDetailScreen: React.FC = () => {
             )}
           </View>
         </View>
+
+        {/* Statistics */}
+        <Esp32CamFeedCard
+          address={device.address}
+          capabilities={device.capabilities}
+          cardTitle="Camera Feed"
+          deviceId={device.id}
+          deviceName={device.deviceName}
+          deviceType={device.deviceType}
+        />
 
         {/* Statistics */}
         <View style={styles.section}>

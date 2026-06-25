@@ -94,6 +94,7 @@ export const DeviceItem = React.memo(function DeviceItem({
             title={device.name}
             description={briefDescription}
             descriptionNumberOfLines={1}
+            onPress={() => onViewDetails(device)}
             disabled={false}
             left={() => (
               <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>

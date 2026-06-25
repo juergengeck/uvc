@@ -1,0 +1,108 @@
+--- packages/esp32.core/firmware/esp32-quicvc-project/main/main.c
++++ packages/esp32.core/firmware/esp32-quicvc-project/main/main.c
+@@ -297,6 +297,7 @@
+ 
+ static volatile led_state_t blue_led_state = LED_STATE_OFF; // Current blue LED state
+ static volatile bool led_manual_control = false; // Flag to indicate manual LED control is active
++static volatile bool led_local_switch_control = false; // Local switch controls LED until remote auto/manual command
+ static volatile uint64_t led_manual_control_time = 0; // Timestamp when manual control was last used
+ static volatile bool led_blink_event = false; // Event flag to trigger LED blink
+ static volatile uint64_t led_last_blink_time = 0; // Last time LED was blinked
+@@ -308,10 +309,13 @@
+ #define BLINK_INTERVAL_MS 500 // Blink interval in milliseconds
+ #ifdef CONFIG_IDF_TARGET_ESP32C3
+ #define BLUE_LED_GPIO_PIN GPIO_NUM_8 // Blue LED on GPIO 8 (ESP32-C3 built-in LED)
++#define LED_SWITCH_GPIO_PIN GPIO_NUM_9 // BOOT switch on ESP32-C3
+ #else
+ #define BLUE_LED_GPIO_PIN GPIO_NUM_2 // Blue LED on GPIO 2 (ESP32 built-in LED)
++#define LED_SWITCH_GPIO_PIN GPIO_NUM_0 // BOOT switch on ESP32
+ #endif
+ #define LED_MANUAL_CONTROL_TIMEOUT_MS 30000 // Reset to automatic after 30 seconds of no manual commands
++#define LED_SWITCH_DEBOUNCE_MS 50 // Debounce active-low switch presses
+ 
+ // Display variables
+ static device_state_t current_device_state = {0};
+@@ -898,6 +902,7 @@
+     } else if (strcmp(action_str, "auto") == 0) {
+         // Re-enable automatic blinking
+         led_manual_control = false;
++        led_local_switch_control = false;
+         // Reset to off when going back to auto
+         blue_led_state = LED_STATE_OFF;
+         gpio_set_level(BLUE_LED_GPIO_PIN, 1);  // Active-low LED: 1 = OFF
+@@ -918,6 +923,7 @@
+     }
+     
+     if (success && strcmp(action_str, "status") != 0 && strcmp(action_str, "auto") != 0) {
++        led_local_switch_control = false;
+         // Update manual control tracking based on manual flag
+         if (is_manual_command) {
+             led_manual_control = true; // Enable manual control mode
+@@ -2713,19 +2719,59 @@
+     };
+     gpio_config(&io_conf);
+     
++    // Configure active-low local switch with internal pull-up.
++    gpio_config_t switch_io_conf = {
++        .pin_bit_mask = (1ULL << LED_SWITCH_GPIO_PIN),
++        .mode = GPIO_MODE_INPUT,
++        .pull_up_en = GPIO_PULLUP_ENABLE,
++        .pull_down_en = GPIO_PULLDOWN_DISABLE,
++        .intr_type = GPIO_INTR_DISABLE,
++    };
++    gpio_config(&switch_io_conf);
++    
+     // Start with LED off
+     blue_led_state = LED_STATE_OFF;
+     gpio_set_level(BLUE_LED_GPIO_PIN, 1);  // Active-low LED: 1 = OFF
+     
++    int switch_stable_level = gpio_get_level(LED_SWITCH_GPIO_PIN);
++    int switch_last_sample_level = switch_stable_level;
++    uint64_t switch_last_change_time = esp_timer_get_time() / 1000;
++    
+     while (1) {
+         // Allow other tasks to run
+         taskYIELD();
+         
+         uint64_t current_time = esp_timer_get_time() / 1000; // ms
++        
++        int switch_level = gpio_get_level(LED_SWITCH_GPIO_PIN);
++        if (switch_level != switch_last_sample_level) {
++            switch_last_sample_level = switch_level;
++            switch_last_change_time = current_time;
++        } else if (switch_level != switch_stable_level &&
++                   (current_time - switch_last_change_time) >= LED_SWITCH_DEBOUNCE_MS) {
++            switch_stable_level = switch_level;
++            
++            if (switch_stable_level == 0) {
++                if (blue_led_state == LED_STATE_ON) {
++                    blue_led_state = LED_STATE_OFF;
++                    gpio_set_level(BLUE_LED_GPIO_PIN, 1); // Active-low LED: 1 = OFF
++                } else {
++                    blue_led_state = LED_STATE_ON;
++                    gpio_set_level(BLUE_LED_GPIO_PIN, 0); // Active-low LED: 0 = ON
++                }
++                
++                led_manual_control = true;
++                led_local_switch_control = true;
++                led_manual_control_time = current_time;
++                led_broadcast_pending = true;
++                QLOG_INFO(LOG_LED_STATE_CHANGE, blue_led_state, 1); // 1 = local switch
++            }
++        }
+         
+         // Check if manual control has timed out
+         if (led_manual_control) {
+-            if ((current_time - led_manual_control_time) >= LED_MANUAL_CONTROL_TIMEOUT_MS) {
++            if (!led_local_switch_control &&
++                (current_time - led_manual_control_time) >= LED_MANUAL_CONTROL_TIMEOUT_MS) {
+                 QLOG_INFO(LOG_LED_TIMEOUT, current_time, 0);
+                 led_manual_control = false;
+                 blue_led_state = LED_STATE_OFF;
+@@ -3163,4 +3209,4 @@
+     // Trigger discovery after a short delay
+     vTaskDelay(2000 / portTICK_PERIOD_MS);
+     discovery_event = DISCOVERY_EVENT_SEND;
+-}
+\ No newline at end of file
++}
