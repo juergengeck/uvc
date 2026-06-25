@@ -14,6 +14,7 @@ import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js'
 import { TransportType, TransportStatus, type ITransport, type ConnectionTarget, type CommServerTransportConfig } from '../../../types/transport';
 import BlacklistModel from '../../BlacklistModel';
 import { getLogger } from '../../../utils/logger';
+import { createGroupIfNotExist } from '../../../utils/groupUtils';
 
 const log = getLogger('CommServerManager');
 
@@ -84,7 +85,13 @@ export default class CommServerManager implements ITransport {
 
       // Create BlacklistModel exactly like one.leute
       this.blacklistModel = new BlacklistModel();
-      const blacklistGroup = await this.leuteModel.createGroup('blacklist');
+
+      // Ensure groups exist with proper HashGroup before constructing GroupModel objects
+      await createGroupIfNotExist('blacklist', []);
+      await createGroupIfNotExist('everyone', []); // Should already exist from initModel, but ensure it
+
+      // Now construct GroupModel objects (safe because groups have HashGroup)
+      const blacklistGroup = await GroupModel.constructFromLatestProfileVersionByGroupName('blacklist');
       const everyoneGroup = await GroupModel.constructFromLatestProfileVersionByGroupName('everyone');
       await this.blacklistModel.init(blacklistGroup, everyoneGroup);
       // Note: Everyone group ID is not needed here since access grants are handled by LeuteAccessRightsManager

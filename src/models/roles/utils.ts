@@ -1,12 +1,23 @@
-import type { Group, Person } from '@refinio/one.core/lib/recipes.js';
-import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
+import type { Group, HashGroup, Person } from '@refinio/one.core/lib/recipes.js';
+import type { SHA256Hash, SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import { calculateIdHashOfObj } from '@refinio/one.core/lib/util/object.js';
 import { exists } from '@refinio/one.core/lib/system/storage-base.js';
+import { storeUnversionedObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import GroupModel from '@refinio/one.models/lib/models/Leute/GroupModel.js';
 import type { LeuteModel } from '@refinio/one.models/lib/models';
 
+async function createHashGroup(members: SHA256IdHash<Person>[]): Promise<SHA256Hash<HashGroup<Person>>> {
+    const hashGroup: HashGroup<Person> = {
+        $type$: 'HashGroup',
+        members
+    };
+    const result = await storeUnversionedObject(hashGroup);
+    return result.hash;
+}
+
 async function getGroupHashId(groupName: string): Promise<SHA256IdHash<Group> | undefined> {
-    const group: Group = {$type$: 'Group', name: groupName, person: []};
+    const hashGroupHash = await createHashGroup([]);
+    const group: Group = {$type$: 'Group', name: groupName, hashGroup: hashGroupHash};
     const groupHash = await calculateIdHashOfObj(group);
 
     if (await exists(groupHash)) {
@@ -17,7 +28,13 @@ async function getGroupHashId(groupName: string): Promise<SHA256IdHash<Group> | 
 }
 
 export async function getGroup(name: string): Promise<GroupModel> {
-    return GroupModel.constructWithNewGroup(name);
+    const groupIdHash = await getGroupHashId(name);
+
+    if (groupIdHash === undefined) {
+        return GroupModel.constructWithNewGroup(name);
+    } else {
+        return GroupModel.constructFromLatestProfileVersion(groupIdHash);
+    }
 }
 
 export async function getPersonIdsForRole(

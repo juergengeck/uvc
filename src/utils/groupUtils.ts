@@ -1,5 +1,5 @@
-import type {SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
-import type {Group, Person} from '@refinio/one.core/lib/recipes.js';
+import type {SHA256IdHash, SHA256Hash} from '@refinio/one.core/lib/util/type-checks.js';
+import type {Group, HashGroup, Person} from '@refinio/one.core/lib/recipes.js';
 import {calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
 import type {VersionedObjectResult} from '@refinio/one.core/lib/storage-versioned-objects.js';
 import {
@@ -7,7 +7,22 @@ import {
     storeVersionedObject
 } from '@refinio/one.core/lib/storage-versioned-objects.js';
 import {exists} from '@refinio/one.core/lib/system/storage-base.js';
-import objectEvents from '@refinio/one.models/lib/misc/ObjectEventDispatcher';
+import {getObject, storeUnversionedObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
+import {objectEvents} from '@refinio/one.models/lib/misc/ObjectEventDispatcher.js';
+
+// ######## Helper Functions ########
+
+/**
+ * Create and store a HashGroup with the given members, returns its hash.
+ */
+async function createHashGroup(members: SHA256IdHash<Person>[]): Promise<SHA256Hash<HashGroup<Person>>> {
+    const hashGroup: HashGroup<Person> = {
+        $type$: 'HashGroup',
+        members
+    };
+    const result = await storeUnversionedObject(hashGroup);
+    return result.hash;
+}
 
 // ######## Name based interface ########
 
@@ -23,8 +38,9 @@ export async function onGroupChangeByName(
     cb: (result: VersionedObjectResult<Group>) => Promise<void> | void,
     cbDescription: string
 ): Promise<() => void> {
+    const hashGroupHash = await createHashGroup([]);
     return onGroupChange(
-        await calculateIdHashOfObj<Group>({$type$: 'Group', name: groupName, person: []}),
+        await calculateIdHashOfObj<Group>({$type$: 'Group', name: groupName, hashGroup: hashGroupHash}),
         cb,
         cbDescription
     );
@@ -42,11 +58,12 @@ export async function createGroupIfNotExist(
 ) {
     const groupId = await getGroupIdByName(groupName);
 
-    if (await exists(groupId, 'vmaps')) {
+    if (await exists(groupId)) {
         return;
     }
 
-    await storeVersionedObject({$type$: 'Group', name: groupName, person: initialPersons});
+    const hashGroupHash = await createHashGroup(initialPersons);
+    await storeVersionedObject({$type$: 'Group', name: groupName, hashGroup: hashGroupHash});
 }
 
 /**
@@ -132,7 +149,8 @@ export async function getGroupMembers(
     groupId: SHA256IdHash<Group>
 ): Promise<SHA256IdHash<Person>[]> {
     const group = await getObjectByIdHash(groupId);
-    return group.obj.person;
+    const hashGroup = await getObject(group.obj.hashGroup);
+    return hashGroup.members;
 }
 
 /**
@@ -146,10 +164,15 @@ export async function addPersonToGroup(
     person: SHA256IdHash<Person>
 ): Promise<void> {
     const group = await getObjectByIdHash(groupId);
+    const hashGroup = await getObject(group.obj.hashGroup);
 
-    if (!group.obj.person.includes(person)) {
-        group.obj.person.push(person);
-        await storeVersionedObject(group.obj);
+    if (!hashGroup.members.includes(person)) {
+        const newMembers = [...hashGroup.members, person];
+        const newHashGroupHash = await createHashGroup(newMembers);
+        await storeVersionedObject({
+            ...group.obj,
+            hashGroup: newHashGroupHash
+        });
     }
 }
 
@@ -164,10 +187,15 @@ export async function removePersonFromGroup(
     person: SHA256IdHash<Person>
 ): Promise<void> {
     const group = await getObjectByIdHash(groupId);
+    const hashGroup = await getObject(group.obj.hashGroup);
 
-    if (group.obj.person.includes(person)) {
-        group.obj.person = group.obj.person.filter(p => p !== person);
-        await storeVersionedObject(group.obj);
+    if (hashGroup.members.includes(person)) {
+        const newMembers = hashGroup.members.filter(p => p !== person);
+        const newHashGroupHash = await createHashGroup(newMembers);
+        await storeVersionedObject({
+            ...group.obj,
+            hashGroup: newHashGroupHash
+        });
     }
 }
 
@@ -177,7 +205,8 @@ export async function removePersonFromGroup(
  * @param groupName
  */
 export async function getGroupIdByName(groupName: string): Promise<SHA256IdHash<Group>> {
-    return calculateIdHashOfObj<Group>({$type$: 'Group', name: groupName, person: []});
+    const hashGroupHash = await createHashGroup([]);
+    return calculateIdHashOfObj<Group>({$type$: 'Group', name: groupName, hashGroup: hashGroupHash});
 }
 
 /**
@@ -187,7 +216,8 @@ export async function getGroupIdByName(groupName: string): Promise<SHA256IdHash<
  * @returns The group hash if it exists, undefined otherwise
  */
 export async function getGroupHash(groupName: string): Promise<SHA256IdHash<Group> | undefined> {
-    const groupHash = await calculateIdHashOfObj<Group>({$type$: 'Group', name: groupName, person: []});
+    const hashGroupHash = await createHashGroup([]);
+    const groupHash = await calculateIdHashOfObj<Group>({$type$: 'Group', name: groupName, hashGroup: hashGroupHash});
     if (await exists(groupHash)) {
         return groupHash;
     }

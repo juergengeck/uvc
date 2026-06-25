@@ -206,6 +206,7 @@ import { hasDefaultKeys, createCryptoApiFromDefaultKeys, getListOfKeys, getDefau
 import { hasSecretKeys } from '@refinio/one.core/lib/keychain/key-storage-secret';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
+import { CORE_RECIPES } from '@refinio/one.core/lib/recipes.js';
 
 // Import recipes and maps
 import RecipesStable from '@refinio/one.models/lib/recipes/recipes-stable';
@@ -261,13 +262,13 @@ import { setupDebugLogging } from '../config/debug';
 
 // CRITICAL: Additional static imports to prevent bundling during login
 import { subscribeToMessageBus } from '../config/debug';
-import { ensurePlatformLoaded } from '@refinio/one.core/lib/system/platform';
 import { objectEvents } from '@refinio/one.models/lib/misc/ObjectEventDispatcher';
 import { createMessageBus } from '@refinio/one.core/lib/message-bus';
 import { initializePlatform } from '../platform/init';
 import { measureTime } from '../utils/performanceOptimization';
 import { keyCache } from './keyCache';
 import { performanceSummary } from '../utils/performanceSummary';
+import { instanceExists } from '@refinio/one.core/lib/instance';
 
 /**
  * Enhanced loginOrRegister that uses the basic MultiUser method
@@ -289,7 +290,6 @@ export async function loginOrRegisterWithKeys(
   }
 
   // Check if instance exists to provide better feedback
-  const { instanceExists } = await import('@refinio/one.core/lib/instance');
   const exists = await instanceExists(instanceName, email);
 
   if (!exists) {
@@ -352,19 +352,25 @@ export async function createInstance(): Promise<MultiUser> {
   if (authInstance) {
     return authInstance;
   }
-  
+
   try {
-    // Don't initialize platform here - it should happen after login
-    // when we have user context and are ready to start networking
-    
     // Create auth instance using standard MultiUser (fixed upstream)
+    console.log('[createInstance] CORE_RECIPES count:', CORE_RECIPES.length);
+    console.log('[createInstance] CORE_RECIPES includes Group?', CORE_RECIPES.some(r => r.name === 'Group'));
+    console.log('[createInstance] CORE_RECIPES includes HashGroup?', CORE_RECIPES.some(r => r.name === 'HashGroup'));
+
+    const allRecipes = [
+      ...CORE_RECIPES,
+      ...RecipesStable,
+      ...RecipesExperimental,
+      ...ALL_RECIPES
+    ];
+    console.log('[createInstance] Total recipes count:', allRecipes.length);
+    console.log('[createInstance] All recipes include Group?', allRecipes.some(r => r.name === 'Group'));
+
     authInstance = new MultiUser({
       directory: APP_CONFIG.name,
-      recipes: [
-        ...RecipesStable,
-        ...RecipesExperimental,
-        ...ALL_RECIPES
-      ],
+      recipes: allRecipes,
       reverseMaps: new Map<OneObjectTypeNames, Set<string>>([
         ['Someone', new Set(['personId', 'mainProfile', 'identities'])],
         ['Profile', new Set(['personId', 'owner'])]
@@ -593,7 +599,15 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
   const leuteModel = await measureTime('LeuteModel.init', async () => {
     const startTime = Date.now();
     const model = new LeuteModel(commServerUrl, true);
-    await model.init();
+    try {
+      console.log('[initModel] About to call LeuteModel.init()');
+      await model.init();
+      console.log('[initModel] LeuteModel.init() completed successfully');
+    } catch (error) {
+      console.error('[initModel] LeuteModel.init() FAILED with error:', error);
+      console.error('[initModel] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      throw error;
+    }
     performanceSummary.record('LeuteModel.init', Date.now() - startTime);
     return model;
   });
@@ -611,14 +625,20 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     return manager;
   });
   
-  const getGroupIdByName = async (name: string) => {
-    const group = await leuteModel.createGroup(name);
-    return group.groupIdHash;
-  };
-
-  // Parallelize group creation
-  const [iomGroupId, leuteReplicantGroupId, glueReplicantGroupId, everyoneGroupId] = await measureTime(
+  // Create groups properly with HashGroup (createGroupIfNotExist ensures HashGroup is created)
+  await measureTime(
     'Group creation (parallel)',
+    () => Promise.all([
+      createGroupIfNotExist('iom', []),
+      createGroupIfNotExist('leute-replicant', []),
+      createGroupIfNotExist('glue-replicant', []),
+      createGroupIfNotExist('everyone', [])
+    ])
+  );
+
+  // Get the IDs after creation
+  const [iomGroupId, leuteReplicantGroupId, glueReplicantGroupId, everyoneGroupId] = await measureTime(
+    'Get group IDs',
     () => Promise.all([
       getGroupIdByName('iom'),
       getGroupIdByName('leute-replicant'),

@@ -29,6 +29,7 @@ import { DeviceDiscoveryModel } from './network/DeviceDiscoveryModel';
 import DeviceModel from './device/DeviceModel';
 import { initializeAppJournal, logAppStart } from '../utils/appJournal';
 import OrganisationModel from './OrganisationModel';
+import { getGroupIdByName } from '../utils/groupUtils';
 
 export type AppModelState = 'Uninitialised' | 'Initialising' | 'Initialised' | 'ShuttingDown';
 export type AppModelEvent = 'init' | 'shutdown';
@@ -55,7 +56,6 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
     
     // Core models
     public leuteModel: InstanceType<typeof LeuteModel>;
-    public everyoneGroup!: GroupModel;
     private _channelManager: InstanceType<typeof ChannelManager>;
     public readonly topicModel: InstanceType<typeof TopicModel>;
     public readonly journalModel: InstanceType<typeof JournalModel>;
@@ -169,12 +169,9 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             
             // TransportManager already initialized
             // Networking will be started later in initModel() AFTER LeuteAccessRightsManager is ready
-            
-            // Create everyone group for legacy compatibility (using static import)
-            const groupStartTime = Date.now();
-            this.everyoneGroup = await GroupModel.constructFromLatestProfileVersionByGroupName('everyone');
-            console.log(`[PERF] Everyone group creation: ${Date.now() - groupStartTime}ms`);
-            
+
+            // Note: "everyone" group is created in initModel() before AppModel initialization
+
             // Create and initialize InviteManager
             const inviteStartTime = Date.now();
             this.inviteManager = new InviteManager(this.leuteModel, this.transportManager);
@@ -607,13 +604,12 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
                         } else {
                             // Fallback: Apply everyone group access for topics without specific participants
                             console.log(`[AppModel] No specific participants found, applying everyone group access for topic: ${topicId}`);
-                            
-                            // Get the everyone group for fallback access
-                            const { default: GroupModel } = await import('@refinio/one.models/lib/models/Leute/GroupModel');
-                            const everyoneGroup = await GroupModel.constructFromLatestProfileVersionByGroupName('everyone');
-                            
+
+                            // Get the everyone group ID for fallback access (group already created in initModel)
+                            const everyoneGroupId = await getGroupIdByName('everyone');
+
                             // topic.channel is a SHA256IdHash<ChannelInfo>, so we need IdAccess
-                            await createAccess(buildAccessGrant(topic.channel, [], [everyoneGroup.groupIdHash], true));
+                            await createAccess(buildAccessGrant(topic.channel, [], [everyoneGroupId], true));
                             
                             console.log(`[AppModel] ✅ Applied everyone group access rights for topic: ${topicId}`);
                         }
