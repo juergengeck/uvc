@@ -27,6 +27,7 @@ import {initAccessManager} from '@refinio/one.core/lib/accessManager.js';
 import { debugMessageTransfer } from '../utils/messageTransferDebug';
 import { DeviceDiscoveryModel } from './network/DeviceDiscoveryModel';
 import DeviceModel from './device/DeviceModel';
+import UvcPhoneBookModel from './contacts/UvcPhoneBookModel';
 import { initializeAppJournal, logAppStart } from '../utils/appJournal';
 import OrganisationModel from './OrganisationModel';
 import { getGroupIdByName } from '../utils/groupUtils';
@@ -81,6 +82,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
     public transportManager: TransportManager;
     public deviceDiscoveryModel?: DeviceDiscoveryModel;
     public deviceModel?: DeviceModel;
+    public phoneBookModel?: UvcPhoneBookModel;
     
     // Organisation management
     public organisationModel?: OrganisationModel;
@@ -182,6 +184,15 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             const deviceStartTime = Date.now();
             this.deviceModel = await DeviceModel.ensureInitialized(this.leuteModel);
             console.log(`[PERF] DeviceModel.init: ${Date.now() - deviceStartTime}ms`);
+
+            const phoneBookStartTime = Date.now();
+            this.phoneBookModel = new UvcPhoneBookModel(
+                this.leuteModel,
+                this.deviceModel,
+                this.connections,
+            );
+            await this.phoneBookModel.init();
+            console.log(`[PERF] UvcPhoneBookModel.init: ${Date.now() - phoneBookStartTime}ms`);
 
             // Initialize DeviceDiscoveryModel
             this.deviceDiscoveryModel = DeviceDiscoveryModel.getInstance();
@@ -329,6 +340,16 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             }
         }
 
+        // Shutdown the phone-book projection before its source models.
+        if (this.phoneBookModel) {
+            try {
+                await this.phoneBookModel.shutdown();
+                this.phoneBookModel = undefined;
+            } catch (error) {
+                console.error('[AppModel] Error shutting down UvcPhoneBookModel:', error);
+            }
+        }
+
         // Shutdown DeviceModel if it exists
         if (this.deviceModel) {
             try {
@@ -433,26 +454,29 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             console.log('[AppModel] Creating Everyone topic...');
             const everyoneStartTime = Date.now();
             const everyoneTopic = await this.topicModel.createEveryoneTopic();
-            console.log(`[AppModel] ✅ Everyone topic created: ${everyoneTopic?.id} (${Date.now() - everyoneStartTime}ms)`);
+            console.log(`[AppModel] ✅ Everyone topic created: ${everyoneTopic?.displayName ?? everyoneTopic?.originalName} (${Date.now() - everyoneStartTime}ms)`);
             
             // Create Glue topic
             console.log('[AppModel] Creating Glue topic...');
             const glueStartTime = Date.now();
-            const glueTopic = await this.topicModel.createGlueTopic();
-            console.log(`[AppModel] ✅ Glue topic created: ${glueTopic?.id} (${Date.now() - glueStartTime}ms)`);
+            const myId = await this.leuteModel.myMainIdentity();
+            const glueTopic = await this.topicModel.createTopic(
+                'GlueOneTopic',
+                [myId],
+                'Glue'
+            );
+            console.log(`[AppModel] ✅ Glue topic created: ${glueTopic?.displayName ?? glueTopic?.originalName} (${Date.now() - glueStartTime}ms)`);
             
             // Create AI Subjects topic for IoM knowledge sharing
             console.log('[AppModel] Creating AI Subjects topic...');
             try {
                 const aiStartTime = Date.now();
-                // Create the AISubjectsChannel as a system topic
-                const subjectsTopicId = 'AISubjectsChannel';
-                const subjectsTopic = await this.topicModel.createGroupTopic(
-                    'AI Knowledge Base', // Display name
-                    subjectsTopicId,     // Topic ID
-                    null                 // No owner for system topic
+                const subjectsTopic = await this.topicModel.createTopic(
+                    'AISubjectsChannel',
+                    [myId],
+                    'AI Knowledge Base'
                 );
-                console.log(`[AppModel] ✅ AI Subjects topic created: ${subjectsTopic?.id} (${Date.now() - aiStartTime}ms)`);
+                console.log(`[AppModel] ✅ AI Subjects topic created: ${subjectsTopic?.displayName ?? subjectsTopic?.originalName} (${Date.now() - aiStartTime}ms)`);
             } catch (error) {
                 // Topic might already exist
                 console.log('[AppModel] AI Subjects topic may already exist:', error);

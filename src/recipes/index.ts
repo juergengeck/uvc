@@ -34,6 +34,12 @@ import {
   DeviceDiscoveryInfoRecipe,
   OwnershipRemovalCommandRecipe
 } from '../types/device-control-recipes';
+import {
+  UVC_PHONE_BOOK_RECIPES,
+  UvcPhoneBookEntryRecipe,
+  UvcPhoneBookRecipe,
+  UvcPhoneBookRegistryRecipe,
+} from './UvcPhoneBookRecipes';
 
 // Verify the recipe array
 console.log('[RECIPES] LLMSettingsRecipes array:', 
@@ -84,6 +90,9 @@ export const ALL_RECIPES: Recipe[] = [
   DeviceDiscoveryInfoRecipe,
   OwnershipRemovalCommandRecipe,
 
+  // Certified UVC-to-UVC contact/device directory
+  ...UVC_PHONE_BOOK_RECIPES,
+
   // Organisational hierarchy
   OrganisationRecipe,
   DepartmentRecipe,
@@ -133,7 +142,10 @@ export {
   LEDStatusResponseRecipe,
   DeviceDiscoveryInfoRecipe,
   OwnershipRemovalCommandRecipe,
+  UvcPhoneBookEntryRecipe,
+  UvcPhoneBookRecipe,
+  UvcPhoneBookRegistryRecipe,
   OrganisationRecipe,
   DepartmentRecipe,
   RoomRecipe
-}; 
+};

@@ -19,10 +19,9 @@ import { getObject, storeUnversionedObject } from '@refinio/one.core/lib/storage
 import { getObjectByIdHash, storeVersionedObject } from '@refinio/one.core/lib/storage-versioned-objects.js';
 // Import device types from recipes
 import { Device, DeviceSettings, DeviceRegistrationResult, DeviceList } from '../../recipes/device';
-import type { VerifiableCredential } from '@OneObjectInterfaces';
+import type { VerifiableCredential } from '../../recipes/VerifiableCredential';
 import { addRecipeToRuntime, hasRecipe } from '@refinio/one.core/lib/object-recipes.js';
-import { DeviceOwnershipLicense } from '@src/recipes/VerifiableCredential';
-import type { License } from '@refinio/one.models/lib/recipes/Certificates/License.js';
+import type {Signature} from '@refinio/one.models/lib/recipes/SignatureRecipes.js';
 
 // Initialize debug logger
 const debugLogger = Debug('one:device:model');
@@ -40,6 +39,11 @@ interface RuntimeDevice extends Device {
   isAuthenticated: boolean;
   discoverySource: 'broadcast' | 'stored' | 'manual';
   status?: string;
+}
+
+interface IssuedDeviceCredential {
+  credential: VerifiableCredential;
+  signatureHash: SHA256Hash<Signature>;
 }
 
 // DiscoveredDevice interface removed - we now use DiscoveryDevice from interfaces.ts
@@ -380,11 +384,7 @@ export class DeviceModel extends Model {
     
     try {
       debugLogger('Removing device ownership for %s', deviceId);
-      
-      // Remove from cache
-      this._devices.delete(deviceId);
-      this._deviceSettings.delete(deviceId);
-      
+
       // Get the device to find its idHash
       const device = await this.getDevice(deviceId);
       if (device) {
@@ -398,6 +398,11 @@ export class DeviceModel extends Model {
         
         // Remove from device list
         await this._removeFromDeviceList(deviceIdHash);
+
+        // Notify projections after the durable list no longer contains it.
+        this._devices.delete(deviceId);
+        this._deviceSettings.delete(deviceId);
+        await this.onDeviceOwnershipChanged.emitAll(device, device.owner);
       }
       
       debugLogger('Removed device ownership for %s', deviceId);
@@ -802,16 +807,16 @@ export class DeviceModel extends Model {
       debugLogger('Stored device with hash: %s', deviceHash);
       
       // Create credential referencing the device object
-      const credential = await this._createDeviceCredential(
+      const issuedCredential = await this._createDeviceCredential(
         personId,
-        deviceHash,  // Pass the device hash instead of deviceId
+        deviceHash as unknown as SHA256Hash,  // Exact Device version certified below
         deviceId,
         device.deviceType
       );
       
       // Send credential to device
       const success = await this._sendCredentialToDevice(
-        credential,
+        issuedCredential.credential,
         device.address,
         device.port
       );
@@ -826,7 +831,8 @@ export class DeviceModel extends Model {
       
       // Update device with credential information
       newDevice.hasValidCredential = true;
-      newDevice.credentialId = credential.id;
+      newDevice.credentialId = issuedCredential.credential.id;
+      newDevice.credential = issuedCredential.signatureHash;
       
       // Replace original device with new one
       this._devices.set(deviceId, newDevice);
@@ -879,7 +885,7 @@ export class DeviceModel extends Model {
       return {
         success: true,
         deviceId,
-        credential
+        credential: issuedCredential.credential
       };
     } catch (error) {
       debugLogger('Error registering device ownership: %o', error);
@@ -896,18 +902,14 @@ export class DeviceModel extends Model {
    */
   private async _createDeviceCredential(
     ownerId: SHA256IdHash<Person>,
-    deviceHash: SHA256Hash<Device>,
+    deviceHash: SHA256Hash,
     deviceId: string,
     deviceType: string
-  ): Promise<VerifiableCredential> {
+  ): Promise<IssuedDeviceCredential> {
     // Generate a unique ID
     const id = `credential-${deviceId}-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     const now = Date.now();
     const validUntil = now + (365 * 24 * 60 * 60 * 1000); // 1 year
-    
-    // Store the license and get its hash
-    const licenseResult = await storeUnversionedObject(DeviceOwnershipLicense);
-    const licenseHash = licenseResult.hash as SHA256Hash<License>;
     
     // Create claims map for device ownership
     const claims = new Map<string, any>([
@@ -917,9 +919,14 @@ export class DeviceModel extends Model {
       ['permissions', ['control', 'configure', 'monitor']]
     ]);
     
-    // Create the credential object
-    const credential: VerifiableCredential = {
-      $type$: 'VerifiableCredential',
+    if (!this._leuteModel) {
+      throw new Error('DeviceModel requires LeuteModel to issue a device credential');
+    }
+
+    // Store the certificate and a real ONE Signature root. The previous code
+    // only stored a hash-shaped `proof` string, which was not independently
+    // verifiable by another UVC instance.
+    const certified = await this._leuteModel.trust.certify('VerifiableCredential' as any, {
       id,
       issuer: ownerId,
       subject: deviceHash,  // Reference to the actual Device object
@@ -927,13 +934,10 @@ export class DeviceModel extends Model {
       claims,
       issuedAt: now,
       validUntil,
-      license: licenseHash,
       proof: await this._generateProof(id, ownerId, deviceId),
       revoked: false
-    };
-    
-    // Store in unversioned object storage
-    await storeUnversionedObject(credential);
+    } as any, ownerId);
+    const credential = certified.certificate.obj as unknown as VerifiableCredential;
     
     // Update cache
     this._credentials.set(id, credential);
@@ -944,7 +948,10 @@ export class DeviceModel extends Model {
       this.onDeviceCredentialIssued.emit(credential, device);
     }
     
-    return credential;
+    return {
+      credential,
+      signatureHash: certified.signature.hash as SHA256Hash<Signature>,
+    };
   }
   
   /**
@@ -990,8 +997,8 @@ export class DeviceModel extends Model {
         subject: credential.subject.toString(),
         device_id: credential.claims.get('device_id'),
         device_type: credential.claims.get('device_type'),
-        issued_at: Math.floor(credential.issuedAt.getTime() / 1000),
-        expires_at: credential.validUntil ? Math.floor(credential.validUntil.getTime() / 1000) : 0,
+        issued_at: Math.floor(credential.issuedAt / 1000),
+        expires_at: credential.validUntil ? Math.floor(credential.validUntil / 1000) : 0,
         ownership: credential.claims.get('ownership'),
         permissions: credential.claims.get('permissions').join(','),
         proof: credential.proof,
@@ -1407,4 +1414,4 @@ export class DeviceModel extends Model {
 }
 
 // Export the singleton instance
-export default DeviceModel; 
+export default DeviceModel;

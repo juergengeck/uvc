@@ -1,5 +1,6 @@
 import type { SHA256IdHash, SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { Person, Instance, VersionNode } from '@refinio/one.core/lib/recipes.js';
+import type {Signature} from '@refinio/one.models/lib/recipes/SignatureRecipes.js';
 
 /**
  * Device object in the ONE architecture.
@@ -36,6 +37,8 @@ export interface Device {
   
   // Credential reference
   credentialId?: string;
+  /** Signature over the immutable device-ownership credential. */
+  credential?: SHA256Hash<Signature>;
   
   // Status flags
   hasValidCredential: boolean;
@@ -196,7 +199,9 @@ export const DeviceRecipe: Recipe = {
     { itemprop: 'firstSeen', itemtype: { type: 'number' } },
     { itemprop: 'lastSeen', itemtype: { type: 'number' } },
     { itemprop: 'online', itemtype: { type: 'boolean' }, optional: true },
-    { itemprop: 'metadata', itemtype: { type: 'string' }, optional: true }
+    { itemprop: 'metadata', itemtype: { type: 'string' }, optional: true },
+    // Append-only recipe evolution: keep existing serialized field order stable.
+    { itemprop: 'credential', itemtype: { type: 'referenceToObj', allowedTypes: new Set(['Signature']) }, optional: true }
   ]
 };
 
@@ -260,4 +265,4 @@ declare module '@OneObjectInterfaces' {
     // DeviceSettings is already defined with 'forDevice' as ID field
     DeviceList: Pick<DeviceList, '$type$' | 'owner'>;
   }
-} 
+}
