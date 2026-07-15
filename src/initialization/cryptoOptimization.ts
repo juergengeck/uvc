@@ -7,8 +7,8 @@
  * 3. Providing async wrappers for heavy operations
  */
 
-import { init as initCryptoHelpers } from '@refinio/one.core/lib/system/expo/crypto-helpers';
-import { createRandomString } from '@refinio/one.core/lib/system/crypto-helpers';
+import '@refinio/one.core-expo/dist/load-expo.js';
+import { createRandomString } from '@refinio/one.core/lib/system/crypto-helpers.js';
 
 let cryptoInitialized = false;
 let cryptoInitPromise: Promise<void> | null = null;
@@ -31,10 +31,8 @@ export async function preInitializeCrypto(): Promise<void> {
     console.log('[CryptoOptimization] Pre-initializing crypto helpers...');
 
     try {
-      // Initialize crypto helpers (includes PRNG setup)
-      await initCryptoHelpers();
-
-      // Test that crypto is working
+      // The Expo platform loader registers crypto helpers during module import.
+      // Test that the public one.core crypto facade is working.
       const testRandom = await createRandomString(8);
       if (!testRandom || testRandom.length !== 8) {
         throw new Error('Crypto helpers test failed');

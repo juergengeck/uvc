@@ -144,6 +144,8 @@ export default function LoginScreen() {
         ) : null}
 
         <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Login"
           onPress={handleLogin}
           disabled={loading || !username || !password}
           style={[themedStyles.buttonPrimary, { marginTop: 16 }]}

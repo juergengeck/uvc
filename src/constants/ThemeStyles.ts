@@ -1,17 +1,33 @@
 import { StyleSheet, Platform } from 'react-native';
 import type { MD3Theme } from 'react-native-paper';
 
+type AppTheme = MD3Theme & {
+  colors: MD3Theme['colors'] & {
+    border: string;
+    divider: string;
+    modalBackground: string;
+    surfaceRaised: string;
+    surfaceSunken: string;
+    textSecondary: string;
+  };
+};
+
 /**
  * Creates reusable styles that depend on the theme
  * Following Apple's iOS Settings design patterns for consistency across all screens
  * @param theme The current theme
  * @returns StyleSheet with theme-dependent styles
  */
-export function createThemedStyles(theme: MD3Theme) {
+export function createThemedStyles(theme: AppTheme) {
   // Common values
-  const borderRadius = 10;
+  const borderRadius = 12;
   const standardPadding = 16;
   const smallPadding = 8;
+  const headingFont = Platform.select({
+    ios: 'Georgia',
+    android: 'serif',
+    default: 'Source Serif 4, Georgia, serif',
+  });
   
   return StyleSheet.create({
     // Layout
@@ -23,8 +39,9 @@ export function createThemedStyles(theme: MD3Theme) {
     
     // Typography
     screenTitle: {
-      fontSize: 34,
-      fontWeight: 'bold',
+      fontSize: 30,
+      fontFamily: headingFont,
+      fontWeight: '600',
       paddingHorizontal: standardPadding,
       paddingTop: standardPadding,
       paddingBottom: smallPadding,
@@ -38,7 +55,7 @@ export function createThemedStyles(theme: MD3Theme) {
       paddingTop: 24,
       paddingBottom: 8,
       color: Platform.select({
-        ios: theme.dark ? '#858585' : '#858585',
+        ios: theme.colors.textSecondary,
         default: theme.colors.onSurfaceVariant,
       }),
       textTransform: 'uppercase',
@@ -68,12 +85,13 @@ export function createThemedStyles(theme: MD3Theme) {
       marginHorizontal: standardPadding,
       marginBottom: standardPadding,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 1)',
+        ios: theme.colors.surfaceRaised,
         default: theme.colors.surface,
       }),
       borderRadius: borderRadius,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.border,
       overflow: 'hidden',
-      // No shadows in iOS Settings
     },
     
     // Settings styles
@@ -81,10 +99,12 @@ export function createThemedStyles(theme: MD3Theme) {
       marginBottom: standardPadding,
       marginHorizontal: standardPadding,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 1)',
+        ios: theme.colors.surfaceRaised,
         default: theme.colors.surface,
       }),
       borderRadius: borderRadius,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.border,
       overflow: 'hidden',
     },
     settingsSectionTitle: {
@@ -93,7 +113,7 @@ export function createThemedStyles(theme: MD3Theme) {
       paddingBottom: 8,
       fontSize: 13,
       color: Platform.select({
-        ios: theme.dark ? '#858585' : '#858585',
+        ios: theme.colors.textSecondary,
         default: theme.colors.onSurfaceVariant,
       }),
       textTransform: 'uppercase',
@@ -103,7 +123,7 @@ export function createThemedStyles(theme: MD3Theme) {
     settingsItem: {
       paddingVertical: smallPadding,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 1)',
+        ios: theme.colors.surfaceRaised,
         default: theme.colors.surface,
       }),
     },
@@ -114,7 +134,7 @@ export function createThemedStyles(theme: MD3Theme) {
     settingsDivider: {
       height: StyleSheet.hairlineWidth,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(60, 60, 67, 0.29)' : 'rgba(60, 60, 67, 0.29)',
+        ios: theme.colors.divider,
         default: theme.colors.outlineVariant,
       }),
       marginLeft: standardPadding,
@@ -142,7 +162,7 @@ export function createThemedStyles(theme: MD3Theme) {
       borderWidth: 0,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: Platform.select({
-        ios: theme.dark ? 'rgba(60, 60, 67, 0.3)' : 'rgba(60, 60, 67, 0.3)',
+        ios: theme.colors.outlineVariant,
         default: theme.colors.outline,
       }),
       width: '100%',
@@ -150,7 +170,7 @@ export function createThemedStyles(theme: MD3Theme) {
     
     // Button styles - iOS style
     buttonPrimary: {
-      backgroundColor: theme.colors.primary, // Use theme primary color (green)
+      backgroundColor: theme.colors.brandPrimary,
       borderRadius: borderRadius,
       paddingVertical: 14,
       marginHorizontal: standardPadding,
@@ -159,7 +179,7 @@ export function createThemedStyles(theme: MD3Theme) {
       justifyContent: 'center',
     },
     buttonPrimaryText: {
-      color: 'white',
+      color: '#ffffff',
       fontSize: 17,
       fontWeight: '600',
     },
@@ -207,10 +227,12 @@ export function createThemedStyles(theme: MD3Theme) {
       marginHorizontal: standardPadding,
       marginBottom: standardPadding,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 1)',
+        ios: theme.colors.surfaceRaised,
         default: theme.colors.surface,
       }),
       borderRadius: borderRadius,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.border,
       overflow: 'hidden',
     },
     collapsibleHeader: {
@@ -256,7 +278,7 @@ export function createThemedStyles(theme: MD3Theme) {
       borderRadius: borderRadius,
       overflow: 'hidden',
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 1)',
+        ios: theme.colors.surfaceRaised,
         default: theme.colors.surface,
       }),
     },
@@ -265,7 +287,7 @@ export function createThemedStyles(theme: MD3Theme) {
     divider: {
       height: StyleSheet.hairlineWidth,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(60, 60, 67, 0.29)' : 'rgba(60, 60, 67, 0.29)',
+        ios: theme.colors.divider,
         default: theme.colors.outlineVariant,
       }),
     },
@@ -273,7 +295,7 @@ export function createThemedStyles(theme: MD3Theme) {
     // Loading overlay
     loadingOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0, 0, 0, 0.1)',
+      backgroundColor: theme.dark ? 'rgba(0, 0, 0, 0.28)' : 'rgba(36, 35, 31, 0.12)',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000,
@@ -284,15 +306,17 @@ export function createThemedStyles(theme: MD3Theme) {
       flex: 1,
       justifyContent: 'center',
       padding: standardPadding,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: theme.colors.modalBackground,
     },
     modalContent: {
       borderRadius: borderRadius,
       padding: 24,
       backgroundColor: Platform.select({
-        ios: theme.dark ? '#1C1C1E' : 'white',
+        ios: theme.colors.surfaceRaised,
         default: theme.colors.surface,
       }),
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.border,
     },
     modalTitle: {
       marginBottom: standardPadding,
@@ -320,10 +344,10 @@ export function createThemedStyles(theme: MD3Theme) {
     // Device List Screen styles (missing from original)
     headerContainer: {
       width: '100%',
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.surfaceSunken,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.colors.outline,
-      elevation: 2,
+      borderBottomColor: theme.colors.border,
+      elevation: 0,
     },
     appbarHeader: {
       backgroundColor: 'transparent',
@@ -346,7 +370,7 @@ export function createThemedStyles(theme: MD3Theme) {
     searchBar: {
       elevation: 0,
       backgroundColor: Platform.select({
-        ios: theme.dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+        ios: theme.colors.surfaceSunken,
         default: theme.colors.surfaceVariant,
       }),
       borderRadius: borderRadius,

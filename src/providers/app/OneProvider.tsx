@@ -12,6 +12,7 @@ import type { AppModel as Model } from '@src/models/AppModel';
 import type Authenticator from '@refinio/one.models/lib/models/Authenticator/Authenticator';
 import { StyleSheet, ActivityIndicator, View, Text, useColorScheme } from 'react-native';
 import { getStoredDarkMode } from '../app/AppTheme';
+import { Colors } from '@src/constants/Colors';
 
 /**
  * Context for sharing the model with child components
@@ -28,6 +29,16 @@ export const OneContext = createContext<OneContext | null>(null);
  */
 interface OneProviderProps extends PropsWithChildren {
   authenticator: Authenticator;
+}
+
+function getBootstrapColors(isDarkMode: boolean) {
+  const colors = isDarkMode ? Colors.dark : Colors.light;
+  return {
+    background: colors.background,
+    text: colors.onBackground,
+    mutedText: colors.textSecondary,
+    spinner: colors.primary,
+  };
 }
 
 /**
@@ -150,8 +161,8 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
     });
 
     return () => {
-      if (unsubscribe && unsubscribe.remove) {
-        unsubscribe.remove();
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
       }
     };
   }, [model]);
@@ -160,10 +171,10 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
   if (authenticator.authState?.currentState !== 'logged_in') {
     // Use user preference if available, otherwise use system color scheme
     const isDarkMode = userDarkModePref !== null ? userDarkModePref : colorScheme === 'dark';
-    const backgroundColor = isDarkMode ? '#121212' : '#ffffff';
+    const colors = getBootstrapColors(isDarkMode);
     
     return (
-      <View style={{ flex: 1, backgroundColor }}>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
         {children}
       </View>
     );
@@ -173,14 +184,12 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
   if (!model) {
     // Use user preference if set, otherwise use system color scheme
     const isDarkMode = userDarkModePref !== null ? userDarkModePref : colorScheme === 'dark';
-    const backgroundColor = isDarkMode ? '#121212' : '#ffffff';
-    const textColor = isDarkMode ? '#ffffff' : '#000000';
-    const spinnerColor = isDarkMode ? '#16a34a' : '#22c55e';
+    const colors = getBootstrapColors(isDarkMode);
     
     return (
-      <View style={[styles.container, { backgroundColor }]}>
-        <ActivityIndicator size="large" color={spinnerColor} />
-        <Text style={[styles.text, { color: textColor }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.spinner} />
+        <Text style={[styles.text, { color: colors.text }]}>
           {isInitializingModel ? 'Initializing user data...' : 'Accessing user data...'}
         </Text>
       </View>
@@ -191,15 +200,13 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
   // Keep showing loading until model is FULLY initialized
   if (!initialized) {
     const isDarkMode = userDarkModePref !== null ? userDarkModePref : colorScheme === 'dark';
-    const backgroundColor = isDarkMode ? '#121212' : '#ffffff';
-    const textColor = isDarkMode ? '#ffffff' : '#000000';
-    const spinnerColor = isDarkMode ? '#16a34a' : '#22c55e';
+    const colors = getBootstrapColors(isDarkMode);
     
     console.log('[OneProvider] Still waiting for initialization, showing loading screen');
     return (
-      <View style={[styles.container, { backgroundColor }]}>
-        <ActivityIndicator size="large" color={spinnerColor} />
-        <Text style={[styles.text, { color: textColor }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.spinner} />
+        <Text style={[styles.text, { color: colors.text }]}>
           Preparing your experience...
         </Text>
       </View>
@@ -210,10 +217,10 @@ export function OneProvider({ authenticator, children }: OneProviderProps) {
   
   // Always wrap children in a view with background to prevent flash
   const isDarkMode = userDarkModePref !== null ? userDarkModePref : colorScheme === 'dark';
-  const backgroundColor = isDarkMode ? '#121212' : '#ffffff';
+  const colors = getBootstrapColors(isDarkMode);
   
   return (
-    <View style={{ flex: 1, backgroundColor }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <OneContext.Provider value={{ model, initialized }}>
         {children}
       </OneContext.Provider>
@@ -271,11 +278,12 @@ const styles = StyleSheet.create({
   },
   text: {
     marginTop: 16,
-    fontSize: 16
+    fontSize: 16,
+    lineHeight: 24
   },
   debug: {
     marginTop: 8,
     fontSize: 12,
-    color: '#888'
+    color: Colors.light.textSecondary
   }
-}); 
+});

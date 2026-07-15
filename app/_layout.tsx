@@ -4,8 +4,9 @@
 
 // CRITICAL: Load one.core polyfills FIRST before any other code
 console.log('🚀 Loading one.core polyfills in _layout.tsx...');
-import '@refinio/one.core/lib/util/feature-detection';
-import '@refinio/one.core/lib/system/load-expo';
+import '../src/polyfills/structuredClone';
+import '@refinio/one.core/lib/util/feature-detection.js';
+import '@refinio/one.core-expo/dist/load-expo.js';
 console.log('✅ one.core polyfills loaded successfully');
 
 // CRITICAL: Import polyfill FIRST before any other code
@@ -17,6 +18,7 @@ import '@src/i18n/config';
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Linking, useColorScheme, Appearance, AppState } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 // Import the new singleton initializer
 import { initializeApp } from '@src/initialization/singleton';
@@ -30,11 +32,21 @@ import { ErrorBoundary } from '@src/components/ErrorBoundary';
 import { OneProvider } from '@src/providers/app/OneProvider';
 import { useScreenTracking } from '@src/hooks/useScreenTracking';
 import { getStoredDarkMode } from '@src/providers/app/AppTheme';
+import { Colors } from '@src/constants/Colors';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch(e => {
   console.warn('[RootLayout] Error preventing splash screen from hiding:', e);
 });
+
+function getBootstrapColors(isDarkMode: boolean) {
+  const colors = isDarkMode ? Colors.dark : Colors.light;
+  return {
+    background: colors.background,
+    text: colors.onBackground,
+    spinner: colors.primary,
+  };
+}
 
 export default function RootLayout() {
   // Track auth state directly in the layout component
@@ -122,9 +134,9 @@ export default function RootLayout() {
   
   // Handle app state changes (background/foreground)
   useEffect(() => {
-    let previousAppState = AppState.currentState;
+    let previousAppState: AppStateStatus = AppState.currentState;
     
-    const handleAppStateChange = async (nextAppState: string) => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       console.log('[RootLayout] App state changed from', previousAppState, 'to:', nextAppState);
       
       // Log app lifecycle events
@@ -159,19 +171,21 @@ export default function RootLayout() {
   
   // Show error state if initialization failed
   if (error) {
+    const colors = getBootstrapColors(isDarkMode);
     return (
-      <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-        <Text style={isDarkMode && styles.darkText}>Error: {error.message}</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={[styles.messageText, { color: colors.text }]}>Error: {error.message}</Text>
       </View>
     );
   }
   
   // Show loading state until initialization completes
   if (!initialized || !auth) {
+    const colors = getBootstrapColors(isDarkMode);
     return (
-      <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-        <ActivityIndicator size="large" color={isDarkMode ? '#16a34a' : '#22c55e'} />
-        <Text style={[styles.loadingText, isDarkMode && styles.darkText]}>Initializing...</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.spinner} />
+        <Text style={[styles.loadingText, { color: colors.text }]}>Initializing...</Text>
       </View>
     );
   }
@@ -179,10 +193,12 @@ export default function RootLayout() {
   // Log the rendering of the main app structure
   console.log('[RootLayout] Rendering app with auth state:', authState);
 
-  // Always wrap in a dark view to prevent any white flash
+  const colors = getBootstrapColors(isDarkMode);
+
+  // Wrap with the stored/system theme background to prevent launch flashes.
   console.log('[RootLayout] RENDERING MAIN APP');
   return (
-    <View style={{ flex: 1, backgroundColor: '#121212' }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ErrorBoundary>
         <AppThemeProvider>
           <OneProvider authenticator={auth}>
@@ -210,8 +226,8 @@ function ThemedStack() {
   // Use stored preference, then theme, then system appearance
   // Determine background color prioritizing dark mode to avoid white flash
   const backgroundColor = storedDarkMode !== null
-    ? (storedDarkMode ? '#121212' : '#ffffff')
-    : (isDarkMode || Appearance.getColorScheme() === 'dark' ? '#121212' : '#ffffff');
+    ? (storedDarkMode ? Colors.dark.background : Colors.light.background)
+    : (isDarkMode || Appearance.getColorScheme() === 'dark' ? Colors.dark.background : Colors.light.background);
   
   console.log('[ThemedStack] backgroundColor:', backgroundColor, 'stored:', storedDarkMode, 'theme:', theme.colors.background);
   
@@ -224,17 +240,7 @@ function ThemedStack() {
           contentStyle: {
             backgroundColor
           },
-          // Disable the default card style to prevent white flashes
-          cardStyle: {
-            backgroundColor
-          },
-          sceneContainerStyle: {
-            backgroundColor
-          },
-          // Force immediate render without animation
-          animationEnabled: false,
-          // Ensure container has background
-          cardOverlayEnabled: false
+          animation: 'none'
         }}
       >
         <Stack.Screen
@@ -252,9 +258,6 @@ function ThemedStack() {
             contentStyle: {
               backgroundColor
             },
-            cardStyle: {
-              backgroundColor
-            }
           }}
         />
         <Stack.Screen
@@ -283,17 +286,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     gap: 12,
-    backgroundColor: '#121212'
-  },
-  darkContainer: {
-    backgroundColor: '#121212'
+    backgroundColor: Colors.light.background
   },
   loadingText: {
     marginTop: 8,
     fontSize: 16,
-    color: '#000'
+    lineHeight: 24,
+    color: Colors.light.onBackground
   },
-  darkText: {
-    color: '#fff'
+  messageText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    color: Colors.light.onBackground
   }
 });

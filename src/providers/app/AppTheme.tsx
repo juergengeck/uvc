@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { View, Appearance } from 'react-native';
-import { MD3DarkTheme, MD3LightTheme, Provider as PaperProvider } from 'react-native-paper';
+import { View, Appearance, Platform } from 'react-native';
+import { configureFonts, MD3DarkTheme, MD3LightTheme, Provider as PaperProvider } from 'react-native-paper';
 import { Colors } from '@src/constants/Colors';
 import { createThemedStyles } from '@src/constants/ThemeStyles';
 import type { Model as BaseModel } from '@refinio/one.models/lib/models/Model.js';
@@ -52,6 +52,44 @@ interface AppThemeProviderProps {
   children: React.ReactNode;
 }
 
+const fontFamilies = {
+  sans: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    default: 'Inter, system-ui, sans-serif',
+  }),
+  serif: Platform.select({
+    ios: 'Georgia',
+    android: 'serif',
+    default: 'Source Serif 4, Georgia, serif',
+  }),
+  mono: Platform.select({
+    ios: 'Menlo',
+    android: 'monospace',
+    default: 'JetBrains Mono, ui-monospace, monospace',
+  }),
+};
+
+const typographyOverrides = configureFonts({
+  config: {
+    displayLarge: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
+    displayMedium: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
+    displaySmall: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
+    headlineLarge: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
+    headlineMedium: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
+    headlineSmall: { fontFamily: fontFamilies.serif, fontWeight: '600', letterSpacing: 0 },
+    titleLarge: { fontFamily: fontFamilies.serif, fontWeight: '600', letterSpacing: 0 },
+    titleMedium: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    titleSmall: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    labelLarge: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    labelMedium: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    labelSmall: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    bodyLarge: { fontFamily: fontFamilies.sans, fontWeight: '400', letterSpacing: 0, lineHeight: 24 },
+    bodyMedium: { fontFamily: fontFamilies.sans, fontWeight: '400', letterSpacing: 0, lineHeight: 21 },
+    bodySmall: { fontFamily: fontFamilies.sans, fontWeight: '400', letterSpacing: 0, lineHeight: 18 },
+  },
+});
+
 /**
  * Creates a custom theme by merging our color tokens with React Native Paper's theme
  */
@@ -65,6 +103,7 @@ function createCustomTheme(isDark: boolean) {
     colors: {
       ...baseTheme.colors,
       primary: colors.primary,
+      brandPrimary: colors.primary,
       primaryContainer: colors.primaryContainer,
       onPrimary: colors.onPrimary,
       onPrimaryContainer: colors.onPrimaryContainer,
@@ -73,15 +112,36 @@ function createCustomTheme(isDark: boolean) {
       onSecondary: colors.onSecondary,
       onSecondaryContainer: colors.onSecondaryContainer,
       background: colors.background,
+      onBackground: colors.onBackground,
       surface: colors.surface,
       surfaceVariant: colors.surfaceVariant,
+      surfaceDisabled: isDark ? 'rgba(240, 233, 223, 0.12)' : 'rgba(36, 35, 31, 0.12)',
       onSurface: colors.onSurface,
       onSurfaceVariant: colors.onSurfaceVariant,
+      onSurfaceDisabled: isDark ? 'rgba(240, 233, 223, 0.38)' : 'rgba(36, 35, 31, 0.38)',
       error: colors.error,
+      errorContainer: colors.errorContainer,
+      onError: colors.onError,
+      onErrorContainer: colors.onErrorContainer,
       notification: colors.notification,
+      outline: colors.outline,
+      outlineVariant: colors.outlineVariant,
+      shadow: isDark ? '#000000' : '#24231f',
+      scrim: colors.scrim,
+      backdrop: colors.backdrop,
+      elevation: {
+        level0: 'transparent',
+        level1: colors.surfaceRaised,
+        level2: colors.surfaceRaised,
+        level3: colors.surfaceRaised,
+        level4: colors.surfaceRaised,
+        level5: colors.surfaceRaised,
+      },
       // Additional custom colors available through theme.colors
       card: colors.card,
       cardAlt: colors.cardAlt,
+      text: colors.text,
+      textPrimary: colors.textPrimary,
       textSecondary: colors.textSecondary,
       textTertiary: colors.textTertiary,
       textInverse: colors.textInverse,
@@ -90,10 +150,17 @@ function createCustomTheme(isDark: boolean) {
       success: colors.success,
       warning: colors.warning,
       info: colors.info,
-      scrim: colors.scrim,
+      surfaceRaised: colors.surfaceRaised,
+      surfaceSunken: colors.surfaceSunken,
+      userBubble: colors.userBubble,
+      userBubbleForeground: colors.userBubbleForeground,
       modalBackground: colors.modalBackground,
     },
-    roundness: 8,
+    fonts: {
+      ...baseTheme.fonts,
+      ...typographyOverrides,
+    },
+    roundness: 12,
   };
 }
 
@@ -206,7 +273,7 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
     return;
     
     try {
-      await instance.propertyTree.setValue('darkMode', String(isDarkMode));
+      await instance?.propertyTree?.setValue('darkMode', String(isDarkMode));
       console.log(`[AppTheme] Synced darkMode to propertyTree: ${isDarkMode}`);
     } catch (error) {
       console.error('[AppTheme] Failed to sync theme to propertyTree:', error);
