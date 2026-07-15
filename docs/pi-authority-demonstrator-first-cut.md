@@ -1,5 +1,7 @@
 # Pi Authority Demonstrator First Cut
 
+> Superseded for the authority implementation by `groov-quicvc-authority-prd.md`. This document remains the record of the earlier Pi/HTTP first cut.
+
 ## Goal
 
 Stand up a demonstrator with four roles:
