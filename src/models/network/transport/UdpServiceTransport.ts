@@ -153,6 +153,15 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
 
     } catch (error) {
       debug('QuicTransport initialization failed:', error);
+      if (this.socket) {
+        try {
+          await this.socket.close();
+        } catch (closeError) {
+          console.warn('[UdpServiceTransport] Error closing socket after initialization failure:', closeError);
+        }
+        this.socket = null;
+      }
+      this._initialized = false;
       this.emit('error', error);
       throw error;
     }

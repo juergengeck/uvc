@@ -553,13 +553,25 @@ export class UdpModel {
         // NOTE: bind() returns a Promise<BindInfoSpec>, so we must await it to properly handle
         // binding errors (e.g., EADDRINUSE) instead of letting an unhandled promise rejection
         // crash the JS runtime.
-        await globalAny._udpJSI.bind(socketId, port, address);
+        const bindInfo = await globalAny._udpJSI.bind(socketId, port, address);
+        addressInfo = {
+          address: bindInfo?.address ?? address,
+          port: bindInfo?.port ?? port,
+          family: bindInfo?.family ?? 'IPv4'
+        };
         debug(`Socket ${socketId} bound to ${address}:${port} via JSI`);
       } catch (error) {
-        console.error(`[UdpModel] JSI bind failed for socket ${socketId}:`, error);
         const errMsg = (typeof error === 'object' && error && 'message' in error)
           ? (error as any).message
           : String(error);
+        const isAddressInUse = /address already in use|eaddrinuse|failed to bind socket/i.test(errMsg);
+
+        if (isAddressInUse) {
+          console.warn(`[UdpModel] JSI bind failed for socket ${socketId}:`, error);
+        } else {
+          console.error(`[UdpModel] JSI bind failed for socket ${socketId}:`, error);
+        }
+
         throw createError('EUDP', { message: `JSI bind failed: ${errMsg}` });
       }
       
@@ -964,11 +976,19 @@ export class UdpModel {
         const result = await nativeModule.forciblyReleasePort(port);
         debug(`Native forciblyReleasePort for port ${port} result: ${JSON.stringify(result)}`);
         
-        // The native module returns { released: boolean, closedCount: number }
-        if (result && typeof result === 'object' && 
-            typeof result.released === 'boolean' && 
-            typeof result.closedCount === 'number') {
-          return result;
+        // The native module has returned both { released, closedCount } and
+        // { success } across native implementations.
+        if (result && typeof result === 'object') {
+          if (typeof result.released === 'boolean' && typeof result.closedCount === 'number') {
+            return result;
+          }
+
+          if (typeof result.success === 'boolean') {
+            return {
+              released: result.success,
+              closedCount: typeof result.closedCount === 'number' ? result.closedCount : 0
+            };
+          }
         }
         
         console.warn(`[UdpModel] Native forciblyReleasePort for port ${port} returned unexpected result format:`, result);

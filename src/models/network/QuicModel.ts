@@ -277,14 +277,7 @@ export class QuicModel extends Model {
         // Shutdown the instance properly
         await QuicModel._instance.shutdown();
         
-        // Reset UdpModel to clear all socket references
-        const udpModel = UdpModel.getInstance();
-        if (udpModel.isInitialized()) {
-          console.log('[QuicModel] Shutting down UdpModel...');
-          await udpModel.shutdown();
-        }
-        
-        await QuicModel._instance.shutdown();
+        await UdpModel.forceReset();
       } catch (error) {
         console.error('[QuicModel] Error during instance reset:', error);
       }
@@ -375,12 +368,17 @@ export class QuicModel extends Model {
           await this._transport.listen(listenOptions);
           console.log(`[QuicModel] ✅ Transport successfully bound to port ${listenOptions.port}`);
         } catch (bindError: any) {
-          // If we get an "Address already in use" error, try with port 0 to let the OS assign a port
-          if (bindError?.message?.includes('Address already in use') || bindError?.message?.includes('bind socket')) {
-            console.warn(`[QuicModel] ⚠️ Port ${listenOptions.port} is already in use. Trying with OS-assigned port...`);
-            listenOptions.port = 0; // Let OS assign an available port
+          if (
+            listenOptions.port === 49497 &&
+            (bindError?.message?.includes('Address already in use') || bindError?.message?.includes('bind socket'))
+          ) {
+            console.warn('[QuicModel] ⚠️ Port 49497 is already in use. Releasing stale native UDP sockets and retrying once...');
+            await this._transport.close().catch(closeError => {
+              console.warn('[QuicModel] Error closing failed transport before retry:', closeError);
+            });
+            await UdpModel.forceReleasePort(49497);
             await this._transport.listen(listenOptions);
-            console.log('[QuicModel] ✅ Successfully bound to OS-assigned port (not 49497!)');
+            console.log('[QuicModel] ✅ Transport successfully rebound to port 49497 after cleanup');
           } else {
             console.error('[QuicModel] ❌ Failed to bind transport:', bindError);
             throw bindError;
@@ -411,7 +409,12 @@ export class QuicModel extends Model {
         this._ready = false;
         this._initialized = false;
         const err = error instanceof Error ? error : new Error(String(error));
-        console.error('[QuicModel] Initialization failed:', err.message);
+        const isDiscoveryPortInUse = /address already in use|eaddrinuse|bind socket/i.test(err.message);
+        if (isDiscoveryPortInUse) {
+          console.warn('[QuicModel] Initialization failed because discovery port 49497 is already in use:', err.message);
+        } else {
+          console.error('[QuicModel] Initialization failed:', err.message);
+        }
         
         // Explicitly ensure transport is closed to clean up any resources
         try {

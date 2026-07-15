@@ -430,20 +430,23 @@ export class DeviceDiscoveryModel {
         try {
           console.log('[DeviceDiscoveryModel] Initializing QUICVC Connection Manager with personId:', this._personId.toString());
 
-          this._quicVCManager = QuicVCConnectionManager.getInstance(this._personId);
+          const quicVCManager = QuicVCConnectionManager.getInstance(this._personId);
 
           // Initialize with VCManager when available
-          if (this._vcManager) {
-            await this._quicVCManager.initialize(this._vcManager);
+          if (this._vcManager && this._transport) {
+            await quicVCManager.initialize(this._transport, this._vcManager);
+            this._quicVCManager = quicVCManager;
             console.log('[DeviceDiscoveryModel] QUICVC Connection Manager initialized');
           } else {
+            this._quicVCManager = quicVCManager;
             console.log('[DeviceDiscoveryModel] VCManager not available, QUICVC partially initialized');
           }
 
           // Set up QUICVC discovery listener regardless of VCManager - discovery doesn't need credentials
           this.setupQuicVCDiscovery();
         } catch (quicvcError) {
-          console.error('[DeviceDiscoveryModel] Failed to initialize QUICVC:', quicvcError);
+          this._quicVCManager = undefined;
+          console.warn('[DeviceDiscoveryModel] Failed to initialize QUICVC; device discovery will run in degraded mode:', quicvcError);
           // Continue without QUICVC - graceful degradation
         }
       } else {
