@@ -2,7 +2,12 @@ import { app, ipcMain } from 'electron';
 
 import type { SettingsValues, SystemInfo } from '@shared/contracts';
 
-import { getDiscoveryRuntimeSnapshot, pushDiscoverySettings, refreshDiscoveryRuntime } from '../services/headless-authority.js';
+import {
+  getDiscoveryRuntimeSnapshot,
+  pushDiscoverySettings,
+  refreshDiscoveryRuntime,
+  setDiscoveryDeviceTrust,
+} from '../services/headless-authority.js';
 import { getCubeSettingsService } from '../services/cube-settings.js';
 import { getWorkspaceSnapshot } from '../services/workspace.js';
 
@@ -42,6 +47,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('discovery:refreshRuntime', async () => {
     return refreshDiscoveryRuntime();
+  });
+
+  ipcMain.handle('discovery:setDeviceTrust', async (_event, deviceId: string, trusted: boolean) => {
+    return setDiscoveryDeviceTrust(deviceId, trusted);
   });
 
   ipcMain.handle('discovery:pushSettings', async () => {

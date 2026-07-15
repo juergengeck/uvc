@@ -11,6 +11,7 @@ const electronApi: ElectronApi = {
   updateSettingsSection: (sectionId: string, values) => ipcRenderer.invoke('settings:updateSection', sectionId, values),
   getDiscoveryRuntimeSnapshot: () => ipcRenderer.invoke('discovery:getRuntime'),
   refreshDiscoveryRuntime: () => ipcRenderer.invoke('discovery:refreshRuntime'),
+  setDiscoveryDeviceTrust: (deviceId, trusted) => ipcRenderer.invoke('discovery:setDeviceTrust', deviceId, trusted),
   pushDiscoverySettings: () => ipcRenderer.invoke('discovery:pushSettings'),
   invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
 };

@@ -76,6 +76,16 @@ function normalizeDevice(payload: any): DiscoveryDeviceSnapshot {
       : typeof payload?.status === 'string'
         ? payload.status === 'online'
         : undefined,
+    connected: typeof payload?.connected === 'boolean'
+      ? payload.connected
+      : typeof payload?.isConnected === 'boolean'
+        ? payload.isConnected
+        : typeof payload?.hasValidCredential === 'boolean'
+          ? payload.hasValidCredential
+          : typeof payload?.isAuthenticated === 'boolean'
+            ? payload.isAuthenticated
+            : undefined,
+    ownerId: payload?.ownerId ?? payload?.ownerPersonId,
     lastSeenAt: payload?.lastSeenAt ?? payload?.lastSeen ?? payload?.updatedAt,
     trustState: payload?.trustState ?? payload?.ownership ?? 'unknown',
     capabilities: Array.isArray(payload?.capabilities) ? payload.capabilities : [],
@@ -217,6 +227,18 @@ export async function refreshDiscoveryRuntime(): Promise<DiscoveryRuntimeSnapsho
   await requestJson(authorityUrl, '/api/uvcAuthority/discovery/refresh', {
     method: 'POST',
     body: JSON.stringify({ requestedAt: new Date().toISOString() }),
+  });
+
+  return getDiscoveryRuntimeSnapshot();
+}
+
+export async function setDiscoveryDeviceTrust(deviceId: string, trusted: boolean): Promise<DiscoveryRuntimeSnapshot> {
+  const settings = await getCubeSettingsService().getSettings();
+  const authorityUrl = getAuthorityUrl(settings);
+
+  await requestJson(authorityUrl, '/api/uvcAuthority/trustDevice', {
+    method: 'POST',
+    body: JSON.stringify({ deviceId, trusted }),
   });
 
   return getDiscoveryRuntimeSnapshot();

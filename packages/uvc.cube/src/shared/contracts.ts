@@ -100,6 +100,8 @@ export interface DiscoveryDeviceSnapshot {
   port?: number;
   mdnsName?: string;
   online?: boolean;
+  connected?: boolean;
+  ownerId?: string;
   lastSeenAt?: string;
   trustState?: string;
   capabilities?: string[];
@@ -144,6 +146,7 @@ export interface ElectronApi {
   updateSettingsSection: (sectionId: string, values: SettingsValues) => Promise<SettingsSnapshot>;
   getDiscoveryRuntimeSnapshot: () => Promise<DiscoveryRuntimeSnapshot>;
   refreshDiscoveryRuntime: () => Promise<DiscoveryRuntimeSnapshot>;
+  setDiscoveryDeviceTrust: (deviceId: string, trusted: boolean) => Promise<DiscoveryRuntimeSnapshot>;
   pushDiscoverySettings: () => Promise<DiscoverySettingsPushResult>;
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
 }
