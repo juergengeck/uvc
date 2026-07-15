@@ -1,13 +1,11 @@
 import type {SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
 import type {Group, Instance, Person} from '@refinio/one.core/lib/recipes.js';
-import {calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
 import {serializeWithType} from '@refinio/one.core/lib/util/promise.js';
 import {getAllEntries} from '@refinio/one.core/lib/reverse-map-query.js';
 import {SET_ACCESS_MODE} from '@refinio/one.core/lib/storage-base-common.js';
 import {getObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import {createAccess} from '@refinio/one.core/lib/access.js';
 
-import QuestionnaireModel from '@refinio/one.models/lib/models/QuestionnaireModel.js';
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
 import type {RawChannelEntry} from '@refinio/one.models/lib/models/ChannelManager.js';
 import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
@@ -16,6 +14,8 @@ import ProfileModel from '@refinio/one.models/lib/models/Leute/ProfileModel.js';
 import type {SignKey} from '@refinio/one.models/lib/recipes/Leute/PersonDescriptions.js';
 import type TrustedKeysManager from '@refinio/one.models/lib/models/Leute/TrustedKeysManager.js';
 import type {ChannelInfo} from '@refinio/one.models/lib/recipes/ChannelRecipes.js';
+
+const QUESTIONNAIRE_CHANNELS = ['questionnaireResponse', 'incompleteQuestionnaireResponse'];
 
 /**
  * This type defines how access rights for channels are specified
@@ -324,7 +324,7 @@ export default class LeuteAccessRightsManager {
                 owner: mainId,
                 persons: [],
                 groups: this.groups('iom', 'leuteReplicant', 'glueReplicant'),
-                channels: [QuestionnaireModel.channelId]
+                channels: QUESTIONNAIRE_CHANNELS
             }
         ];
         await this.applyAccessRights(channelAccessRights);
@@ -358,13 +358,10 @@ export default class LeuteAccessRightsManager {
             // Apply all access rights
             await Promise.all(
                 accessRights.map(async accessInfo => {
-                    await this.channelManager.createChannel(accessInfo.channel, accessInfo.owner);
-
-                    const channelIdHash = await calculateIdHashOfObj({
-                        $type$: 'ChannelInfo',
-                        id: accessInfo.channel,
-                        owner: accessInfo.owner === null ? undefined : accessInfo.owner
-                    });
+                    const channelIdHash = await this.channelManager.createChannel(
+                        accessInfo.channel,
+                        accessInfo.owner
+                    );
 
                     await createAccess([
                         {

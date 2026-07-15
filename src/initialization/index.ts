@@ -22,7 +22,7 @@ if (global.HOT_RELOAD_DETECTED) {
       await QuicModel.resetInstance();
       
       const { UdpModel } = await import('@src/models/network/UdpModel');
-      await UdpModel.resetInstance();
+      await UdpModel.forceReset();
       
       console.log('[Initialization] Singletons reset successfully');
     } catch (error) {
@@ -206,7 +206,6 @@ import { hasDefaultKeys, createCryptoApiFromDefaultKeys, getListOfKeys, getDefau
 import { hasSecretKeys } from '@refinio/one.core/lib/keychain/key-storage-secret';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
-import { CORE_RECIPES } from '@refinio/one.core/lib/recipes.js';
 
 // Import recipes and maps
 import RecipesStable from '@refinio/one.models/lib/recipes/recipes-stable';
@@ -355,18 +354,12 @@ export async function createInstance(): Promise<MultiUser> {
 
   try {
     // Create auth instance using standard MultiUser (fixed upstream)
-    console.log('[createInstance] CORE_RECIPES count:', CORE_RECIPES.length);
-    console.log('[createInstance] CORE_RECIPES includes Group?', CORE_RECIPES.some(r => r.name === 'Group'));
-    console.log('[createInstance] CORE_RECIPES includes HashGroup?', CORE_RECIPES.some(r => r.name === 'HashGroup'));
-
     const allRecipes = [
-      ...CORE_RECIPES,
       ...RecipesStable,
       ...RecipesExperimental,
       ...ALL_RECIPES
     ];
     console.log('[createInstance] Total recipes count:', allRecipes.length);
-    console.log('[createInstance] All recipes include Group?', allRecipes.some(r => r.name === 'Group'));
 
     authInstance = new MultiUser({
       directory: APP_CONFIG.name,
@@ -941,11 +934,6 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
   // Now that AppModel is created and stored, set up the pairing success listener to use it
   const connectionsModelForTopics = transportManager.getConnectionsModel();
   if (connectionsModelForTopics?.pairing?.onPairingSuccess) {
-    // Remove any existing listeners first
-    if ((connectionsModelForTopics.pairing.onPairingSuccess as any).removeAllListeners) {
-      (connectionsModelForTopics.pairing.onPairingSuccess as any).removeAllListeners();
-    }
-    
     const { ContactCreationService } = await import('../services/ContactCreationService');
     const contactService = new ContactCreationService(leuteModel);
     

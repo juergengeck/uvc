@@ -55,6 +55,8 @@ interface ProcessedMessage {
 export class ChatModel {
   private currentTopicId: string | null = null;
   private currentTopicRoom: TopicRoom | null = null;
+  private currentTopicRecord: (Topic & { originalName?: string; displayName?: string; name?: string }) | null = null;
+  private currentTopicDisplayName: string | null = null;
   private currentChannelOwner: SHA256IdHash<Person> | null = null;
   
   // Messages and message loading state
@@ -406,6 +408,59 @@ export class ChatModel {
   }
 
   /**
+   * Resolve the Topic object for a content-addressed Topic id hash.
+   *
+   * Topic ids in current one.models are id hashes returned by topics.allWithIdHash().
+   * They are not the user-visible topic names.
+   */
+  private async resolveTopicRecord(topicId: string): Promise<(Topic & { originalName?: string; displayName?: string; name?: string }) | null> {
+    const topicStore = (this.topicModel as any).topics;
+    if (!topicStore || typeof topicStore.allWithIdHash !== 'function') {
+      return null;
+    }
+
+    const entries = await topicStore.allWithIdHash();
+    const match = entries.find((entry: { idHash: unknown; topic: Topic }) =>
+      entry?.idHash?.toString?.() === topicId
+    );
+
+    return (match?.topic as Topic & { originalName?: string; displayName?: string; name?: string }) ?? null;
+  }
+
+  private async resolveTopicDisplayName(
+    topicId: string,
+    topic: (Topic & { originalName?: string; displayName?: string; name?: string }) | null
+  ): Promise<string> {
+    const fallbackName = topic?.displayName || topic?.originalName || topic?.name || topicId;
+
+    if (!topic) {
+      return fallbackName;
+    }
+
+    try {
+      const topicModel = this.topicModel as any;
+      if (
+        typeof topicModel.isOneToOneChatAsync === 'function' &&
+        await topicModel.isOneToOneChatAsync(topic) &&
+        typeof topicModel.getOneToOneChatParticipantsMeFirst === 'function' &&
+        typeof (this.leuteModel as any).getMainProfileDisplayName === 'function'
+      ) {
+        const [, otherPersonId] = await topicModel.getOneToOneChatParticipantsMeFirst(topic);
+        if (otherPersonId) {
+          const profileName = await (this.leuteModel as any).getMainProfileDisplayName(otherPersonId);
+          if (profileName) {
+            return profileName;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[ChatModel] Could not resolve one-to-one topic display name:', error);
+    }
+
+    return fallbackName;
+  }
+
+  /**
    * Enter a topic room using content-addressed storage pattern
    */
   async enterTopicRoom(topicId: string): Promise<TopicRoom> {
@@ -422,6 +477,9 @@ export class ChatModel {
     console.log(`[ChatModel] 🏠 Entering topic room for ID: ${topicId}`);
 
     try {
+      const topicRecord = await this.resolveTopicRecord(topicId);
+      const topicDisplayName = await this.resolveTopicDisplayName(topicId, topicRecord);
+
       // STEP 1: Determine the appropriate channel owner for this topic
       const channelOwner = await this.determineChannelOwner(topicId);
       console.log(`[ChatModel] Channel owner determined: ${channelOwner?.toString?.().substring(0, 8) || channelOwner}`);
@@ -447,9 +505,11 @@ export class ChatModel {
       console.log(`[ChatModel] Entering topic room (channel already initialized)`);
       this.currentTopicRoom = await this.topicModel.enterTopicRoom(topicId);
       this.currentTopicId = topicId;
+      this.currentTopicRecord = topicRecord;
+      this.currentTopicDisplayName = topicDisplayName;
       this.currentChannelOwner = channelOwner === undefined ? null : channelOwner;
 
-      console.log(`[ChatModel] ✅ Successfully entered topic room for ${topicId}`);
+      console.log(`[ChatModel] ✅ Successfully entered topic room for ${topicDisplayName} (${topicId})`);
 
       // STEP 7: Load initial messages after entering the topic room
       console.log(`[ChatModel] Loading initial messages for topic ${topicId}`);
@@ -599,12 +659,14 @@ export class ChatModel {
     if (!this.currentTopicId) {
       return 'Chat';
     }
-    
-    // For 1-to-1 chats, we should get the display name from contacts or topic name
-    // AI chats now use the standard person<->person format
-    
-    // For regular topics, use the topic name or ID
-    return this.currentTopicRoom?.topic?.name || this.currentTopicId;
+
+    return (
+      this.currentTopicDisplayName ||
+      this.currentTopicRecord?.displayName ||
+      this.currentTopicRecord?.originalName ||
+      this.currentTopicRecord?.name ||
+      this.currentTopicId
+    );
   }
 
 

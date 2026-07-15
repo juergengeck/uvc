@@ -82,6 +82,16 @@ interface ChatProps {
    * Optional handler for topic info press
    */
   onTopicInfoPress?: () => void;
+
+  /**
+   * Resolved display title for the current topic.
+   */
+  topicTitle?: string;
+
+  /**
+   * Whether this topic is an AI chat.
+   */
+  isAIChat?: boolean;
 }
 
 /**
@@ -130,6 +140,8 @@ export const Chat: React.FC<ChatProps> = ({
   llmModel,
   onBackPress,
   onTopicInfoPress,
+  topicTitle: providedTopicTitle,
+  isAIChat: providedIsAIChat,
 }) => {
   // Component instance ID for tracking
   const instanceId = React.useRef(`chat-${Math.random().toString(36).substring(2, 10)}`);
@@ -139,15 +151,16 @@ export const Chat: React.FC<ChatProps> = ({
   // Derive all topic-related properties from chatModel in one place
   const { topicId, topicTitle, isAIChat } = React.useMemo(() => {
     const id = chatModel?.currentTopic || '';
-    const name = chatModel?.getCurrentTopicName?.() || 'Chat';
-    const isAI = id.startsWith('chat-with-');
+    const modelName = chatModel?.getCurrentTopicName?.();
+    const name = modelName || providedTopicTitle || 'Chat';
+    const isAI = providedIsAIChat ?? id.startsWith('chat-with-');
     
     return {
       topicId: id,
       topicTitle: name,
       isAIChat: isAI
     };
-  }, [chatModel]);
+  }, [chatModel, providedTopicTitle, providedIsAIChat]);
   const { t } = useTranslation(Namespaces.CHAT);
   const { t: tMessages } = useTranslation(Namespaces.MESSAGES);
   

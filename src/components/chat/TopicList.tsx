@@ -30,6 +30,7 @@ interface TopicListProps {
 interface TopicListItem {
   id: string;
   name: string;
+  originalName?: string;
   displayName: string; // Resolved name for display
   lastMessage?: string;
   lastMessageTimestamp?: number;
@@ -38,6 +39,11 @@ interface TopicListItem {
   otherParticipantId?: SHA256IdHash<Person>; // For one-to-one chats
   hasUnreadMessages?: boolean; // For notification badges
 }
+
+type TopicWithRegistryId = Topic & {
+  id: string;
+  name: string;
+};
 
 /**
  * Get initials from a name for avatar display
@@ -97,7 +103,10 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
   /**
    * Resolve the other participant's name for one-to-one chats
    */
-  const resolveOtherParticipantName = useCallback(async (topicId: string): Promise<{displayName: string, otherParticipantId?: SHA256IdHash<Person>}> => {
+  const resolveOtherParticipantName = useCallback(async (topic: TopicWithRegistryId): Promise<{displayName: string, otherParticipantId?: SHA256IdHash<Person>}> => {
+    const topicId = topic.id;
+    const topicName = topic.displayName ?? topic.originalName ?? topic.name ?? topicId;
+
     try {
       // Check cache first
       const cachedName = nameCache.current.get(topicId);
@@ -109,13 +118,13 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
       const leuteModel = getLeuteModel();
       if (!leuteModel) {
         console.warn('[TopicList] LeuteModel not available for name resolution');
-        return { displayName: topicId };
+        return { displayName: topicName };
       }
 
       // Check if this is an AI topic first
-      if (topicId.startsWith('chat-with-')) {
+      if (topicName.startsWith('chat-with-')) {
         // Extract model name from topic ID and format it nicely
-        const modelName = topicId
+        const modelName = topicName
           .replace('chat-with-', '')
           .split('-')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -126,35 +135,35 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
       }
       
       // Check if this is a one-to-one chat
-      if (!topicModel.isOneToOneChat || !topicModel.isOneToOneChat(topicId)) {
-        console.log(`[TopicList] Not a one-to-one chat: ${topicId}, using topic ID as title`);
-        return { displayName: topicId };
+      if (!topicModel.isOneToOneChatAsync || !await topicModel.isOneToOneChatAsync(topic)) {
+        console.log(`[TopicList] Not a one-to-one chat: ${topicId}, using topic name as title`);
+        return { displayName: topicName };
       }
 
       // Get participants from the topic ID  
       if (!topicModel.getOneToOneChatParticipants) {
         console.warn('[TopicList] getOneToOneChatParticipants method not available');
-        return { displayName: topicId };
+        return { displayName: topicName };
       }
 
-      const participants = topicModel.getOneToOneChatParticipants(topicId);
+      const participants = await topicModel.getOneToOneChatParticipants(topic);
       if (!participants || participants.length !== 2) {
         console.warn(`[TopicList] Invalid participants for one-to-one chat: ${participants?.length || 0}`);
-        return { displayName: topicId };
+        return { displayName: topicName };
       }
 
       // Get current user ID
       const myPersonId = await leuteModel.myMainIdentity();
       if (!myPersonId) {
         console.warn('[TopicList] Could not get current user ID');
-        return { displayName: topicId };
+        return { displayName: topicName };
       }
 
       // Find the other participant (not me)
       const otherParticipant = participants.find(p => p.toString() !== myPersonId.toString());
       if (!otherParticipant) {
         console.warn('[TopicList] Could not find other participant');
-        return { displayName: topicId };
+        return { displayName: topicName };
       }
 
       // Try to get the other participant's name
@@ -197,7 +206,7 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
 
     } catch (error) {
       console.error('[TopicList] Error resolving participant name:', error);
-      return { displayName: topicId }; // Final fallback
+      return { displayName: topicName }; // Final fallback
     }
   }, [getLeuteModel, topicModel]);
 
@@ -238,32 +247,37 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
       try {
         console.log('[TopicList] Loading topics...');
         
-        // Get all topics through the topic model's content-addressed storage
-        const allTopics = await topicModel.topics.all();
-        console.log(`[TopicList] Found ${allTopics.length} topics from topicModel.topics.all()`);
+        // Get all topics with their ONE.core id hashes. Topic objects no longer carry an `id`.
+        const topicEntries = await topicModel.topics.allWithIdHash();
+        const allTopics: TopicWithRegistryId[] = topicEntries.map(({ topic, idHash }) => ({
+          ...topic,
+          id: idHash,
+          name: topic.displayName ?? topic.originalName ?? 'Unnamed'
+        }));
+        console.log(`[TopicList] Found ${allTopics.length} topics from topicModel.topics.allWithIdHash()`);
         
         // Debug log all topic IDs and names
         console.log('[TopicList] Topic IDs:');
         allTopics.forEach(topic => {
-          console.log(`  - ${topic.id}: ${topic.name || 'Unnamed'}`);
+          console.log(`  - ${topic.id}: ${topic.displayName ?? topic.originalName ?? 'Unnamed'}`);
         });
         
         // Check for system topics
         console.log('[TopicList] Checking for system topics...');
         try {
-          const allTopicIds = allTopics.map(topic => topic.id);
-          const hasEveryone = allTopicIds.includes('EveryoneTopic');
-          const hasGlue = allTopicIds.includes('GlueTopic') || allTopicIds.includes('GlueOneTopic');
+          const allTopicNames = allTopics.map(topic => topic.originalName ?? topic.displayName);
+          const hasEveryone = allTopicNames.includes('Everyone');
+          const hasGlue = allTopicNames.includes('GlueTopic') || allTopicNames.includes('GlueOneTopic');
           
           console.log(`[TopicList] EveryoneTopic: ${hasEveryone ? 'Found' : 'Not found'}`);
           console.log(`[TopicList] GlueTopic/GlueOneTopic: ${hasGlue ? 'Found' : 'Not found'}`);
           
           // Log system topic information
           const systemTopics = allTopics.filter(t => 
-            t.id === 'EveryoneTopic' || 
-            t.id === 'GlueTopic' || 
-            t.id === 'GlueOneTopic' ||
-            t.id === 'AISubjectsChannel'
+            t.originalName === 'Everyone' ||
+            t.originalName === 'GlueTopic' ||
+            t.originalName === 'GlueOneTopic' ||
+            t.originalName === 'AISubjectsChannel'
           );
           
           console.log(`[TopicList] System topics: ${systemTopics.length}`);
@@ -302,18 +316,18 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
               // Calculate correct participant count based on topic type
               let participantCount = 1; // Default: at least the owner
               
-              if (topic.id === 'EveryoneTopic') {
+              if (topic.originalName === 'Everyone') {
                 // Everyone topic always has the owner as participant
                 participantCount = 1;
-              } else if (topic.id === 'GlueOneTopic') {
+              } else if (topic.originalName === 'GlueOneTopic' || topic.originalName === 'GlueTopic') {
                 // Glue topic has owner + glue replicant
                 participantCount = 1; // Messages come via channel settings, not direct participation
                 console.log(`[TopicList] GlueOneTopic shows 1 participant (normal - replicant messages via channel settings)`);
-              } else if (topic.id.includes('<->')) {
+              } else if (topic.originalName?.includes('<->')) {
                 // 1-to-1 chats always have exactly 2 participants (extracted from topic ID)
                 participantCount = 2;
                 console.log(`[TopicList] 1-to-1 chat ${topic.id} has 2 participants`);
-              } else if (topic.id.startsWith('chat-with-')) {
+              } else if (topic.originalName?.startsWith('chat-with-')) {
                 // LLM topics have 2 participants (user + AI)
                 participantCount = 2;
                 console.log(`[TopicList] LLM topic ${topic.id} has 2 participants (owner + LLM)`);
@@ -346,7 +360,7 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
               }
 
               // Resolve display name for one-to-one chats
-              const { displayName, otherParticipantId } = await resolveOtherParticipantName(topic.id);
+              const { displayName, otherParticipantId } = await resolveOtherParticipantName(topic);
 
               // Simple heuristic for unread messages: 
               // Consider messages from the last 24 hours as potentially unread
@@ -358,18 +372,20 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
               // Messages from channelManager.getObjectsWithType return ObjectData<ChatMessage>
               const messageData = messages[0]?.data as ChatMessage | undefined;
               const rawLastMessage = messageData?.text || '';
-              const lastMessage = topic.id.startsWith('chat-with-') 
+              const isAITopic = topic.originalName?.startsWith('chat-with-') ?? false;
+              const lastMessage = isAITopic
                 ? cleanAIMessageText(rawLastMessage)
                 : rawLastMessage;
               
               const item: TopicListItem = {
                 id: topic.id,
                 name: topic.name || 'Untitled Topic',
+                originalName: topic.originalName,
                 displayName,
                 lastMessage,
                 lastMessageTimestamp: messages[0]?.creationTime?.getTime() || 0,
                 participantCount,
-                isAITopic: topic.id.startsWith('chat-with-'),
+                isAITopic,
                 otherParticipantId,
                 hasUnreadMessages
               };
@@ -570,7 +586,7 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
           style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
         />
       );
-    } else if (topic.id === 'EveryoneTopic') {
+    } else if (topic.originalName === 'Everyone') {
       // Everyone topic gets a group icon
       avatarComponent = (
         <Avatar.Icon 
@@ -579,7 +595,7 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
           style={[styles.avatar, { backgroundColor: theme.colors.secondary }]}
         />
       );
-    } else if (topic.id === 'GlueOneTopic' || topic.id === 'GlueTopic') {
+    } else if (topic.originalName === 'GlueOneTopic' || topic.originalName === 'GlueTopic') {
       // Glue topic gets a link icon
       avatarComponent = (
         <Avatar.Icon 
@@ -588,7 +604,7 @@ export function TopicList({ topicModel, channelManager, onTopicSelect }: TopicLi
           style={[styles.avatar, { backgroundColor: theme.colors.tertiary }]}
         />
       );
-    } else if (topic.id === 'AISubjectsChannel') {
+    } else if (topic.originalName === 'AISubjectsChannel') {
       // AI Subjects channel gets a brain icon
       avatarComponent = (
         <Avatar.Icon 
