@@ -4,11 +4,17 @@
   "private": true,
   "type": "module",
   "main": "./dist/src/index.js",
+  "browser": "./dist/src/client.js",
+  "react-native": "./dist/src/client.js",
   "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/src/client.js",
+      "types": "./dist/src/client.d.ts"
     }
   },
   "scripts": {
@@ -18,6 +24,10 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@refinio/uvc.core": "file:../../../one/packages/uvc.core",
+    "bonjour-service": "^1.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

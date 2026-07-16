@@ -1,4 +1,5 @@
 export const GROOV_AUTHORITY_STREAM_ID = 0x42;
+export const GROOV_PROVISIONING_STREAM_ID = 0x43;
 export const GROOV_AUTHORITY_FRAME_VERSION = 1;
 
 const HEADER_LENGTH = 8;
@@ -13,6 +14,10 @@ export const GroovAuthorityFrameType = {
   EmergencyOffRequest: 5,
   EmergencyOffResponse: 6,
   StateChangedEvent: 7,
+  IdentityAssignmentRequest: 8,
+  DeviceIdentityProofResponse: 9,
+  IdentityCertificateRequest: 10,
+  AdminRoleGrantResponse: 11,
   ErrorResponse: 255,
 } as const;
 

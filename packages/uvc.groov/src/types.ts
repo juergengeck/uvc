@@ -26,6 +26,12 @@ export interface LightController {
 export interface QuicVCConnectionLike {
   state: 'initial' | 'handshake' | 'established' | 'closed';
   peerPersonId: string | null;
+  peerPublicKey?: string | null;
+  /** Verified by QUICVC/ONE connection establishment; never sourced from mDNS. */
+  peerInstanceId?: string | null;
+  /** Verified signing key for peerInstanceId; never sourced from mDNS. */
+  peerPublicSignKey?: string | null;
+  peerSignAlgorithm?: 'ed25519' | 'ecdsa-p256-sha256' | null;
   peerTrustLevel?: string | null;
 }
 
@@ -87,4 +93,9 @@ export interface GroovAuthorityState {
     updatedAt: string;
   };
   light: LightState;
+}
+
+export interface GroovAuthorityClientRequestOptions {
+  connectionId?: string;
+  timeoutMs?: number;
 }
