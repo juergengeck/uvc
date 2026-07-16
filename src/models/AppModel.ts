@@ -31,6 +31,8 @@ import UvcPhoneBookModel from './contacts/UvcPhoneBookModel';
 import { initializeAppJournal, logAppStart } from '../utils/appJournal';
 import OrganisationModel from './OrganisationModel';
 import { getGroupIdByName } from '../utils/groupUtils';
+import {DeviceControlModel} from './device/DeviceControlModel';
+import {getInstanceIdHash, getInstanceOwnerIdHash} from '@refinio/one.core/lib/instance.js';
 
 export type AppModelState = 'Uninitialised' | 'Initialising' | 'Initialised' | 'ShuttingDown';
 export type AppModelEvent = 'init' | 'shutdown';
@@ -83,6 +85,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
     public deviceDiscoveryModel?: DeviceDiscoveryModel;
     public deviceModel?: DeviceModel;
     public phoneBookModel?: UvcPhoneBookModel;
+    public deviceControlModel?: DeviceControlModel;
     
     // Organisation management
     public organisationModel?: OrganisationModel;
@@ -154,7 +157,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             
             // Initialize SettingsModel
             const settingsStartTime = Date.now();
-            this._settingsModel = new SettingsModel('lama');
+            this._settingsModel = new SettingsModel('vger');
             await this._settingsModel.init();
             console.log(`[PERF] SettingsModel.init: ${Date.now() - settingsStartTime}ms`);
             
@@ -196,6 +199,18 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
 
             // Initialize DeviceDiscoveryModel
             this.deviceDiscoveryModel = DeviceDiscoveryModel.getInstance();
+            const ownPersonId = getInstanceOwnerIdHash();
+            const ownInstanceId = getInstanceIdHash();
+            if (!ownPersonId || !ownInstanceId) {
+                throw new Error('Cannot initialize device control without a ONE person and instance identity');
+            }
+            this.deviceControlModel = new DeviceControlModel(
+                this.deviceDiscoveryModel,
+                this.connections,
+                ownPersonId,
+                ownInstanceId,
+            );
+            await this.deviceControlModel.init();
             // DeviceDiscoveryModel will be fully configured later in initModel() after TrustModel is available
 
             // Initialize OrganisationModel
@@ -329,6 +344,11 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             // Continue shutdown even if transport shutdown fails
         }
         
+        if (this.deviceControlModel) {
+            this.deviceControlModel.shutdown();
+            this.deviceControlModel = undefined;
+        }
+
         // Shutdown DeviceDiscoveryModel if it exists
         if (this.deviceDiscoveryModel) {
             console.log('[AppModel] Shutting down DeviceDiscoveryModel...');

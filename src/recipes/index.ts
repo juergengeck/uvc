@@ -40,6 +40,13 @@ import {
   UvcPhoneBookRecipe,
   UvcPhoneBookRegistryRecipe,
 } from './UvcPhoneBookRecipes';
+import {ConnectionPhoneBookRecipes} from '@refinio/connection.core/recipes';
+import {UVC_RECIPES} from '@refinio/uvc.core';
+import {
+  UVC_DEVICE_CONTROL_RECIPES,
+  UvcDeviceControlCommandRecipe,
+  UvcDeviceControlObservationRecipe,
+} from './UvcDeviceControlRecipes';
 
 // Verify the recipe array
 console.log('[RECIPES] LLMSettingsRecipes array:', 
@@ -90,7 +97,17 @@ export const ALL_RECIPES: Recipe[] = [
   DeviceDiscoveryInfoRecipe,
   OwnershipRemovalCommandRecipe,
 
+  // Shared command and authority-observation evidence for Groov and ESP32.
+  ...UVC_DEVICE_CONTROL_RECIPES,
+
+  // Shared trie roots and discovery/control/journal entries. These recipes
+  // live in ../one so Expo, browser and Cube use the same storage contract.
+  ...UVC_RECIPES,
+
   // Certified UVC-to-UVC contact/device directory
+  // connection.core owns reachability, route memory, and trusted instance
+  // introductions; UVC_PHONE_BOOK_RECIPES owns certified contact/device data.
+  ...ConnectionPhoneBookRecipes,
   ...UVC_PHONE_BOOK_RECIPES,
 
   // Organisational hierarchy
@@ -142,6 +159,8 @@ export {
   LEDStatusResponseRecipe,
   DeviceDiscoveryInfoRecipe,
   OwnershipRemovalCommandRecipe,
+  UvcDeviceControlCommandRecipe,
+  UvcDeviceControlObservationRecipe,
   UvcPhoneBookEntryRecipe,
   UvcPhoneBookRecipe,
   UvcPhoneBookRegistryRecipe,

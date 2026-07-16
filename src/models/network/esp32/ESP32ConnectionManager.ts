@@ -699,7 +699,7 @@ export class ESP32ConnectionManager {
     // ESP32 expects microdata HTML, not JSON
     // Convert command to LEDControlCommand object and then to microdata
     // ESP32 supports: 'on', 'off', 'toggle', 'blink', 'status'
-    let ledState: string;
+    let ledState: LEDControlCommand['state'];
     if (command.action === 'blue_on' || command.action === 'on') {
       ledState = 'on';
     } else if (command.action === 'blue_off' || command.action === 'off') {
@@ -711,9 +711,7 @@ export class ESP32ConnectionManager {
     } else if (command.action === 'status') {
       ledState = 'status';
     } else {
-      // Default to 'off' for unknown actions
-      console.warn(`[ESP32ConnectionManager] Unknown LED action: ${command.action}, defaulting to 'off'`);
-      ledState = 'off';
+      throw new Error(`Unsupported ESP32 LED action: ${command.action ?? '<missing>'}`);
     }
 
     const ledCommand: LEDControlCommand = {
@@ -829,21 +827,9 @@ export class ESP32ConnectionManager {
         console.warn(`[ESP32ConnectionManager] Expected response format: { "requestId": "${requestId}", "status": "success", "blue_led": "on/off" }`);
         this.pendingCommands.delete(requestId);
         
-        // Don't fail the operation - we sent the command successfully
-        // The ESP32 may not support responses yet
-        resolve({
-          type: 'response',
-          status: 'sent' as const,
-          message: 'Command sent. ESP32 firmware needs update to include requestId in responses.',
-          command: command.type,
-          timestamp: Date.now(),
-          data: {
-            deviceId: deviceId,
-            command: command.type,
-            action: command.action,
-            warning: 'ESP32 did not send response with matching requestId'
-          }
-        });
+        reject(new Error(
+          `ESP32 command ${requestId} timed out without an authoritative state response`,
+        ));
       }, 3000); // 3 second timeout for LED commands
       
       this.pendingCommands.set(requestId, { resolve, reject, timeout });

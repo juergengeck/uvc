@@ -44,6 +44,7 @@ const appNativeModules = {
 const refinioPackages = {
   '@refinio/api': path.resolve(oneWorkspaceRoot, 'packages/refinio.api'),
   '@refinio/connection.btle': path.resolve(oneWorkspaceRoot, 'packages/connection.btle'),
+  '@refinio/connection.core': path.resolve(oneWorkspaceRoot, 'packages/connection.core'),
   '@refinio/one.core': path.resolve(oneWorkspaceRoot, 'packages/one.core'),
   '@refinio/one.core-expo': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo'),
   '@refinio/one.models': path.resolve(oneWorkspaceRoot, 'packages/one.models'),
@@ -61,6 +62,11 @@ function resolveRefinioPackageSubpath(moduleName) {
 
   const packageRoot = refinioPackages[packageName];
   const subpath = moduleName.slice(packageName.length + 1);
+  if (packageName === '@refinio/connection.core' && subpath) {
+    return subpath === 'recipes'
+      ? path.join(packageRoot, 'dist/esm/recipes/index.js')
+      : path.join(packageRoot, 'dist/esm', subpath);
+  }
   return subpath ? path.join(packageRoot, subpath) : packageRoot;
 }
 
@@ -92,15 +98,15 @@ module.exports = {
       if (expoCompatModules[moduleName]) {
         return context.resolveRequest(context, expoCompatModules[moduleName], platform);
       }
+      if (platform === 'web' && moduleName === 'react-native') {
+        return context.resolveRequest(context, 'react-native-web', platform);
+      }
       if (appNativeModules[moduleName]) {
         return context.resolveRequest(context, appNativeModules[moduleName], platform);
       }
       const refinioPath = resolveRefinioPackageSubpath(moduleName);
       if (refinioPath) {
         return context.resolveRequest(context, refinioPath, platform);
-      }
-      if (platform === 'web' && moduleName === 'react-native') {
-        return context.resolveRequest(context, 'react-native-web', platform);
       }
       return context.resolveRequest(context, moduleName, platform);
     },

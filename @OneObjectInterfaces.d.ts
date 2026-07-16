@@ -288,6 +288,30 @@ declare module '@OneObjectInterfaces' {
          userId?: string;
      }
 
+     export interface UvcDeviceControlCommand {
+         $type$: 'UvcDeviceControlCommand';
+         requestId: string;
+         targetDeviceId: string;
+         targetKind: 'groov' | 'esp32';
+         operation: 'read' | 'set';
+         capability: 'light';
+         desiredEnabled?: boolean;
+         desiredIntensity?: number;
+         issuer: string;
+         issuedAt: number;
+     }
+
+     export interface UvcDeviceControlObservation {
+         $type$: 'UvcDeviceControlObservation';
+         request: string;
+         producerDeviceId: string;
+         status: 'observed' | 'failed';
+         enabled?: boolean;
+         intensity?: number;
+         observedAt: string;
+         error?: string;
+     }
+
      // Organizational structure type declarations
      export interface Organisation {
          $type$: 'Organisation';
@@ -335,6 +359,8 @@ declare module '@OneObjectInterfaces' {
          AIMetadata: AIMetadata;
          AICapability: AICapability;
          JournalEntry: JournalEntry;
+         UvcDeviceControlCommand: UvcDeviceControlCommand;
+         UvcDeviceControlObservation: UvcDeviceControlObservation;
          Organisation: Organisation;
          Department: Department;
          Room: Room;
@@ -356,6 +382,8 @@ declare module '@OneObjectInterfaces' {
          Organisation: Pick<Organisation, '$type$' | 'name'>;
          Department: Pick<Department, '$type$' | 'name' | 'organisation'>;
          Room: Pick<Room, '$type$' | 'name' | 'department'>;
+         UvcDeviceControlCommand: Pick<UvcDeviceControlCommand, '$type$' | 'requestId'>;
+         UvcDeviceControlObservation: Pick<UvcDeviceControlObservation, '$type$' | 'request'>;
      }
 
          interface OneVersionedObjectInterfaces {
@@ -378,6 +406,7 @@ export type { LLM, LLMSettings, GlobalLLMSettings };
 export type { AIProviderConfig, AIProcessingStatus, AIResponse, LocalAIConfig };
 export type { Device, DeviceSettings, VerifiableCredential, ESP32DataPresentation, DeviceSettingsGroup };
 export type { JournalEntry };
+export type { UvcDeviceControlCommand, UvcDeviceControlObservation };
 export type { Organisation, Department, Room };
 
 // NOTE: The export statement for specific types has been removed.

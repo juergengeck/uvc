@@ -14,6 +14,7 @@ import type QuestionnaireModel from '@refinio/one.models/lib/models/Questionnair
 import type { StateMachine } from '@refinio/one.models/lib/misc/StateMachine.js';
 import type { DeviceDiscoveryModel } from '@src/models/network/DeviceDiscoveryModel';
 import type { QuicModel } from '@src/models/network/QuicModel';
+import type {DeviceControlModel} from '@src/models/device/DeviceControlModel';
 
 /**
  * Extended Model interface that includes all properties available on the AppModel
@@ -34,6 +35,7 @@ declare module '@refinio/one.models/lib/models/Model.js' {
     // Network models
     quicModel: QuicModel;
     deviceDiscoveryModel?: DeviceDiscoveryModel;
+    deviceControlModel?: DeviceControlModel;
     
     // State and metadata
     state: StateMachine<"Uninitialised" | "Initialised", "shutdown" | "init">;
@@ -114,4 +116,4 @@ declare module './AddModelModal' {
 declare module '../../contexts/AppContext' {
   import React from 'react';
   export const useAppContext: () => any;
-} 
+}

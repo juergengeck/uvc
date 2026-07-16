@@ -134,7 +134,7 @@ export const DeviceIdentityCredentialRecipe: Recipe = {
 export interface LEDControlCommand {
   $type$: 'LEDControlCommand';
   deviceId: string;                              // Target device ID
-  state: 'on' | 'off';                           // LED state
+  state: 'on' | 'off' | 'status' | 'toggle' | 'blink'; // LED operation
   timestamp: number;                             // Unix timestamp in milliseconds
   requestId?: string;                            // Optional request ID for tracking
   issuer?: string;                               // Optional issuer Person ID

@@ -377,62 +377,36 @@ export function useDeviceDiscovery() {
     // Mark as processing
     processingLEDCommands.current.add(device.id);
 
-    // 3. Determine next LED status for UI and corresponding command for ESP32
-    const originalStatus = device.blueLedStatus;
-    const nextStatus: 'on' | 'off' = (originalStatus === 'on') ? 'off' : 'on';
+    // Determine the requested transition. The UI changes only after the
+    // authority returns an observed state.
+    const nextStatus: 'on' | 'off' = device.blueLedStatus === 'on' ? 'off' : 'on';
 
     try {
-      
-      // Optimistic UI update - update immediately for better UX
-      setDevices(prev => prev.map(d => 
-        d.id === device.id ? { ...d, blueLedStatus: nextStatus } : d
-      ));
-      
       // Mark LED command as pending
       setPendingLEDCommands(prev => ({
         ...prev,
         [device.id]: true
       }));
       
-      // ESP32ConnectionManager was already fetched above, no need to get it again
-      
-      const esp32Command = {
-        type: 'led_control' as const,
-        action: nextStatus,
-        timestamp: Date.now()
-      };
-
-      // Send command through ESP32ConnectionManager which handles authentication
-      profiler.startOperation('send_led_command', { deviceId: device.id, action: nextStatus });
-      const response = await esp32ConnectionManager.sendCommand(device.id, esp32Command);
-      profiler.endOperation('send_led_command', { status: response.status });
-
-      // Handle command response
-      if (response.status === 'success' || response.status === 'sent') {
-        // State was optimistically updated above - device events may also update
-        // Both updates are idempotent so no conflict
-        
-        // Clear pending state on success
-        setPendingLEDCommands(prev => {
-          const { [device.id]: _, ...rest } = prev;
-          return rest;
-        });
-        profiler.endOperation(operationId, { success: true });
-      } else {
-        console.error('[toggleBlueLED] LED command failed:', response.error || response.message);
-        // Revert optimistic update on failure - restore original status
-        setDevices(prev => prev.map(d =>
-          d.id === device.id ? { ...d, blueLedStatus: originalStatus } : d
-        ));
-        // Clear pending state on failure
-        setPendingLEDCommands(prev => {
-          const { [device.id]: _, ...rest } = prev;
-          return rest;
-        });
-        profiler.endOperation(operationId, { success: false, error: response.error || response.message });
-        // Don't throw - just log the error
-        return;
+      const appModel = ModelService.getAppModel();
+      const deviceControl = appModel?.deviceControlModel;
+      if (!deviceControl) {
+        throw new Error('Device control logic is not initialized');
       }
+      profiler.startOperation('send_led_command', { deviceId: device.id, action: nextStatus });
+      const observed = await deviceControl.setLight(
+        {deviceId: device.id, kind: 'esp32'},
+        {enabled: nextStatus === 'on'},
+      );
+      profiler.endOperation('send_led_command', { status: 'observed' });
+      setDevices(prev => prev.map(d =>
+        d.id === device.id ? {...d, blueLedStatus: observed.enabled ? 'on' : 'off'} : d
+      ));
+      setPendingLEDCommands(prev => {
+        const { [device.id]: _, ...rest } = prev;
+        return rest;
+      });
+      profiler.endOperation(operationId, { success: true });
     } catch (err) {
       profiler.endOperation(operationId, { success: false, error: String(err) });
       console.error('[toggleBlueLED] LED command failed with error:', err);
@@ -440,10 +414,6 @@ export function useDeviceDiscovery() {
         message: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined
       });
-      // Revert optimistic update on error - restore original status
-      setDevices(prev => prev.map(d =>
-        d.id === device.id ? { ...d, blueLedStatus: originalStatus } : d
-      ));
       // Clear pending state on error
       setPendingLEDCommands(prev => {
         const { [device.id]: _, ...rest } = prev;

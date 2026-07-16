@@ -81,6 +81,22 @@ export default class CommServerManager implements ITransport {
           ],
       });
 
+      // ONE invokes this handler only after the remote peer has proved possession
+      // of its presented Person key and the Person id matches the identity bound
+      // to the registered route/invitation. The route key is the durable trust
+      // anchor here; allow the legacy Person encryption key to rotate beneath it.
+      this.connectionsModel.setKeyMismatchHandler(async (
+        remotePersonId,
+        message,
+        remotePublicKey,
+      ) => {
+        log.warn(
+          `Authorizing Person key replacement for registered peer ${remotePersonId.slice(0, 16)} `
+          + `on route ${remotePublicKey.slice(0, 16)}: ${message}`,
+        );
+        return true;
+      });
+
       // Create BlacklistModel exactly like one.leute
       this.blacklistModel = new BlacklistModel();
 

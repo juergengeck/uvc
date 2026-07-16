@@ -1,83 +1,62 @@
-# Device Ownership Journal Logging
+# UVC device state and journal
 
-## Overview
-Added comprehensive journal logging for device ownership events in the React Native app. All ownership changes are now tracked with timestamps and metadata.
+UVC discovery, control, and observed hardware state use persisted `trie.core`
+roots. Channels are not part of this protocol. CHUM shares the root selected by
+IdAccess and follows its typed references feed-forward.
 
-## Journal Entry Types
+## Objects
 
-### 1. Device Ownership Established
-Logged when:
-- ESP32 device is authenticated via QUIC-VC
-- Manual device registration via `registerDeviceOwner()`
+- `UvcDiscoveryObservation` records which Person/Instance saw an mDNS endpoint,
+  its advertised public key and claimed identity, and its expiry time. It is a
+  reachability observation, never ownership or trust.
+- `UvcControlCommand` records issuer Person/Instance, paired executor Person,
+  target device, `read|set`, and desired state.
+- `UvcControlObservation` references the command hash and records the producing
+  Person/Instance, observed device state, or explicit failure.
+- `UvcJournalEvent` references command and observation hashes for Journal UI.
 
-Journal entry includes:
-- `action`: "ownership_established"
-- `deviceId`: ID of the device
-- `ownerPersonId`: Person ID of the new owner
-- `establishedBy`: Person ID who established ownership
-- `establishedAt`: Timestamp when ownership was established
-- `deviceType`: Type of device (e.g., "ESP32")
-- `deviceAddress`: IP address of device
-- `devicePort`: Port number
-- `authenticationMethod`: Method used (e.g., "QUIC-VC", "manual")
+Provisioning adds four more immutable objects:
 
-### 2. Device Ownership Removed
-Logged when:
-- Device ownership is explicitly removed via `removeDeviceOwner()`
+- `UvcIdentityAssignment` — controller-selected Person/Instance inputs and a
+  signed challenge.
+- `UvcDeviceIdentityProof` — public device keys generated on the device and a
+  device signature; it never contains private material.
+- `UvcDeviceIdentityCertificate` — controller certification of the exact
+  device-created keys and assigned IDs.
+- `UvcAdminRoleGrant` — the device's signed, durable trust of the provisioning
+  Person as `admin`.
 
-Journal entry includes:
-- `action`: "ownership_removed"
-- `deviceId`: ID of the device
-- `ownerPersonId`: Previous owner's Person ID
-- `removedBy`: Person ID who removed ownership
-- `removalMethod`: How it was removed (e.g., "manual")
+All eight are immutable unversioned ONE objects. Trie nodes and roots are the
+versioned storage objects.
 
-### 3. Device Ownership Verified
-Logged when:
-- Credentials are verified for an owned device
+## Root layout
 
-Journal entry includes:
-- `action`: "ownership_verified"
-- `deviceId`: ID of the device
-- `ownerPersonId`: Current owner's Person ID
-- `verifiedBy`: Person ID who verified
-- `verificationMethod`: Method used (e.g., "credential")
+- `uvc:phone-book:<ownerPerson>:<ownerInstance>` indexes observations under
+  `phone-book`, `phone-book/device/<id>`, and `phone-book/observer/<person>`.
+- `uvc:control:<ownerPerson>:<ownerInstance>:<audiencePerson>` indexes commands,
+  observations, and latest device state. This is the participant access boundary.
+- `uvc:journal:<ownerPerson>:<ownerInstance>` indexes `journal`,
+  `journal/device/<id>`, and `journal/event/<type>`.
+- `uvc:provisioning:<ownerPerson>:<ownerInstance>` indexes each ceremony under
+  `provisioning/ceremony/<id>` and admin grants under
+  `provisioning/admin/<person>`.
 
-## Implementation Details
+Stable roots are restored directly. Startup does not scan or replay objects.
+A raw imported command is not executable: the receiver consumes only entries
+reached through a paired peer's control root whose audience is the receiver.
 
-### Journal Entry Structure
-```typescript
-{
-  $type$: 'JournalEntry',
-  id: `device-ownership-${action}-${timestamp}-${random}`,
-  timestamp: Date.now(),
-  type: 'DeviceOwnership',
-  data: {
-    action: string,
-    deviceId: string,
-    ownerPersonId: string,
-    establishedBy/removedBy/verifiedBy: string,
-    establishedAt: number,
-    // Additional metadata
-  },
-  userId: string
-}
-```
+## Read/set flow
 
-### Storage and Distribution
-- Journal entries are stored as unversioned objects in ONE.core
-- Posted to the configured journal channel for synchronization
-- Accessible across all devices sharing the channel
+Browser, Expo, and Cube call the same `UvcControlPlan`. If the local instance
+has the authenticated Groov or ESP32 connection it executes locally. Otherwise
+it writes to a recipient-scoped control trie and shares that root with the paired
+executor. The executor writes a producer-owned observation to the inverse root.
 
-## Side Effects
+Every attempt records a command journal event and every outcome records an
+observed/failed journal event. Dispatch and timeout are never treated as state.
+Groov writes require Manage readback; ESP32 writes require correlated LED state.
 
-### Discovery Management
-- When device ownership is established: Discovery automatically stops
-- When last owned device is removed: Discovery automatically restarts
-- Prevents unnecessary network traffic when devices are paired
-
-### Future Enhancements
-1. Query journal for device ownership history
-2. Export ownership timeline for audit purposes
-3. Sync ownership state across multiple app instances
-4. Add ownership transfer events (from one user to another)
+Provisioning writes `identity-assigned`, `device-keys-created`,
+`identity-certified`, and `admin-granted` journal events, each referencing the
+exact evidence hash. An mDNS appearance or sent assignment is never journaled
+as successful provisioning.

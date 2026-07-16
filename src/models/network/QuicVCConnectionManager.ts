@@ -33,6 +33,12 @@ import * as expoCrypto from 'expo-crypto';
 import * as tweetnacl from 'tweetnacl';
 import Debug from 'debug';
 import { parseFromMicrodata } from '@src/utils/microdataHelpers';
+import {
+    base64ToBytes,
+    bytesToBase64,
+    bytesToHex,
+    concatBytes,
+} from '@src/utils/byteEncoding';
 
 // QUIC-VC protocol abstractions
 import {
@@ -156,6 +162,18 @@ export class QuicVCConnectionManager {
     public readonly onLEDResponse = new OEvent<(deviceId: string, response: any) => void>();
     public readonly onOwnershipRemovalAck = new OEvent<(deviceId: string, response: any) => void>();
     public readonly onDeviceDiscovered = new OEvent<(event: any) => void>();
+    private readonly streamServiceHandlers = new Map<number, Set<(message: {
+        connectionId: string;
+        deviceId: string;
+        streamId: number;
+        payload: Uint8Array;
+        connection: {
+            state: 'initial' | 'handshake' | 'established' | 'closed';
+            peerPersonId: string | null;
+            peerTrustLevel: string | null;
+        };
+        timestamp: number;
+    }) => void | Promise<void>>>();
     
     private constructor(ownPersonId: SHA256IdHash<Person>) {
         this.ownPersonId = ownPersonId;
@@ -207,6 +225,57 @@ export class QuicVCConnectionManager {
         await this.sendPacket(connection, packet);
         
         console.log(`[QuicVCConnectionManager] Sent PROTECTED frame to ${deviceId}, frame type: 0x${frameData[0].toString(16)}`);
+    }
+
+    /** Register a process-wide application-stream handler, including future connections. */
+    registerStreamServiceHandler(
+        streamId: number,
+        handler: (message: {
+            connectionId: string;
+            deviceId: string;
+            streamId: number;
+            payload: Uint8Array;
+            connection: {
+                state: 'initial' | 'handshake' | 'established' | 'closed';
+                peerPersonId: string | null;
+                peerTrustLevel: string | null;
+            };
+            timestamp: number;
+        }) => void | Promise<void>
+    ): () => void {
+        if (!Number.isInteger(streamId) || streamId < 0 || streamId > 0xff) {
+            throw new Error(`QUICVC stream id must be an integer between 0 and 255, got ${streamId}`);
+        }
+        const handlers = this.streamServiceHandlers.get(streamId) ?? new Set();
+        handlers.add(handler);
+        this.streamServiceHandlers.set(streamId, handlers);
+        return () => {
+            handlers.delete(handler);
+            if (handlers.size === 0) {
+                this.streamServiceHandlers.delete(streamId);
+            }
+        };
+    }
+
+    async sendStreamData(
+        deviceId: string,
+        streamId: number,
+        data: Uint8Array,
+        connectionId?: string
+    ): Promise<void> {
+        const connection = connectionId
+            ? this.connections.get(connectionId)
+            : this.getConnectionByDeviceId(deviceId);
+        if (!connection || connection.deviceId !== deviceId || connection.state !== 'established') {
+            throw new Error(`No established QUICVC connection to ${deviceId}`);
+        }
+        await this.sendProtectedPacket(connection, [{
+            type: QuicFrameType.STREAM,
+            streamId,
+            data,
+            offset: 0,
+            fin: false
+        }]);
     }
     
     /**
@@ -1165,7 +1234,7 @@ export class QuicVCConnectionManager {
         const packet = await this.createEncryptedPacket(
             QuicVCPacketType.PROTECTED,
             connection,
-            Buffer.from(payload).toString('utf-8'), // Convert to string for encryption
+            new TextDecoder().decode(payload),
             connection.applicationKeys
         );
 
@@ -1190,10 +1259,10 @@ export class QuicVCConnectionManager {
         combined.set(info, salt.length);
         const hash = await expoCrypto.digestStringAsync(
             expoCrypto.CryptoDigestAlgorithm.SHA256,
-            Buffer.from(combined).toString('base64'),
+            bytesToBase64(combined),
             { encoding: expoCrypto.CryptoEncoding.BASE64 }
         );
-        const keyMaterial = Buffer.from(hash, 'base64').slice(0, 96); // 3 * 32 bytes
+        const keyMaterial = base64ToBytes(hash).slice(0, 96); // 3 * 32 bytes
         
         return {
             encryptionKey: keyMaterial.slice(0, 32),
@@ -1224,7 +1293,7 @@ export class QuicVCConnectionManager {
         combined.set(info, salt.length);
         const hash1 = await expoCrypto.digestStringAsync(
             expoCrypto.CryptoDigestAlgorithm.SHA256,
-            Buffer.from(combined).toString('base64'),
+            bytesToBase64(combined),
             { encoding: expoCrypto.CryptoEncoding.BASE64 }
         );
         const hash2 = await expoCrypto.digestStringAsync(
@@ -1232,10 +1301,10 @@ export class QuicVCConnectionManager {
             hash1,
             { encoding: expoCrypto.CryptoEncoding.BASE64 }
         );
-        const keyMaterial = Buffer.concat([
-            Buffer.from(hash1, 'base64'),
-            Buffer.from(hash2, 'base64')
-        ]).slice(0, 192); // 6 * 32 bytes
+        const keyMaterial = concatBytes(
+            base64ToBytes(hash1),
+            base64ToBytes(hash2),
+        ).slice(0, 192); // 6 * 32 bytes
         
         return {
             encryptionKey: keyMaterial.slice(0, 32),
@@ -1327,7 +1396,7 @@ export class QuicVCConnectionManager {
         combined.set(info, salt.length);
         const hash1 = await expoCrypto.digestStringAsync(
             expoCrypto.CryptoDigestAlgorithm.SHA256,
-            Buffer.from(combined).toString('base64'),
+            bytesToBase64(combined),
             { encoding: expoCrypto.CryptoEncoding.BASE64 }
         );
         const hash2 = await expoCrypto.digestStringAsync(
@@ -1335,10 +1404,10 @@ export class QuicVCConnectionManager {
             hash1,
             { encoding: expoCrypto.CryptoEncoding.BASE64 }
         );
-        const keyMaterial = Buffer.concat([
-            Buffer.from(hash1, 'base64'),
-            Buffer.from(hash2, 'base64')
-        ]).slice(0, 192);
+        const keyMaterial = concatBytes(
+            base64ToBytes(hash1),
+            base64ToBytes(hash2),
+        ).slice(0, 192);
         
         return {
             encryptionKey: keyMaterial.slice(0, 32),
@@ -1410,7 +1479,7 @@ export class QuicVCConnectionManager {
     }
     
     private generateChallenge(): string {
-        return Buffer.from(tweetnacl.randomBytes(32)).toString('hex');
+        return bytesToHex(tweetnacl.randomBytes(32));
     }
     
     private createPacket(type: QuicVCPacketType, connection: QuicVCConnection, payload: string, frameType?: QuicVCFrameType): Uint8Array {
@@ -1993,6 +2062,11 @@ export class QuicVCConnectionManager {
         // STREAM frame format:
         // { type: STREAM, streamId: serviceType, data: serviceData }
         const streamId = frame.streamId;
+        const data = typeof frame.data === 'string'
+            ? new TextEncoder().encode(frame.data)
+            : frame.data instanceof Uint8Array
+                ? frame.data
+                : new Uint8Array(frame.data ?? []);
 
         console.log('[QuicVCConnectionManager] Handling STREAM frame:', {
             streamId,
@@ -2079,12 +2153,31 @@ export class QuicVCConnectionManager {
             }
         }
         
-        // Otherwise, check for service handlers
+        const applicationHandlers = this.streamServiceHandlers.get(streamId);
+        if (applicationHandlers?.size) {
+            const message = {
+                connectionId: this.getConnectionId(connection.scid),
+                deviceId: connection.deviceId,
+                streamId,
+                payload: data,
+                connection: {
+                    state: connection.state,
+                    peerPersonId: connection.remoteVC?.issuerPersonId ?? null,
+                    peerTrustLevel: connection.state === 'established' ? 'trusted' : null
+                },
+                timestamp: Date.now()
+            };
+            for (const handler of applicationHandlers) {
+                Promise.resolve(handler(message)).catch(error => {
+                    console.error(`[QuicVCConnectionManager] Stream ${streamId} handler failed:`, error);
+                });
+            }
+            return;
+        }
+
+        // Otherwise, check for legacy per-connection service handlers
         const handler = connection.serviceHandlers?.get(streamId);
         if (handler) {
-            const data = typeof frame.data === 'string' 
-                ? new TextEncoder().encode(frame.data)
-                : frame.data;
             handler(data, connection.deviceId);
         } else {
             debug(`No handler for stream ID ${streamId} from ${connection.deviceId}`);
@@ -2104,7 +2197,7 @@ export class QuicVCConnectionManager {
         const streamFrame = {
             type: QuicFrameType.STREAM,
             streamId: serviceType, // Use streamId to carry service type
-            data: Buffer.from(data).toString('base64'), // Base64 for JSON transport
+            data: bytesToBase64(data), // Preserve the existing JSON wire representation
             timestamp: Date.now()
         };
         
@@ -2140,16 +2233,16 @@ export class QuicVCConnectionManager {
     async sendDiscoveryBroadcast(deviceInfo: {
         deviceId: string;
         deviceType: number;
-        ownership: number;
-        capabilities: Uint8Array;
+        ownerId?: string;
+        capabilities: string[];
     }): Promise<void> {
         // Create DISCOVERY frame
         const discoveryFrame = {
             type: QuicVCFrameType.DISCOVERY,
             deviceId: deviceInfo.deviceId,
             deviceType: deviceInfo.deviceType,
-            ownership: deviceInfo.ownership, // 0x00=unclaimed, 0x01=claimed
-            capabilities: Buffer.from(deviceInfo.capabilities).toString('base64'),
+            ownership: deviceInfo.ownerId ? 0x01 : 0x00,
+            capabilities: deviceInfo.capabilities,
             timestamp: Date.now()
         };
         

@@ -20,8 +20,8 @@ import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.j
 import { QuicModel } from './QuicModel';
 import { QuicVCConnectionManager } from './QuicVCConnectionManager';
 import type { UdpRemoteInfo } from '@src/platform/react-native/UDPModule';
-import { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
-import { Person } from '@refinio/one.core/lib/recipes.js';
+import { SHA256Hash, SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
+import { HashGroup, Person } from '@refinio/one.core/lib/recipes.js';
 import { getInstanceOwnerIdHash } from '@refinio/one.core/lib/instance.js';
 import { NetworkServiceType } from './interfaces';
 import type { 
@@ -43,6 +43,13 @@ import { VCManager } from './vc/VCManager';
 import { RefactoredBTLEService } from '@src/services/RefactoredBTLEService';
 import { deviceOperationsQueue } from '@src/utils/deferredQueue';
 import { ModelService } from '@src/services/ModelService';
+import {getInstanceIdHash} from '@refinio/one.core/lib/instance.js';
+import {createCryptoApiFromDefaultKeys} from '@refinio/one.core/lib/keychain/keychain.js';
+import type {LocalPeerInfo} from '@refinio/connection.core/discovery/DiscoveryService.js';
+import {NativeMdnsDiscovery} from './mdns/NativeMdnsDiscovery';
+import {storeUnversionedObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
+import type {JournalEntry} from '@OneObjectInterfaces';
+import {bytesToHex, encodeDiscoveryPacket} from './discovery/DiscoveryPacket';
 
 const debug = createDebug('lama:device-discovery');
 
@@ -58,9 +65,12 @@ export class DeviceDiscoveryModel {
   private _quicModel?: QuicModel;
   private _quicVCManager?: QuicVCConnectionManager;
   private _channelManager?: ChannelManager;
+  private _journalParticipants?: SHA256Hash<HashGroup<Person>>;
   private _personId?: SHA256IdHash<Person>;
   private _esp32ConnectionManager?: ESP32ConnectionManager;
   private _vcManager?: VCManager;
+  private _mdnsDiscovery?: NativeMdnsDiscovery;
+  private journalSequence = 0;
   
   // QUICVC port
   private readonly QUICVC_PORT = 49497;
@@ -183,6 +193,13 @@ export class DeviceDiscoveryModel {
 
     // Load owned devices
     if (this._personId) {
+      const channel = await channelManager.createChannel(
+        [this._personId],
+        this._personId,
+        undefined,
+        `app-lifecycle-journal-${this._personId}`,
+      );
+      this._journalParticipants = channel.participantsHash;
       console.log('[DeviceDiscoveryModel] Loading owned devices for person:', this._personId.toString());
       await this.loadOwnedDevices();
       console.log('[DeviceDiscoveryModel] Finished loading owned devices');
@@ -200,6 +217,83 @@ export class DeviceDiscoveryModel {
 
     // QUICVC configuration updated with new identity
     console.log(`[DeviceDiscoveryModel] Updated identity configuration for QUICVC: ${deviceId}`);
+  }
+
+  /**
+   * Advertise and browse the shared ONE DNS-SD service. The advertised id is
+   * the local ONE Instance id; discovery claims remain untrusted until the
+   * QUICVC/ONE handshake verifies them.
+   */
+  private async startMdnsDiscovery(): Promise<void> {
+    if (this._mdnsDiscovery) {
+      return;
+    }
+    const instanceId = getInstanceIdHash();
+    if (!instanceId || !this._personId) {
+      throw new Error('[DeviceDiscoveryModel] Cannot start mDNS without instance and person identity');
+    }
+    const cryptoApi = await createCryptoApiFromDefaultKeys(instanceId);
+    const publicEncryptionKey = bytesToHex(cryptoApi.publicEncryptionKey);
+
+    const mdns = new NativeMdnsDiscovery({
+      deviceId: instanceId.toString(),
+      pubKey: publicEncryptionKey,
+      personId: this._personId.toString(),
+      displayName: 'UVC Expo',
+      deviceType: 'expo',
+      quicvcPort: this.QUICVC_PORT,
+      capabilities: ['quicvc', 'chum', 'phone-book'],
+    });
+    mdns.onPeerDiscovered(peer => void this.handleMdnsPeer(peer));
+    mdns.onPeerUpdated(peer => void this.handleMdnsPeer(peer));
+    mdns.onPeerLost(deviceId => this.handleMdnsPeerLost(deviceId));
+    await mdns.initialize();
+    await mdns.startListening();
+    this._mdnsDiscovery = mdns;
+  }
+
+  private async handleMdnsPeer(peer: LocalPeerInfo): Promise<void> {
+    const separator = peer.address.lastIndexOf(':');
+    if (separator < 1) {
+      throw new Error(`[DeviceDiscoveryModel] Invalid mDNS endpoint ${peer.address}`);
+    }
+    const address = peer.address.slice(0, separator);
+    const port = Number(peer.address.slice(separator + 1));
+    if (!address || !Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error(`[DeviceDiscoveryModel] Invalid mDNS endpoint ${peer.address}`);
+    }
+
+    // owner/personId is intentionally not projected as ownership here. It is
+    // an unauthenticated mDNS claim until QUICVC verifies the remote identity.
+    const device = {
+      deviceId: peer.id,
+      name: peer.name,
+      deviceType: peer.deviceType ?? 'one-peer',
+      address,
+      port,
+      capabilities: peer.capabilities ?? [],
+      hasValidCredential: false,
+      firstSeen: peer.discoveredAt,
+      lastSeen: peer.lastSeenAt,
+      online: true,
+      wifiStatus: 'active',
+      metadata: JSON.stringify({
+        discovery: 'mdns',
+        claimedPersonId: peer.personId,
+        publicKey: peer.publicKey,
+      }),
+    } as unknown as DiscoveryDevice;
+    await this.handleDeviceDiscovered(device);
+  }
+
+  private handleMdnsPeerLost(deviceId: string): void {
+    const device = this._deviceList.get(deviceId);
+    if (!device) {
+      return;
+    }
+    device.online = false;
+    device.wifiStatus = 'inactive';
+    this.emitDeviceUpdate(deviceId);
   }
 
   /**
@@ -559,7 +653,7 @@ export class DeviceDiscoveryModel {
     
     // QuicModel is already listening on port 49497
     // Listen for QUICVC discovery events from QuicModel's OEvent
-    this._quicModel.onQuicVCDiscovery.listen((data: Buffer, rinfo: any) => {
+    this._quicModel.onQuicVCDiscovery.listen((data: Uint8Array, rinfo: any) => {
       // console.log(`[DeviceDiscoveryModel] Received QUICVC discovery event from ${rinfo.address}:${rinfo.port}`);
       this.handleQuicVCPacket(data as any as Uint8Array, rinfo);
     });
@@ -1111,6 +1205,9 @@ export class DeviceDiscoveryModel {
       console.log('[DeviceDiscoveryModel] Using QUICVC discovery on port 49497');
 
       // Start BTLE discovery for IoT devices and app-to-app discovery
+      await this.startMdnsDiscovery();
+
+      // Start BTLE discovery for IoT devices and app-to-app discovery
       await this.initializeBTLEService();
       if (this._btleService && this._btleInitialized) {
         try {
@@ -1199,6 +1296,12 @@ export class DeviceDiscoveryModel {
 
     // QUICVC discovery uses passive listening - no broadcasting to stop
     console.log('[DeviceDiscoveryModel] Stopped QUICVC discovery listening');
+
+    if (this._mdnsDiscovery) {
+      await this._mdnsDiscovery.shutdown();
+      this._mdnsDiscovery = undefined;
+      console.log('[DeviceDiscoveryModel] Stopped mDNS advertising and discovery');
+    }
 
     // Stop BTLE discovery and advertising
     if (this._btleService && this._btleInitialized) {
@@ -1292,8 +1395,7 @@ export class DeviceDiscoveryModel {
         console.log('[DeviceDiscoveryModel] Sent QUICVC app discovery broadcast');
       } else {
         // Fallback to regular UDP broadcast
-        const packet = Buffer.from(JSON.stringify(discoveryMessage));
-        const udpPacket = Buffer.concat([Buffer.from([0x01]), packet]); // Type 1 for discovery
+        const udpPacket = encodeDiscoveryPacket(0x01, discoveryMessage);
         
         // Broadcast to all interfaces
         await this._transport.send(udpPacket, '255.255.255.255', 49497);
@@ -1366,6 +1468,10 @@ export class DeviceDiscoveryModel {
       console.error('[DeviceDiscoveryModel] Failed to initialize ESP32ConnectionManager:', error);
       return undefined;
     }
+  }
+
+  public getQuicVCConnectionManager(): QuicVCConnectionManager | undefined {
+    return this._quicVCManager;
   }
 
   /**
@@ -1465,7 +1571,7 @@ export class DeviceDiscoveryModel {
                              device.type === 'Ring' || 
                              device.type === 'LamaDevice' ||
                              device.name?.toLowerCase().includes('esp32') ||
-                             device.name?.toLowerCase().includes('lama');
+                             device.name?.toLowerCase().includes('vger');
     
     if (!isKnownDeviceType) {
       console.log(`[DeviceDiscoveryModel] Ignoring unknown BTLE device: ${device.name} (${device.type})`);
@@ -2038,6 +2144,11 @@ export class DeviceDiscoveryModel {
       // Update address/port from WiFi discovery
       existingDevice.address = device.address;
       existingDevice.port = device.port;
+      existingDevice.name = device.name;
+      existingDevice.deviceType = device.deviceType;
+      existingDevice.capabilities = device.capabilities;
+      existingDevice.metadata = device.metadata;
+      existingDevice.online = true;
       console.log(`[DeviceDiscoveryModel] Updated existing device ${device.deviceId} with WiFi connectivity`);
       
       // Check if this is a rediscovery of an owned device
@@ -2301,8 +2412,11 @@ export class DeviceDiscoveryModel {
     ownerPersonId: string,
     metadata?: any
   ): Promise<void> {
-    // Journal functionality temporarily disabled
-    return;
+    await this.storeDeviceJournalEntry('DeviceOwnership', deviceId, {
+      ...metadata,
+      action: event,
+      ownerPersonId,
+    });
   }
 
   /**
@@ -2315,8 +2429,41 @@ export class DeviceDiscoveryModel {
     trigger: string,
     metadata?: any
   ): Promise<void> {
-    // Journal functionality temporarily disabled
-    return;
+    await this.storeDeviceJournalEntry('DeviceState', deviceId, {
+      ...metadata,
+      fromState,
+      toState,
+      trigger,
+    });
+  }
+
+  private async storeDeviceJournalEntry(
+    type: 'DeviceOwnership' | 'DeviceState',
+    deviceId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this._channelManager || !this._personId || !this._journalParticipants) {
+      throw new Error(`[DeviceDiscoveryModel] Cannot journal ${type} before channel and identity initialization`);
+    }
+    const timestamp = Date.now();
+    this.journalSequence += 1;
+    const entry: JournalEntry = {
+      $type$: 'JournalEntry',
+      id: `${type.toLowerCase()}-${deviceId}-${timestamp}-${this.journalSequence}`,
+      timestamp,
+      type,
+      data: {deviceId, ...data},
+      userId: this._personId.toString(),
+    };
+    await storeUnversionedObject(entry);
+    await this._channelManager.postToChannel(
+      this._journalParticipants,
+      entry,
+      this._personId,
+      undefined,
+      this._personId,
+      `app-lifecycle-journal-${this._personId}`,
+    );
   }
 
   /**
@@ -2921,6 +3068,11 @@ export class DeviceDiscoveryModel {
     
     // QUICVC connection manager cleanup handled by QuicModel
     console.log('[DeviceDiscoveryModel] QUICVC discovery cleanup complete');
+
+    if (this._mdnsDiscovery) {
+      await this._mdnsDiscovery.shutdown();
+      this._mdnsDiscovery = undefined;
+    }
     
     // Clean up owned device monitor
     if (this._ownedDeviceMonitor) {
