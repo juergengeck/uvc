@@ -6,7 +6,6 @@ import { useTheme as useAppTheme } from '@src/providers/app/AppTheme';
 import { useTranslation } from 'react-i18next';
 import { Namespaces } from '@src/i18n/namespaces';
 import { useInstance } from '@src/providers/app';
-import { useDeepLinks } from '@src/hooks/useDeepLinks';
 
 console.log('=== LOADING TABS HOME PAGE ===');
 
@@ -16,9 +15,6 @@ export default function TabsHome() {
   
   // Use same hook as Messages tab for consistency and reactivity
   const { instance, isAuthenticated, models } = useInstance();
-  
-  // Enable deep link handling for invitation URLs
-  useDeepLinks();
   
   console.log(`[TabsHome] Auth state: ${isAuthenticated ? 'authenticated' : 'not authenticated'}, models available: ${!!models}`);
   
@@ -56,4 +52,4 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   }
-}); 
+});

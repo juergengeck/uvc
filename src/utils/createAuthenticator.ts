@@ -19,7 +19,7 @@ interface AuthOptions {
  * @param appName Application name used for storage directory
  * @returns Configured authenticator instance
  */
-export function createAuthenticator(appName: string = 'lama'): any {
+export function createAuthenticator(appName: string = 'vger.ios.storage'): any {
   // Type assertion needed because Authenticator is defined as abstract in TS
   // but implemented as a concrete class in JS
   const ConcreteAuthenticator = Authenticator as any;
@@ -36,4 +36,4 @@ export function createAuthenticator(appName: string = 'lama'): any {
   console.log('[createAuthenticator] Authenticator created for app:', appName);
   
   return auth;
-} 
+}

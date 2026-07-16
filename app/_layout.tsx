@@ -16,23 +16,24 @@ import '../i18n';
 // Import enhanced i18n config separately to load all translations
 import '@src/i18n/config';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator, Linking, useColorScheme, Appearance, AppState } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, useColorScheme, Appearance, AppState } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 // Import the new singleton initializer
 import { initializeApp } from '@src/initialization/singleton';
 // We only need getAuthenticator now
-import { getAuthenticator, cleanupApp } from '@src/initialization';
+import { getAuthenticator, restoreStoredCredentials } from '@src/initialization';
 import { AppThemeProvider, useTheme } from '@src/providers/app/AppTheme';
 import { Text } from 'react-native-paper';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { AppModelProvider } from '@src/providers/app/AppModelProvider';
 import { ErrorBoundary } from '@src/components/ErrorBoundary';
 import { OneProvider } from '@src/providers/app/OneProvider';
 import { useScreenTracking } from '@src/hooks/useScreenTracking';
 import { getStoredDarkMode } from '@src/providers/app/AppTheme';
 import { Colors } from '@src/constants/Colors';
+import { useDeepLinks } from '@src/hooks/useDeepLinks';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch(e => {
@@ -88,7 +89,10 @@ export default function RootLayout() {
         // 3. Attempt credential restoration (logic is unchanged)
         const initialState = auth.authState.currentState;
         console.log('[RootLayout] Initial auth state:', initialState);
-        console.log('[RootLayout] SKIPPING automatic credential restoration for pairing testing');
+        if (initialState !== 'logged_in') {
+          const restored = await restoreStoredCredentials(auth);
+          console.log('[RootLayout] Stored credential restoration:', restored ? 'restored' : 'not available');
+        }
         
         // 4. Set state and listeners (logic is unchanged)
         const finalState = auth.authState.currentState;
@@ -215,6 +219,10 @@ export default function RootLayout() {
 function ThemedStack() {
   const { theme, isDarkMode, isLoading } = useTheme();
   const [storedDarkMode, setStoredDarkMode] = useState<boolean | null>(null);
+
+  // Invitation URLs must be handled by a persistent component. Route-local
+  // listeners are unmounted when Expo Router follows the invitation URL.
+  useDeepLinks();
   
   // Track screen navigation
   useScreenTracking();

@@ -230,6 +230,19 @@ let handlersAttached = false;
 let isLoginInProgress = false; // NEW: Prevent concurrent login attempts
 let isModelInitInProgress = false; // Prevent concurrent model initialization
 
+const CREDENTIAL_KEYS = {
+  email: 'vger_email',
+  secret: 'vger_secret',
+  instance: 'vger_instance',
+} as const;
+const LEGACY_CREDENTIAL_KEYS = {
+  email: 'lama_email',
+  secret: 'lama_secret',
+} as const;
+const LEGACY_STORAGE_DIRECTORY = 'lama';
+const LEGACY_INSTANCE_NAME = 'lama';
+let activeCredentialInstanceName: string = APP_CONFIG.name;
+
 // Declare variables for object events and platform initialization status
 let objectEventsInitialized = false;
 let platformInitialized = false;
@@ -256,6 +269,7 @@ import { UdpModel } from '@src/models/network/UdpModel';
 // Note: Using one.core functions for key generation to ensure consistency with LLMManager
 
 import { SettingsStore } from '@refinio/one.core/lib/system/settings-store';
+import * as FileSystem from 'expo-file-system';
 import { fromByteArray } from 'base64-js';
 import { setupDebugLogging } from '../config/debug';
 
@@ -280,6 +294,7 @@ export async function loginOrRegisterWithKeys(
   instanceName: string
 ): Promise<void> {
   const startTime = Date.now();
+  activeCredentialInstanceName = instanceName;
 
   // Check if we have cached keys from this session
   if (keyCache.hasCachedKeys(email, instanceName)) {
@@ -342,6 +357,29 @@ export async function clearModel(): Promise<void> {
 // Note: Previously had EnhancedMultiUser wrapper to fix key generation issues,
 // but this has been fixed upstream in one.models, so we can use MultiUser directly
 
+async function migrateLegacyStorageDirectory(): Promise<void> {
+  const documentDirectory = FileSystem.documentDirectory;
+  if (!documentDirectory) {
+    throw new Error('[Initialization] Expo document directory is unavailable');
+  }
+  const legacyDirectory = `${documentDirectory}${LEGACY_STORAGE_DIRECTORY}`;
+  const targetDirectory = `${documentDirectory}${APP_CONFIG.directory}`;
+  const [legacy, target] = await Promise.all([
+    FileSystem.getInfoAsync(legacyDirectory),
+    FileSystem.getInfoAsync(targetDirectory),
+  ]);
+  if (!legacy.exists) {
+    return;
+  }
+  if (target.exists) {
+    throw new Error(
+      `[Initialization] Both legacy and VGER storage directories exist; refusing to choose between ${legacyDirectory} and ${targetDirectory}`,
+    );
+  }
+  await FileSystem.moveAsync({from: legacyDirectory, to: targetDirectory});
+  console.log(`[Initialization] Migrated ONE storage to ${APP_CONFIG.directory}`);
+}
+
 /**
  * Create a new authenticator instance
  * This happens BEFORE login - minimal setup only
@@ -353,6 +391,7 @@ export async function createInstance(): Promise<MultiUser> {
   }
 
   try {
+    await migrateLegacyStorageDirectory();
     // Create auth instance using standard MultiUser (fixed upstream)
     const allRecipes = [
       ...RecipesStable,
@@ -362,7 +401,7 @@ export async function createInstance(): Promise<MultiUser> {
     console.log('[createInstance] Total recipes count:', allRecipes.length);
 
     authInstance = new MultiUser({
-      directory: APP_CONFIG.name,
+      directory: APP_CONFIG.directory,
       recipes: allRecipes,
       reverseMaps: new Map<OneObjectTypeNames, Set<string>>([
         ['Someone', new Set(['personId', 'mainProfile', 'identities'])],
@@ -569,7 +608,7 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
 
   const storageOptions: InitStorageOptions = {
     instanceIdHash: instanceId,
-    name: APP_CONFIG.name,
+    name: APP_CONFIG.directory,
     encryptStorage: false,
     secretForStorageKey: secret || null
   };
@@ -696,44 +735,35 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
   // Wait for networking to complete (non-blocking for UI)
   await networkingPromise;
   
-  // Defer DeviceDiscoveryModel journal configuration - not critical for UI
   const personId = getInstanceOwnerIdHash();
   if (personId) {
-    // Import and defer the journal setup
     const { deferUntilAfterRender } = await import('../utils/startupOptimization');
-
-    deferUntilAfterRender(async () => {
-      console.log('[initModel] 📱 Setting up DeviceDiscoveryModel journal channel (deferred)...');
-      const deviceDiscoveryModel = appModel.deviceDiscoveryModel;
-      if (!deviceDiscoveryModel) {
-        console.error('[initModel] ❌ DeviceDiscoveryModel not available on AppModel for journal setup');
-        return;
-      }
-
-      try {
-        await deviceDiscoveryModel.setChannelManager(channelManager);
-        console.log('[initModel] ✅ DeviceDiscoveryModel journal channel configured');
-      } catch (error) {
-        console.error('[initModel] ❌ Failed to setup DeviceDiscoveryModel journal channel:', error);
-      }
-    });
+    const deviceDiscoveryModel = appModel.deviceDiscoveryModel;
+    if (!deviceDiscoveryModel) {
+      throw new Error('[initModel] DeviceDiscoveryModel not available on AppModel');
+    }
+    await deviceDiscoveryModel.setChannelManager(channelManager);
+    console.log('[initModel] ✅ DeviceDiscoveryModel journal channel configured');
 
       // Initialize app journal immediately (but don't block on channel history loading)
       console.log('[initModel] 📱 Initializing app journal...');
       const { initializeAppJournal, logAppStart } = await import('../utils/appJournal');
       const journalChannelId = `app-lifecycle-journal-${personId}`;
 
-      try {
-        // Create or get the app journal channel
-        await channelManager.createChannel(journalChannelId, personId);
-      } catch (error) {
-        if (!error.message?.includes('already exists')) {
-          console.error('[initModel] Error creating app journal channel:', error);
-        }
-      }
+      const journalChannel = await channelManager.createChannel(
+        [personId],
+        personId,
+        undefined,
+        journalChannelId,
+      );
 
       // Initialize immediately so screen tracking works
-      initializeAppJournal(channelManager, journalChannelId, personId);
+      initializeAppJournal(
+        channelManager,
+        journalChannel.participantsHash,
+        journalChannelId,
+        personId,
+      );
       console.log('[initModel] ✅ App journal initialized');
 
       // Defer app start logging to avoid blocking
@@ -825,7 +855,21 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
             deviceDiscoveryModel.setSettingsService(settingsService);
             console.log('[initModel] ✅ DeviceSettingsService connected to DeviceDiscoveryModel');
 
-            // DeviceDiscoveryModel initialized successfully
+            // Discovery is a runtime service, not a screen lifecycle concern. Start
+            // it here once identity, QUICVC, VC verification, and settings are all
+            // wired so native Expo advertises even when DeviceListScreen is absent.
+            const integrationDiscoveryEnabled =
+              __DEV__ && process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1';
+            if (integrationDiscoveryEnabled) {
+              deviceDiscoveryModel.setForciblyDisabled(false);
+              await deviceDiscoveryModel.startDiscovery();
+              console.log('[initModel] ✅ Device discovery started for integration mode');
+            } else if (settingsService.getSettings()?.discoveryEnabled === true) {
+              await deviceDiscoveryModel.startDiscovery();
+              console.log('[initModel] ✅ Device discovery started');
+            } else {
+              console.log('[initModel] Device discovery is disabled in settings');
+            }
           } else {
             console.error('[initModel] ❌ Failed to initialize DeviceDiscoveryModel');
           }
@@ -1005,15 +1049,12 @@ export async function initModelAfterLogin(): Promise<AppModel> {
  */
 export async function storeCredentials(instanceName: string, secret: string): Promise<void> {
   try {
-    // Use simple, static keys for storage
-    const emailKey = 'lama_email';
-    const secretKey = 'lama_secret';
-    
     // Store instance name (email)
-    await SettingsStore.setItem(emailKey, instanceName);
+    await SettingsStore.setItem(CREDENTIAL_KEYS.email, instanceName);
     
     // Store secret securely
-    await SettingsStore.setItem(secretKey, secret);
+    await SettingsStore.setItem(CREDENTIAL_KEYS.secret, secret);
+    await SettingsStore.setItem(CREDENTIAL_KEYS.instance, activeCredentialInstanceName);
   } catch (error: any) {
     console.error('[Initialization] ❌ Failed to store credentials:', error);
     // Don't throw - allow the app to continue without stored credentials
@@ -1021,17 +1062,70 @@ export async function storeCredentials(instanceName: string, secret: string): Pr
   }
 }
 
+async function readStoredCredentials(): Promise<{
+  email: string;
+  secret: string;
+  instanceName: string;
+} | undefined> {
+  const [email, secret, instanceName] = await Promise.all([
+    SettingsStore.getItem(CREDENTIAL_KEYS.email) as Promise<string | undefined>,
+    SettingsStore.getItem(CREDENTIAL_KEYS.secret) as Promise<string | undefined>,
+    SettingsStore.getItem(CREDENTIAL_KEYS.instance) as Promise<string | undefined>,
+  ]);
+  if (email || secret) {
+    if (!email || !secret) {
+      throw new Error('[Initialization] Stored VGER credentials are incomplete');
+    }
+    return {email, secret, instanceName: instanceName ?? APP_CONFIG.name};
+  }
+
+  const [legacyEmail, legacySecret] = await Promise.all([
+    SettingsStore.getItem(LEGACY_CREDENTIAL_KEYS.email) as Promise<string | undefined>,
+    SettingsStore.getItem(LEGACY_CREDENTIAL_KEYS.secret) as Promise<string | undefined>,
+  ]);
+  if (!legacyEmail && !legacySecret) {
+    return undefined;
+  }
+  if (!legacyEmail || !legacySecret) {
+    throw new Error('[Initialization] Stored legacy credentials are incomplete');
+  }
+  await SettingsStore.setItem(CREDENTIAL_KEYS.email, legacyEmail);
+  await SettingsStore.setItem(CREDENTIAL_KEYS.secret, legacySecret);
+  await SettingsStore.setItem(CREDENTIAL_KEYS.instance, LEGACY_INSTANCE_NAME);
+  await SettingsStore.removeItem(LEGACY_CREDENTIAL_KEYS.email);
+  await SettingsStore.removeItem(LEGACY_CREDENTIAL_KEYS.secret);
+  console.log('[Initialization] Migrated stored credentials to VGER keys');
+  return {email: legacyEmail, secret: legacySecret, instanceName: LEGACY_INSTANCE_NAME};
+}
+
+/**
+ * Restore the last authenticated local ONE instance on cold start.
+ */
+export async function restoreStoredCredentials(auth: MultiUser): Promise<boolean> {
+  const credentials = await readStoredCredentials();
+  if (!credentials) {
+    return false;
+  }
+
+  await loginOrRegisterWithKeys(
+    auth,
+    credentials.email,
+    credentials.secret,
+    credentials.instanceName,
+  );
+  return true;
+}
+
 /**
  * Clear stored credentials (used on logout or when credentials are invalid)
  */
 export async function clearStoredCredentials(): Promise<void> {
   try {
-    // Use simple, valid keys for SecureStore
-    const emailKey = 'lama_email';
-    const secretKey = 'lama_secret';
-    
-    await SettingsStore.removeItem(emailKey);
-    await SettingsStore.removeItem(secretKey);
+    await SettingsStore.removeItem(CREDENTIAL_KEYS.email);
+    await SettingsStore.removeItem(CREDENTIAL_KEYS.secret);
+    await SettingsStore.removeItem(CREDENTIAL_KEYS.instance);
+    await SettingsStore.removeItem(LEGACY_CREDENTIAL_KEYS.email);
+    await SettingsStore.removeItem(LEGACY_CREDENTIAL_KEYS.secret);
   } catch (error) {
     console.error('[Initialization] Error clearing stored credentials:', error);
   }
@@ -1042,13 +1136,7 @@ export async function clearStoredCredentials(): Promise<void> {
  */
 export async function hasStoredCredentials(): Promise<boolean> {
   try {
-    // Use simple, valid keys for SecureStore
-    const emailKey = 'lama_email';
-    const secretKey = 'lama_secret';
-    
-    const storedEmail = await SettingsStore.getItem(emailKey) as string | undefined;
-    const storedSecret = await SettingsStore.getItem(secretKey) as string | undefined;
-    return !!(storedEmail && storedSecret);
+    return (await readStoredCredentials()) !== undefined;
   } catch (error) {
     console.error('[Initialization] Error checking stored credentials:', error);
     return false;

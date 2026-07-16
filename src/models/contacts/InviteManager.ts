@@ -333,7 +333,7 @@ export class InviteManager extends StateMachine<"Uninitialised" | "Initialised",
    * Accept invitation from URL
    */
   async acceptInvitationFromUrl(inviteUrl: string): Promise<void> {
-    console.log(`[InviteManager] Accepting invitation from URL: ${inviteUrl}`);
+    console.log('[InviteManager] Accepting invitation from URL');
     const parsed = parseInvitationUrl(inviteUrl);
 
     if (parsed.error || !parsed.invitation) {
@@ -409,4 +409,4 @@ export class InviteManager extends StateMachine<"Uninitialised" | "Initialised",
   async generateInviteData(): Promise<string> {
     return await this.generateInvitationUrl();
   }
-} 
+}

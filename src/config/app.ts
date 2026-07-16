@@ -14,11 +14,11 @@ const earlyDebug = (msg: string) => {
 earlyDebug('Loading app configuration');
 
 export const APP_CONFIG = {
-  name: 'lama',
-  email: 'lama@refinio.one',
-  directory: 'lama',
-  secret: 'lama-secret',  // Instance secret, not user auth
-  ownerName: 'Lama User',
+  name: 'vger',
+  email: 'vger@refinio.one',
+  directory: 'vger.ios.storage',
+  secret: 'vger-secret',  // Instance secret, not user auth
+  ownerName: 'VGER User',
 } as const;
 
 earlyDebug('APP_CONFIG loaded');
@@ -52,4 +52,4 @@ earlyDebug('Configuration complete');
 export default {
   app: APP_CONFIG,
   auth: AUTH_CONFIG,
-}; 
+};

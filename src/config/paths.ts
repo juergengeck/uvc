@@ -3,9 +3,9 @@
  * This allows us to easily switch between different app implementations
  */
 
-export const APP_MODULE_PATH = 'src/lama';
+export const APP_MODULE_PATH = 'src';
 
 // Helper function to get a path within the app module
 export function getAppPath(relativePath: string): string {
   return `${APP_MODULE_PATH}/${relativePath}`;
-} 
+}

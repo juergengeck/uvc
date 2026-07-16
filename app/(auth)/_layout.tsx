@@ -32,10 +32,10 @@ export default function AuthLayout() {
           contentStyle: { 
             backgroundColor: theme?.colors.background 
           },
-          animation: 'fade',
-          presentation: 'transparentModal'
+          animation: 'none',
+          presentation: 'card'
         }}
       />
     </AuthProvider>
   );
-} 
+}

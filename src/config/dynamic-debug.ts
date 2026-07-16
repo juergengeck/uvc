@@ -87,7 +87,7 @@ export function enableConnectionDebug(): void {
     
     // Set up message bus listeners for one.core events
     try {
-        debugBus = createMessageBus('lama-connection-debug');
+        debugBus = createMessageBus('vger-connection-debug');
         
         // Listen for all relevant debug events
         const debugTypes = ['log', 'debug', 'info', 'warn', 'error', 'alert'];
@@ -337,4 +337,4 @@ export function forceDisableAllDebug(): void {
     };
     
     console.log('[DynamicDebug] 🚨 All debug output force disabled');
-} 
+}

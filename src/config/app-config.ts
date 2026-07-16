@@ -24,12 +24,12 @@ type AppConfig = {
 };
 
 /**
- * Get the default configuration for the lama app
+ * Get the default configuration for the VGER app
  * This includes the glue and leute replicants as IOP peers using the actual identity data from one.leute
  */
 export function getDefaultConfig(): AppConfig {
     return {
-        app: "lama",
+        app: "vger",
         commServerUrl: "wss://comm10.dev.refinio.one",
         initialIopPeers: [
             {
@@ -66,4 +66,4 @@ export function getDefaultConfig(): AppConfig {
         enableLogging: true,
         logTypes: ["error", "alert", "log", "debug"]
     };
-} 
+}

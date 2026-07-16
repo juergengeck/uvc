@@ -897,7 +897,7 @@ export function AIModelSettings({ loading: parentLoading = false, error: parentE
         console.log(`[AIModelSettings] Imported model details:`, {
           name: importedModelDef.name,
           filename: importedModelDef.metadata?.filename || 'model.gguf',
-          provider: importedModelDef.provider || 'lama',
+          provider: importedModelDef.provider || 'vger',
           modelType: importedModelDef.modelType || 'local'
         });
         

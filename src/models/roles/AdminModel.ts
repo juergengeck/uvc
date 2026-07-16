@@ -17,7 +17,7 @@ export class AdminModel extends BaseRoleModel {
     private adminGroup?: GroupModel;
 
     constructor(instance: Instance, leuteModel: LeuteModel) {
-        super(instance, leuteModel, Role.ADMIN, 'lama');
+        super(instance, leuteModel, Role.ADMIN, 'vger');
     }
 
     /**

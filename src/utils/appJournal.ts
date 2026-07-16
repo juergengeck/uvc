@@ -5,8 +5,8 @@
  */
 
 import { storeUnversionedObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
-import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
-import type { Person } from '@refinio/one.core/lib/recipes.js';
+import type { SHA256Hash, SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
+import type { HashGroup, Person } from '@refinio/one.core/lib/recipes.js';
 import { JournalEntry } from '@OneObjectInterfaces';
 import { Platform } from 'react-native';
 
@@ -31,7 +31,8 @@ export enum AppUsageEventType {
 
 interface AppJournalContext {
   channelManager: any;
-  journalChannelId: string;
+  journalParticipants: SHA256Hash<HashGroup<Person>>;
+  journalDiscriminator: string;
   personId: SHA256IdHash<Person>;
 }
 
@@ -53,15 +54,17 @@ let isProcessingQueue = false;
  */
 export function initializeAppJournal(
   channelManager: any,
-  journalChannelId: string,
+  journalParticipants: SHA256Hash<HashGroup<Person>>,
+  journalDiscriminator: string,
   personId: SHA256IdHash<Person>
 ): void {
   appJournalContext = {
     channelManager,
-    journalChannelId,
+    journalParticipants,
+    journalDiscriminator,
     personId
   };
-  console.log('[AppJournal] Initialized with channel:', journalChannelId);
+  console.log('[AppJournal] Initialized with channel:', journalDiscriminator);
 }
 
 /**
@@ -108,11 +111,14 @@ async function processJournalQueue(): Promise<void> {
         };
 
         // Store and post to journal channel
-        const result = await storeUnversionedObject(journalEntry);
+        await storeUnversionedObject(journalEntry);
         await appJournalContext.channelManager.postToChannel(
-          appJournalContext.journalChannelId,
-          result.hash,
-          appJournalContext.personId
+          appJournalContext.journalParticipants,
+          journalEntry,
+          appJournalContext.personId,
+          undefined,
+          appJournalContext.personId,
+          appJournalContext.journalDiscriminator,
         );
 
         // console.log(`[AppJournal] Processed queued journal entry: ${queuedEntry.eventType}`);
@@ -180,7 +186,7 @@ export async function createAppUsageJournalEntry(
  * Clear the app journal context during logout/reset
  */
 export function clearAppJournalContext(): void {
-  appJournalContext = undefined;
+  appJournalContext = null;
 }
 
 /**
