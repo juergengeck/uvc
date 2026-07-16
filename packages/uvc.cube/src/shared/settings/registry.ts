@@ -8,100 +8,55 @@ import {
 import { registerDeviceSettings } from '@settingscore/sections/device-settings.ts';
 
 export const UVC_DISCOVERY_SECTION_ID = 'uvc.discovery';
-export const UVC_DEFAULT_AUTHORITY_URL = 'http://uvc-pi.local:3000';
-
-export interface UvcDiscoverySettings {
-  authorityUrl: string;
-  mdnsEnabled: boolean;
-  discoveryMode: 'mdns' | 'udp' | 'hybrid';
-  serviceType: string;
-  serviceName: string;
-  domain: string;
-  discoveryIntervalMs: number;
-  refreshIntervalSeconds: number;
-}
-
-export const UVC_DISCOVERY_DEFAULTS: UvcDiscoverySettings = {
-  authorityUrl: UVC_DEFAULT_AUTHORITY_URL,
-  mdnsEnabled: true,
-  discoveryMode: 'mdns',
-  serviceType: 'one-refinio',
-  serviceName: 'uvc-pi',
-  domain: 'local',
-  discoveryIntervalMs: 5000,
-  refreshIntervalSeconds: 15,
-};
+export const UVC_IDENTITY_SECTION_ID = 'uvc.identity';
 
 const uvcDiscoverySettingsSection = defineSection({
   id: UVC_DISCOVERY_SECTION_ID,
-  name: 'Discovery & Authority',
+  name: 'Peer discovery',
   module: 'uvc.cube',
   order: 26,
+  fields: [],
+});
+
+const uvcIdentitySettingsSection = defineSection({
+  id: UVC_IDENTITY_SECTION_ID,
+  name: 'Cube identity',
+  module: 'uvc.cube',
+  order: 20,
   fields: [
     defineField({
-      key: 'authorityUrl',
+      key: 'email',
       type: 'string',
-      label: 'Authority URL',
-      description: 'Base URL for the Raspberry Pi headless authority that reports devices and accepts discovery config updates.',
-      default: UVC_DISCOVERY_DEFAULTS.authorityUrl,
+      label: 'Person email',
+      description: 'The independent ONE Person who owns this Cube instance.',
+      default: 'cube@uvc.local',
     }),
     defineField({
-      key: 'mdnsEnabled',
-      type: 'boolean',
-      label: 'mDNS Discovery',
-      description: 'Expose and query local discovery using DNS-SD / Bonjour.',
-      default: UVC_DISCOVERY_DEFAULTS.mdnsEnabled,
-    }),
-    defineField({
-      key: 'discoveryMode',
-      type: 'select',
-      label: 'Discovery Mode',
-      description: 'Preferred discovery transport advertised to the authority.',
-      default: UVC_DISCOVERY_DEFAULTS.discoveryMode,
-      options: [
-        { value: 'mdns', label: 'mDNS' },
-        { value: 'udp', label: 'UDP' },
-        { value: 'hybrid', label: 'Hybrid' },
-      ],
-    }),
-    defineField({
-      key: 'serviceType',
+      key: 'instanceName',
       type: 'string',
-      label: 'Service Type',
-      description: 'Bonjour service type used for local discovery.',
-      default: UVC_DISCOVERY_DEFAULTS.serviceType,
+      label: 'Instance name',
+      description: 'A device-local name; changing identity settings takes effect after restart.',
+      default: 'uvc-cube',
     }),
     defineField({
-      key: 'serviceName',
+      key: 'displayName',
       type: 'string',
-      label: 'Service Name',
-      description: 'Human-friendly instance name to advertise on the network.',
-      default: UVC_DISCOVERY_DEFAULTS.serviceName,
+      label: 'Display name',
+      default: 'UVC Cube',
     }),
     defineField({
-      key: 'domain',
+      key: 'password',
+      type: 'password',
+      label: 'Local storage password',
+      description: 'Encrypts this Cube instance storage and is never advertised.',
+      default: 'uvc-cube-local',
+    }),
+    defineField({
+      key: 'commServerUrl',
       type: 'string',
-      label: 'Domain',
-      description: 'mDNS domain, usually local.',
-      default: UVC_DISCOVERY_DEFAULTS.domain,
-    }),
-    defineField({
-      key: 'discoveryIntervalMs',
-      type: 'number',
-      label: 'Discovery Interval',
-      description: 'Authority discovery polling / broadcast interval in milliseconds.',
-      default: UVC_DISCOVERY_DEFAULTS.discoveryIntervalMs,
-      min: 1000,
-      step: 1000,
-    }),
-    defineField({
-      key: 'refreshIntervalSeconds',
-      type: 'number',
-      label: 'Auto Refresh',
-      description: 'How often the cube refreshes device/runtime status from the authority. Set to 0 to disable polling.',
-      default: UVC_DISCOVERY_DEFAULTS.refreshIntervalSeconds,
-      min: 0,
-      step: 1,
+      label: 'Communication server',
+      description: 'ONE pairing and CHUM transport used to share trie roots.',
+      default: 'wss://comm10.dev.refinio.one',
     }),
   ],
 });
@@ -111,6 +66,9 @@ export function ensureUvcSettingsSectionsRegistered(): SettingsSection[] {
 
   if (!SettingsRegistry.hasSection(uvcDiscoverySettingsSection.id)) {
     SettingsRegistry.registerSection(uvcDiscoverySettingsSection);
+  }
+  if (!SettingsRegistry.hasSection(uvcIdentitySettingsSection.id)) {
+    SettingsRegistry.registerSection(uvcIdentitySettingsSection);
   }
 
   return SettingsRegistry.getSections();

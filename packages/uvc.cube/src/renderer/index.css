@@ -140,7 +140,7 @@ a {
   flex: 0 0 auto;
 }
 
-.authority-state {
+.discovery-state {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -149,7 +149,7 @@ a {
   white-space: nowrap;
 }
 
-.authority-state > span {
+.discovery-state > span {
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -157,12 +157,12 @@ a {
   box-shadow: 0 0 0 4px rgba(115, 128, 153, 0.12);
 }
 
-.authority-state--online > span {
+.discovery-state--online > span {
   background: #55d6a2;
   box-shadow: 0 0 0 4px rgba(85, 214, 162, 0.12);
 }
 
-.authority-state--offline > span {
+.discovery-state--offline > span {
   background: #f08a7e;
   box-shadow: 0 0 0 4px rgba(240, 138, 126, 0.12);
 }
@@ -451,6 +451,91 @@ a {
   justify-items: end;
   gap: 10px;
   min-width: 142px;
+}
+
+.flow-device-card__actions .action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.flow-device-card__actions .action-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.setup-dialog-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 12, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.setup-dialog {
+  width: min(100%, 480px);
+  border: 1px solid rgba(122, 162, 255, 0.28);
+  border-radius: 12px;
+  padding: 24px;
+  background: #0d1522;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.52);
+}
+
+.setup-dialog h2 {
+  margin: 5px 0 8px;
+  font-size: 1.35rem;
+}
+
+.setup-dialog > p {
+  margin: 0;
+  color: #9aa9bf;
+  line-height: 1.5;
+}
+
+.setup-dialog__field {
+  display: grid;
+  gap: 7px;
+  margin-top: 22px;
+  color: #dbe6f7;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.setup-dialog__summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: rgba(52, 211, 153, 0.08);
+  color: #75dcb8;
+  font-size: 0.82rem;
+}
+
+.setup-dialog__summary svg {
+  width: 17px;
+  height: 17px;
+}
+
+.setup-dialog__error {
+  margin-top: 14px !important;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(248, 113, 113, 0.09);
+  color: #fca5a5 !important;
+  font-size: 0.82rem;
+}
+
+.setup-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
 }
 
 .action-button--quiet {

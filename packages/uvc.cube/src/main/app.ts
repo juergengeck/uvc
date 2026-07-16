@@ -1,7 +1,11 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 
 import { getAppPaths } from './utils/app-paths.js';
+
+export function getAppIconPath(): string {
+  return path.join(app.getAppPath(), 'resources', 'uvc-logo.png');
+}
 
 export class MainApplication {
   private mainWindow: BrowserWindow | null = null;
@@ -16,6 +20,7 @@ export class MainApplication {
       minHeight: 760,
       backgroundColor: '#0c111b',
       title: 'UVC Cube',
+      icon: getAppIconPath(),
       titleBarStyle: 'hiddenInset',
       webPreferences: {
         nodeIntegration: false,

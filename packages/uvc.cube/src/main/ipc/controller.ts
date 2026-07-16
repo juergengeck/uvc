@@ -1,17 +1,22 @@
-import { app, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 
 import type { SettingsValues, SystemInfo } from '@shared/contracts';
 
-import {
-  getDiscoveryRuntimeSnapshot,
-  pushDiscoverySettings,
-  refreshDiscoveryRuntime,
-  setDiscoveryDeviceTrust,
-} from '../services/headless-authority.js';
 import { getCubeSettingsService } from '../services/cube-settings.js';
 import { getWorkspaceSnapshot } from '../services/workspace.js';
+import {invokeUvcPlan, registerUvcPlans} from '../registry/uvc-plan-registry.js';
+import {onPeerDirectoryChanged} from '../services/peer-directory.js';
 
 export function registerIpcHandlers(): void {
+  registerUvcPlans();
+  ipcMain.handle('plan:invoke', async (_event, operation: string, method: string, params?: unknown) => (
+    invokeUvcPlan(operation, method, params)
+  ));
+  onPeerDirectoryChanged(() => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send('discovery:changed');
+    }
+  });
   ipcMain.handle('system:info', async (): Promise<SystemInfo> => {
     return {
       appName: app.getName(),
@@ -41,19 +46,4 @@ export function registerIpcHandlers(): void {
     return getCubeSettingsService().updateSection(sectionId, values);
   });
 
-  ipcMain.handle('discovery:getRuntime', async () => {
-    return getDiscoveryRuntimeSnapshot();
-  });
-
-  ipcMain.handle('discovery:refreshRuntime', async () => {
-    return refreshDiscoveryRuntime();
-  });
-
-  ipcMain.handle('discovery:setDeviceTrust', async (_event, deviceId: string, trusted: boolean) => {
-    return setDiscoveryDeviceTrust(deviceId, trusted);
-  });
-
-  ipcMain.handle('discovery:pushSettings', async () => {
-    return pushDiscoverySettings();
-  });
 }

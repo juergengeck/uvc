@@ -1,0 +1,167 @@
+{
+  "scanMs": 7000,
+  "expectedKinds": [
+    "cube",
+    "groov"
+  ],
+  "services": [
+    {
+      "serviceType": "one-refinio",
+      "name": "e04158a67052c7da",
+      "host": "bambam.home.arpa",
+      "port": 49497,
+      "addresses": [
+        "192.168.178.102",
+        "fe80::1c1e:9b1c:989e:3ffe",
+        "2a02:810d:f600:500:835:5f87:3660:684",
+        "2a02:810d:f600:500:ac98:e9b:f1b9:24dc",
+        "2a02:810d:f600:500:c3b:ea39:6f5d:e8c2",
+        "2a02:810d:f600:500:173:1a88:a4d2:f55d",
+        "2a02:810d:f600:500:2167:9add:c744:2f11",
+        "2a02:810d:f600:500:b115:a01a:f3c6:ebe7",
+        "2a02:810d:f600:500:b5ee:1eb5:1780:5d5e",
+        "2a02:810d:f600:500:d8a7:70c6:d458:14c3",
+        "fe80::bc8e:b2ff:fe88:2516"
+      ],
+      "txt": {
+        "deviceId": "e04158a67052c7da8867172322a4b7a2d52feaabd10017efc8c51ea84cd717e2",
+        "pubkey": "476d159d60f97a6a3d005ab84685c6f50fe8b4bd65d63e53ed7a02b99c52f77e",
+        "personId": "5ced103920289f934ec51346d4818e64b62630f47d84eb977d0037387acdd947",
+        "name": "UVC Cube",
+        "deviceType": "cube",
+        "platform": "one",
+        "capabilities": "chum,phone-book,trie,device-control,journal"
+      }
+    },
+    {
+      "serviceType": "one-refinio",
+      "name": "12576c9eb78324d0",
+      "host": "opto-05-bd-39",
+      "port": 49497,
+      "addresses": [
+        "192.168.178.141",
+        "2a02:810d:f600:500:2a0:3dff:fe05:bd39",
+        "fe80::2a0:3dff:fe05:bd39"
+      ],
+      "txt": {
+        "pubkey": "824f87897c3fb03a8bf25db0106199a3813d8f558ea3934087046f9bb5519c73",
+        "deviceId": "12576c9eb78324d0f5574d97efedde97f6ef469156387df0f63488e83cc852e4",
+        "name": "rio",
+        "deviceType": "groov",
+        "platform": "one",
+        "capabilities": "quicvc,webrtc,websocket,http",
+        "personId": "e42cafb8a27ba115745f99390a35f938c5a9188385838b13b066f0bd1dedee4c",
+        "email": "admin@uvc.one",
+        "webPort": "3000"
+      }
+    }
+  ],
+  "report": {
+    "timestamp": 1784113723402,
+    "probeResults": [
+      {
+        "probeId": "mdns-identity-contract",
+        "title": "Every UVC advertisement is bound to a ONE identity",
+        "status": "passed",
+        "summary": "2 advertisements have bound identities",
+        "executedAt": "2026-07-15T11:08:43.395Z",
+        "durationMs": 5,
+        "details": {
+          "invalid": []
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "headless-provisioning-contract",
+        "title": "Headless identity assignment has typed proof and admin evidence",
+        "status": "passed",
+        "summary": "assignment, key proof, certificate, and admin grant are typed without private material",
+        "executedAt": "2026-07-15T11:08:43.400Z",
+        "durationMs": 1,
+        "details": {
+          "missing": [],
+          "leakedPrivateFields": []
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "native-peer-presence",
+        "title": "Cube, Expo, Groov and ESP32 advertise the shared service",
+        "status": "passed",
+        "summary": "all expected peers are visible: cube, groov",
+        "executedAt": "2026-07-15T11:08:43.401Z",
+        "durationMs": 0,
+        "details": {
+          "seen": [
+            "cube",
+            "groov"
+          ],
+          "services": [
+            {
+              "serviceType": "one-refinio",
+              "name": "e04158a67052c7da",
+              "host": "bambam.home.arpa",
+              "port": 49497,
+              "addresses": [
+                "192.168.178.102",
+                "fe80::1c1e:9b1c:989e:3ffe",
+                "2a02:810d:f600:500:835:5f87:3660:684",
+                "2a02:810d:f600:500:ac98:e9b:f1b9:24dc",
+                "2a02:810d:f600:500:c3b:ea39:6f5d:e8c2",
+                "2a02:810d:f600:500:173:1a88:a4d2:f55d",
+                "2a02:810d:f600:500:2167:9add:c744:2f11",
+                "2a02:810d:f600:500:b115:a01a:f3c6:ebe7",
+                "2a02:810d:f600:500:b5ee:1eb5:1780:5d5e",
+                "2a02:810d:f600:500:d8a7:70c6:d458:14c3",
+                "fe80::bc8e:b2ff:fe88:2516"
+              ],
+              "txt": {
+                "deviceId": "e04158a67052c7da8867172322a4b7a2d52feaabd10017efc8c51ea84cd717e2",
+                "pubkey": "476d159d60f97a6a3d005ab84685c6f50fe8b4bd65d63e53ed7a02b99c52f77e",
+                "personId": "5ced103920289f934ec51346d4818e64b62630f47d84eb977d0037387acdd947",
+                "name": "UVC Cube",
+                "deviceType": "cube",
+                "platform": "one",
+                "capabilities": "chum,phone-book,trie,device-control,journal"
+              }
+            },
+            {
+              "serviceType": "one-refinio",
+              "name": "12576c9eb78324d0",
+              "host": "opto-05-bd-39",
+              "port": 49497,
+              "addresses": [
+                "192.168.178.141",
+                "2a02:810d:f600:500:2a0:3dff:fe05:bd39",
+                "fe80::2a0:3dff:fe05:bd39"
+              ],
+              "txt": {
+                "pubkey": "824f87897c3fb03a8bf25db0106199a3813d8f558ea3934087046f9bb5519c73",
+                "deviceId": "12576c9eb78324d0f5574d97efedde97f6ef469156387df0f63488e83cc852e4",
+                "name": "rio",
+                "deviceType": "groov",
+                "platform": "one",
+                "capabilities": "quicvc,webrtc,websocket,http",
+                "personId": "e42cafb8a27ba115745f99390a35f938c5a9188385838b13b066f0bd1dedee4c",
+                "email": "admin@uvc.one",
+                "webPort": "3000"
+              }
+            }
+          ]
+        },
+        "verificationEvidence": []
+      }
+    ],
+    "contractViolations": [],
+    "transportViolations": [],
+    "parityGaps": [],
+    "verificationReports": [],
+    "verificationFindings": [],
+    "summary": {
+      "total": 0,
+      "critical": 0,
+      "warning": 0,
+      "passed": true
+    }
+  }
+}

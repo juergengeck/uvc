@@ -93,6 +93,8 @@ export interface DiscoveryStatusSnapshot {
 
 export interface DiscoveryDeviceSnapshot {
   id: string;
+  /** ONE Instance id claimed by a standard discovery advertisement. */
+  instanceId?: string;
   name?: string;
   type?: string;
   role?: string;
@@ -102,9 +104,18 @@ export interface DiscoveryDeviceSnapshot {
   online?: boolean;
   connected?: boolean;
   ownerId?: string;
+  publicKey?: string;
   lastSeenAt?: string;
   trustState?: string;
   capabilities?: string[];
+}
+
+export interface CubeIdentitySnapshot {
+  personId: string;
+  instanceId: string;
+  publicKey: string;
+  publicSignKey: string;
+  displayName: string;
 }
 
 export interface DiscoveryConfigSnapshot {
@@ -125,7 +136,7 @@ export interface DiscoveryConfigSnapshot {
 }
 
 export interface DiscoveryRuntimeSnapshot {
-  authorityUrl: string;
+  discoverySource: string;
   status: DiscoveryStatusSnapshot;
   devices: DiscoveryDeviceSnapshot[];
   config: DiscoveryConfigSnapshot;
@@ -145,6 +156,9 @@ export interface ElectronApi {
   getSettingsSnapshot: () => Promise<SettingsSnapshot>;
   updateSettingsSection: (sectionId: string, values: SettingsValues) => Promise<SettingsSnapshot>;
   getDiscoveryRuntimeSnapshot: () => Promise<DiscoveryRuntimeSnapshot>;
+  getCubeIdentity: () => Promise<CubeIdentitySnapshot>;
+  invokePlan: <T = unknown>(operation: string, method: string, params?: unknown) => Promise<T>;
+  onDiscoveryChanged: (listener: () => void) => () => void;
   refreshDiscoveryRuntime: () => Promise<DiscoveryRuntimeSnapshot>;
   setDiscoveryDeviceTrust: (deviceId: string, trusted: boolean) => Promise<DiscoveryRuntimeSnapshot>;
   pushDiscoverySettings: () => Promise<DiscoverySettingsPushResult>;

@@ -74,7 +74,10 @@ export function SettingsView({
   }, [sections, settings]);
 
   const visibleSections = useMemo(() => {
-    return sections.filter((section) => section.id === 'device' || section.id === 'uvc.discovery');
+    return sections.filter((section) => (
+      section.id === 'device'
+      || section.id === 'uvc.identity'
+    ));
   }, [sections]);
 
   const handleFieldChange = (sectionId: string, key: string, value: unknown) => {
@@ -105,7 +108,7 @@ export function SettingsView({
         <div className="panel__header panel__header--with-actions">
           <div>
             <h2>Discovery Runtime</h2>
-            <p>Read device and mDNS state from the Raspberry Pi authority, then push the current cube settings back into its discovery config.</p>
+            <p>Browse local UVC peers over the shared ONE DNS-SD service and control Cube's discovery view.</p>
           </div>
           <div className="action-row">
             <button className="action-button" onClick={() => void onRefreshRuntime()} type="button">
@@ -123,8 +126,8 @@ export function SettingsView({
           <div className="stack">
             <div className="stats-grid stats-grid--three">
               <article className="stat-card">
-                <span className="stat-card__label">Authority</span>
-                <strong>{runtime.authorityUrl}</strong>
+                <span className="stat-card__label">Discovery source</span>
+                <strong>{runtime.discoverySource}</strong>
                 <span>{runtime.status.status ?? (runtime.status.healthy ? 'healthy' : 'unknown')}</span>
               </article>
               <article className="stat-card">
@@ -283,12 +286,12 @@ export function SettingsView({
         <div className="panel__header">
           <div>
             <h2>Discovered Devices</h2>
-            <p>Devices reported by the configured authority, including mDNS names and trust state.</p>
+            <p>Peers discovered directly over mDNS, including service names and trust state.</p>
           </div>
         </div>
 
         {!runtime || runtime.devices.length === 0 ? (
-          <p className="panel-empty">No devices reported by the authority yet.</p>
+          <p className="panel-empty">No local peers discovered yet.</p>
         ) : (
           <div className="device-grid">
             {runtime.devices.map((device) => (

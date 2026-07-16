@@ -19,7 +19,6 @@ import type {
   WorkspacePackageInfo,
   WorkspaceSnapshot,
 } from '@shared/contracts';
-import { UVC_DISCOVERY_SECTION_ID } from '@shared/settings/registry';
 
 import { ChatView } from './views/ChatView';
 import { DevicesView } from './views/DevicesView';
@@ -39,7 +38,7 @@ interface UvcRuntime {
   availableHighlightCount: number;
   onSaveSection: (sectionId: string, values: SettingsValues) => Promise<void>;
   onRefreshRuntime: (refresh?: boolean) => Promise<void>;
-  onSetDeviceTrust: (deviceId: string, trusted: boolean) => Promise<void>;
+  onSetupDevice: (deviceId: string, assignedInstanceName: string) => Promise<void>;
   onPushDiscoverySettings: () => Promise<void>;
 }
 
@@ -211,7 +210,7 @@ function OverviewRoute() {
     discoveryRuntime,
     isRefreshingRuntime,
     onRefreshRuntime,
-    onSetDeviceTrust,
+    onSetupDevice,
     runtimeError,
   } = useUvcRuntime();
 
@@ -220,7 +219,7 @@ function OverviewRoute() {
       busyDeviceIds={busyDeviceIds}
       isRefreshing={isRefreshingRuntime}
       onRefresh={async () => onRefreshRuntime(true)}
-      onSetDeviceTrust={onSetDeviceTrust}
+      onSetupDevice={onSetupDevice}
       runtime={discoveryRuntime}
       runtimeError={runtimeError}
     />
@@ -411,20 +410,9 @@ export default function App() {
     };
   }, [loadDiscoveryRuntime]);
 
-  useEffect(() => {
-    const intervalSeconds = Number(settingsSnapshot?.[UVC_DISCOVERY_SECTION_ID]?.refreshIntervalSeconds ?? 0);
-    if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      void loadDiscoveryRuntime();
-    }, intervalSeconds * 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [loadDiscoveryRuntime, settingsSnapshot]);
+  useEffect(() => window.electronAPI.onDiscoveryChanged(() => {
+    void loadDiscoveryRuntime();
+  }), [loadDiscoveryRuntime]);
 
   const handleSaveSection = useCallback(async (sectionId: string, values: SettingsValues) => {
     setIsSavingSettings(true);
@@ -432,13 +420,10 @@ export default function App() {
       const updated = await window.electronAPI.updateSettingsSection(sectionId, values);
       setSettingsSnapshot(updated);
 
-      if (sectionId === UVC_DISCOVERY_SECTION_ID) {
-        await loadDiscoveryRuntime();
-      }
     } finally {
       setIsSavingSettings(false);
     }
-  }, [loadDiscoveryRuntime]);
+  }, []);
 
   const handlePushDiscoverySettings = useCallback(async () => {
     setIsRefreshingRuntime(true);
@@ -452,15 +437,15 @@ export default function App() {
     }
   }, []);
 
-  const handleSetDeviceTrust = useCallback(async (deviceId: string, trusted: boolean) => {
+  const handleSetupDevice = useCallback(async (deviceId: string, assignedInstanceName: string) => {
     setBusyDeviceIds((current) => new Set(current).add(deviceId));
     setRuntimeError(null);
-
     try {
-      const nextRuntime = await window.electronAPI.setDiscoveryDeviceTrust(deviceId, trusted);
-      setDiscoveryRuntime(nextRuntime);
-    } catch (caughtError) {
-      setRuntimeError(caughtError instanceof Error ? caughtError.message : 'Failed to update device approval.');
+      await window.electronAPI.invokePlan('headlessProvisioning', 'provision', {
+        deviceId,
+        assignedInstanceName,
+      });
+      await loadDiscoveryRuntime(true);
     } finally {
       setBusyDeviceIds((current) => {
         const next = new Set(current);
@@ -468,7 +453,7 @@ export default function App() {
         return next;
       });
     }
-  }, []);
+  }, [loadDiscoveryRuntime]);
 
   const availableHighlightCount = useMemo(() => {
     return workspace?.highlights.filter((highlight) => highlight.status === 'available').length ?? 0;
@@ -488,7 +473,7 @@ export default function App() {
     availableHighlightCount,
     onSaveSection: handleSaveSection,
     onRefreshRuntime: loadDiscoveryRuntime,
-    onSetDeviceTrust: handleSetDeviceTrust,
+    onSetupDevice: handleSetupDevice,
     onPushDiscoverySettings: handlePushDiscoverySettings,
   }), [
     availableHighlightCount,
@@ -497,7 +482,7 @@ export default function App() {
     error,
     handlePushDiscoverySettings,
     handleSaveSection,
-    handleSetDeviceTrust,
+    handleSetupDevice,
     isRefreshingRuntime,
     isSavingSettings,
     loadDiscoveryRuntime,

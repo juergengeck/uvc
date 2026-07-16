@@ -10,11 +10,23 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "test:integration": "node scripts/run-runner-full-protocol.mjs",
+    "test:integration:probe": "node tests/integration/uvc-protocol-runner.mjs",
+    "run:runner-full-protocol": "node scripts/run-runner-full-protocol.mjs"
   },
   "dependencies": {
+    "@refinio/api": "file:../../../one/packages/refinio.api",
+    "@refinio/connection.core": "file:../../../one/packages/connection.core",
+    "@refinio/one.core": "file:../../../one/packages/one.core",
+    "@refinio/one.models": "file:../../../one/packages/one.models",
+    "@refinio/qa.core": "file:../../../one/packages/qa.core",
+    "@refinio/trie.core": "file:../../../one/packages/trie.core",
+    "@refinio/uvc.core": "file:../../../one/packages/uvc.core",
+    "@uvc/groov-authority": "file:../uvc.groov",
     "@shadcn/react": "^0.2.1",
     "@tanstack/react-router": "^1.170.17",
+    "bonjour-service": "^1.4.3",
     "lucide-react": "^1.24.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

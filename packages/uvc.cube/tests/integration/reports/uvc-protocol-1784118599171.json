@@ -1,0 +1,124 @@
+{
+  "scanMs": 5000,
+  "expectedKinds": [
+    "cube",
+    "groov"
+  ],
+  "services": [
+    {
+      "serviceType": "one-refinio",
+      "name": "12576c9eb78324d0",
+      "host": "opto-05-bd-39",
+      "port": 49497,
+      "addresses": [
+        "192.168.178.141",
+        "2a02:810d:f600:500:2a0:3dff:fe05:bd39",
+        "fe80::2a0:3dff:fe05:bd39"
+      ],
+      "txt": {
+        "pubkey": "824f87897c3fb03a8bf25db0106199a3813d8f558ea3934087046f9bb5519c73",
+        "deviceId": "12576c9eb78324d0f5574d97efedde97f6ef469156387df0f63488e83cc852e4",
+        "name": "rio",
+        "deviceType": "groov",
+        "platform": "one",
+        "capabilities": "quicvc,webrtc,websocket,http",
+        "personId": "e42cafb8a27ba115745f99390a35f938c5a9188385838b13b066f0bd1dedee4c",
+        "email": "admin@uvc.one",
+        "webPort": "3000"
+      }
+    }
+  ],
+  "report": {
+    "timestamp": 1784118599171,
+    "probeResults": [
+      {
+        "probeId": "mdns-identity-contract",
+        "title": "Every UVC advertisement is bound to a ONE identity",
+        "status": "passed",
+        "summary": "1 advertisements have bound identities",
+        "executedAt": "2026-07-15T12:29:59.170Z",
+        "durationMs": 1,
+        "details": {
+          "invalid": []
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "headless-provisioning-contract",
+        "title": "Headless identity assignment has typed proof and admin evidence",
+        "status": "passed",
+        "summary": "assignment, key proof, certificate, and admin grant are typed without private material",
+        "executedAt": "2026-07-15T12:29:59.171Z",
+        "durationMs": 0,
+        "details": {
+          "missing": [],
+          "leakedPrivateFields": []
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "native-peer-presence",
+        "title": "Cube, Expo, Groov and ESP32 advertise the shared service",
+        "status": "failed",
+        "summary": "missing mDNS device types: cube",
+        "executedAt": "2026-07-15T12:29:59.171Z",
+        "durationMs": 0,
+        "details": {
+          "seen": [
+            "groov"
+          ],
+          "services": [
+            {
+              "serviceType": "one-refinio",
+              "name": "12576c9eb78324d0",
+              "host": "opto-05-bd-39",
+              "port": 49497,
+              "addresses": [
+                "192.168.178.141",
+                "2a02:810d:f600:500:2a0:3dff:fe05:bd39",
+                "fe80::2a0:3dff:fe05:bd39"
+              ],
+              "txt": {
+                "pubkey": "824f87897c3fb03a8bf25db0106199a3813d8f558ea3934087046f9bb5519c73",
+                "deviceId": "12576c9eb78324d0f5574d97efedde97f6ef469156387df0f63488e83cc852e4",
+                "name": "rio",
+                "deviceType": "groov",
+                "platform": "one",
+                "capabilities": "quicvc,webrtc,websocket,http",
+                "personId": "e42cafb8a27ba115745f99390a35f938c5a9188385838b13b066f0bd1dedee4c",
+                "email": "admin@uvc.one",
+                "webPort": "3000"
+              }
+            }
+          ]
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "esp32-firmware-contract",
+        "title": "Deployable ESP32 firmware preserves identity and fails closed",
+        "status": "passed",
+        "summary": "bootstrap/assigned mDNS is stateful, identity is durable, and insecure ownership fails closed",
+        "executedAt": "2026-07-15T12:29:59.171Z",
+        "durationMs": 0,
+        "details": {
+          "firmwareRoot": "/Users/gecko/src/vger/packages/esp32.core/firmware/esp32-quicvc-project",
+          "missing": [],
+          "forbidden": []
+        },
+        "verificationEvidence": []
+      }
+    ],
+    "contractViolations": [],
+    "transportViolations": [],
+    "parityGaps": [],
+    "verificationReports": [],
+    "verificationFindings": [],
+    "summary": {
+      "total": 1,
+      "critical": 1,
+      "warning": 0,
+      "passed": false
+    }
+  }
+}

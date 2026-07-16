@@ -1,0 +1,177 @@
+{
+  "scanMs": 5000,
+  "expectedKinds": [
+    "cube",
+    "expo",
+    "groov",
+    "esp32"
+  ],
+  "services": [
+    {
+      "serviceType": "one-refinio",
+      "name": "e04158a67052c7da",
+      "host": "bambam.home.arpa",
+      "port": 49497,
+      "addresses": [
+        "192.168.178.102",
+        "169.254.124.38",
+        "fe80::1c1e:9b1c:989e:3ffe",
+        "2a02:810d:f600:500:835:5f87:3660:684",
+        "2a02:810d:f600:500:61ab:bf95:6154:8b7d",
+        "fe80::7c08:69ff:fe1c:1798",
+        "fe80::74ba:4fff:fea7:a34f",
+        "fe80::83a:b52a:905:d85f"
+      ],
+      "txt": {
+        "deviceId": "e04158a67052c7da8867172322a4b7a2d52feaabd10017efc8c51ea84cd717e2",
+        "pubkey": "476d159d60f97a6a3d005ab84685c6f50fe8b4bd65d63e53ed7a02b99c52f77e",
+        "personId": "5ced103920289f934ec51346d4818e64b62630f47d84eb977d0037387acdd947",
+        "name": "UVC Cube",
+        "deviceType": "cube",
+        "platform": "one",
+        "capabilities": "chum,phone-book,trie,device-control,journal"
+      }
+    },
+    {
+      "serviceType": "one-refinio",
+      "name": "e55aaa91c98c05be",
+      "host": "opto-05-bd-39",
+      "port": 49497,
+      "addresses": [
+        "192.168.178.141",
+        "2a02:810d:f600:500:2a0:3dff:fe05:bd39",
+        "fe80::2a0:3dff:fe05:bd39"
+      ],
+      "txt": {
+        "pubkey": "a318c2d3f142c5562572755d518fc41524ffc5d6de4dac415107991b97e83376",
+        "deviceId": "e55aaa91c98c05bef474fb69948dfc0b5d3e4906138a6dc3a00522847d9eff6e",
+        "name": "rio",
+        "deviceType": "groov",
+        "platform": "one",
+        "capabilities": "quicvc,webrtc,websocket,http",
+        "personId": "88610ed449816b90357914f7489a27367678a702f7a4899c4fa15124c7e408c2",
+        "email": "groov-rio@devices.uvc.local",
+        "webPort": "3000"
+      }
+    }
+  ],
+  "report": {
+    "timestamp": 1784127152211,
+    "probeResults": [
+      {
+        "probeId": "mdns-identity-contract",
+        "title": "Every UVC advertisement is bound to a ONE identity",
+        "status": "passed",
+        "summary": "2 advertisements have bound identities",
+        "executedAt": "2026-07-15T14:52:32.207Z",
+        "durationMs": 2,
+        "details": {
+          "invalid": []
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "headless-provisioning-contract",
+        "title": "Headless identity assignment has typed proof and admin evidence",
+        "status": "passed",
+        "summary": "assignment, key proof, certificate, and admin grant are typed without private material",
+        "executedAt": "2026-07-15T14:52:32.209Z",
+        "durationMs": 1,
+        "details": {
+          "missing": [],
+          "leakedPrivateFields": []
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "native-peer-presence",
+        "title": "Cube, Expo, Groov and ESP32 advertise the shared service",
+        "status": "failed",
+        "summary": "missing mDNS device types: expo, esp32",
+        "executedAt": "2026-07-15T14:52:32.210Z",
+        "durationMs": 0,
+        "details": {
+          "seen": [
+            "cube",
+            "groov"
+          ],
+          "services": [
+            {
+              "serviceType": "one-refinio",
+              "name": "e04158a67052c7da",
+              "host": "bambam.home.arpa",
+              "port": 49497,
+              "addresses": [
+                "192.168.178.102",
+                "169.254.124.38",
+                "fe80::1c1e:9b1c:989e:3ffe",
+                "2a02:810d:f600:500:835:5f87:3660:684",
+                "2a02:810d:f600:500:61ab:bf95:6154:8b7d",
+                "fe80::7c08:69ff:fe1c:1798",
+                "fe80::74ba:4fff:fea7:a34f",
+                "fe80::83a:b52a:905:d85f"
+              ],
+              "txt": {
+                "deviceId": "e04158a67052c7da8867172322a4b7a2d52feaabd10017efc8c51ea84cd717e2",
+                "pubkey": "476d159d60f97a6a3d005ab84685c6f50fe8b4bd65d63e53ed7a02b99c52f77e",
+                "personId": "5ced103920289f934ec51346d4818e64b62630f47d84eb977d0037387acdd947",
+                "name": "UVC Cube",
+                "deviceType": "cube",
+                "platform": "one",
+                "capabilities": "chum,phone-book,trie,device-control,journal"
+              }
+            },
+            {
+              "serviceType": "one-refinio",
+              "name": "e55aaa91c98c05be",
+              "host": "opto-05-bd-39",
+              "port": 49497,
+              "addresses": [
+                "192.168.178.141",
+                "2a02:810d:f600:500:2a0:3dff:fe05:bd39",
+                "fe80::2a0:3dff:fe05:bd39"
+              ],
+              "txt": {
+                "pubkey": "a318c2d3f142c5562572755d518fc41524ffc5d6de4dac415107991b97e83376",
+                "deviceId": "e55aaa91c98c05bef474fb69948dfc0b5d3e4906138a6dc3a00522847d9eff6e",
+                "name": "rio",
+                "deviceType": "groov",
+                "platform": "one",
+                "capabilities": "quicvc,webrtc,websocket,http",
+                "personId": "88610ed449816b90357914f7489a27367678a702f7a4899c4fa15124c7e408c2",
+                "email": "groov-rio@devices.uvc.local",
+                "webPort": "3000"
+              }
+            }
+          ]
+        },
+        "verificationEvidence": []
+      },
+      {
+        "probeId": "esp32-firmware-contract",
+        "title": "Deployable ESP32 firmware preserves identity and fails closed",
+        "status": "passed",
+        "summary": "bootstrap/assigned mDNS is stateful, identity is durable, and insecure ownership fails closed",
+        "executedAt": "2026-07-15T14:52:32.210Z",
+        "durationMs": 1,
+        "details": {
+          "firmwareRoot": "/Users/gecko/src/vger/packages/esp32.core/firmware/esp32-quicvc-project",
+          "missing": [],
+          "forbidden": []
+        },
+        "verificationEvidence": []
+      }
+    ],
+    "contractViolations": [],
+    "transportViolations": [],
+    "parityGaps": [],
+    "verificationReports": [],
+    "verificationFindings": [],
+    "summary": {
+      "total": 1,
+      "critical": 1,
+      "warning": 0,
+      "passed": false
+    }
+  }
+}

@@ -1,8 +1,10 @@
 import { Link } from '@tanstack/react-router';
+import {useState} from 'react';
 import {
   Camera,
   ChevronRight,
   CircleDot,
+  Link2,
   Radio,
   RefreshCw,
   ShieldCheck,
@@ -17,7 +19,7 @@ interface DevicesViewProps {
   busyDeviceIds: ReadonlySet<string>;
   isRefreshing: boolean;
   onRefresh: () => Promise<void>;
-  onSetDeviceTrust: (deviceId: string, trusted: boolean) => Promise<void>;
+  onSetupDevice: (deviceId: string, assignedInstanceName: string) => Promise<void>;
   runtime: DiscoveryRuntimeSnapshot | null;
   runtimeError: string | null;
 }
@@ -27,7 +29,7 @@ function normalizedTrustState(device: DiscoveryDeviceSnapshot): string {
 }
 
 function isTrusted(device: DiscoveryDeviceSnapshot): boolean {
-  return Boolean(device.ownerId) || ['trusted', 'claimed', 'owned', 'accepted', 'verified'].includes(normalizedTrustState(device));
+  return ['paired', 'trusted', 'claimed', 'owned', 'accepted', 'verified'].includes(normalizedTrustState(device));
 }
 
 function isCamera(device: DiscoveryDeviceSnapshot): boolean {
@@ -74,18 +76,39 @@ function deviceEndpoint(device: DiscoveryDeviceSnapshot): string {
   return `${device.address}${device.port ? `:${device.port}` : ''}`;
 }
 
+function deviceKindLabel(device: DiscoveryDeviceSnapshot): string {
+  const kind = (device.type ?? device.role ?? 'device').trim().toLowerCase();
+  if (kind === 'esp32') return 'ESP32';
+  if (kind === 'groov') return 'Groov';
+  if (kind === 'expo') return 'Expo';
+  return 'device';
+}
+
+function isHeadlessDevice(device: DiscoveryDeviceSnapshot): boolean {
+  return ['esp32', 'groov'].includes((device.type ?? device.role ?? '').trim().toLowerCase());
+}
+
 function DeviceCard({
   busy,
   device,
-  onSetDeviceTrust,
+  pairing,
+  onPairDevice,
+  onSetupDevice,
 }: {
   busy: boolean;
   device: DiscoveryDeviceSnapshot;
-  onSetDeviceTrust: DevicesViewProps['onSetDeviceTrust'];
+  pairing: boolean;
+  onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
+  onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
 }) {
   const trusted = isTrusted(device);
   const connected = device.connected === true;
   const camera = isCamera(device);
+  const setupAvailable = !trusted
+    && !device.ownerId
+    && normalizedTrustState(device) === 'unprovisioned'
+    && isHeadlessDevice(device);
+  const pairingAvailable = !trusted && Boolean(device.ownerId);
 
   return (
     <article className={`flow-device-card${!device.online ? ' flow-device-card--offline' : ''}`}>
@@ -132,14 +155,37 @@ function DeviceCard({
       </div>
 
       <div className="flow-device-card__actions">
-        <button
-          className={trusted ? 'action-button action-button--quiet' : 'action-button action-button--primary'}
-          disabled={busy}
-          onClick={() => void onSetDeviceTrust(device.id, !trusted)}
-          type="button"
-        >
-          {busy ? 'Updating…' : trusted ? 'Remove approval' : 'Approve device'}
-        </button>
+        {setupAvailable ? (
+          <button
+            className="action-button action-button--primary"
+            disabled={busy}
+            onClick={() => onSetupDevice(device)}
+            type="button"
+          >
+            <ShieldQuestion /> {busy ? 'Setting up…' : `Set up ${deviceKindLabel(device)}`}
+          </button>
+        ) : pairingAvailable ? (
+          <button
+            className="action-button action-button--primary"
+            disabled={pairing}
+            onClick={() => onPairDevice(device)}
+            type="button"
+          >
+            <Link2 /> {pairing ? 'Creating invite…' : `Pair ${deviceKindLabel(device)}`}
+          </button>
+        ) : connected ? (
+          <span className="device-state device-state--trusted">
+            <ShieldCheck /> Authenticated
+          </span>
+        ) : trusted ? (
+          <span className="device-state device-state--offline">
+            <CircleDot /> Waiting for secure connection
+          </span>
+        ) : (
+          <span className="device-state">
+            <Radio /> Discovered
+          </span>
+        )}
         {camera && trusted ? (
           <Link className="device-link" to="/feeds">
             Open feed <ChevronRight />
@@ -155,14 +201,18 @@ function DeviceGroup({
   devices,
   emptyCopy,
   eyebrow,
-  onSetDeviceTrust,
+  pairingDeviceId,
+  onPairDevice,
+  onSetupDevice,
   title,
 }: {
   busyDeviceIds: ReadonlySet<string>;
   devices: DiscoveryDeviceSnapshot[];
   emptyCopy: string;
   eyebrow: string;
-  onSetDeviceTrust: DevicesViewProps['onSetDeviceTrust'];
+  pairingDeviceId: string | null;
+  onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
+  onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
   title: string;
 }) {
   return (
@@ -182,7 +232,9 @@ function DeviceGroup({
               busy={busyDeviceIds.has(device.id)}
               device={device}
               key={device.id}
-              onSetDeviceTrust={onSetDeviceTrust}
+              pairing={pairingDeviceId === device.id}
+              onPairDevice={onPairDevice}
+              onSetupDevice={onSetupDevice}
             />
           ))}
         </div>
@@ -197,17 +249,79 @@ export function DevicesView({
   busyDeviceIds,
   isRefreshing,
   onRefresh,
-  onSetDeviceTrust,
+  onSetupDevice,
   runtime,
   runtimeError,
 }: DevicesViewProps) {
+  const [invitation, setInvitation] = useState('');
+  const [invitationInput, setInvitationInput] = useState('');
+  const [pairingStatus, setPairingStatus] = useState<string | null>(null);
+  const [isCreatingInvitation, setIsCreatingInvitation] = useState(false);
+  const [pairingDeviceId, setPairingDeviceId] = useState<string | null>(null);
+  const [setupDevice, setSetupDevice] = useState<DiscoveryDeviceSnapshot | null>(null);
+  const [setupName, setSetupName] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
   const devices = runtime?.devices ?? [];
   const connectedDevices = devices.filter((device) => device.connected === true);
   const discoveredDevices = devices.filter((device) => !isTrusted(device) && device.connected !== true);
   const approvedDevices = devices.filter((device) => isTrusted(device) && device.connected !== true);
   const onlineCount = devices.filter((device) => device.online).length;
   const discoveryEnabled = runtime?.config.discovery?.enabled !== false;
-  const authorityHealthy = runtime?.status.healthy === true;
+  const discoveryHealthy = runtime?.status.healthy === true;
+
+  const createInvitation = async (device?: DiscoveryDeviceSnapshot) => {
+    setIsCreatingInvitation(true);
+    setPairingDeviceId(device?.id ?? null);
+    try {
+      const created = await window.electronAPI.invokePlan('pairing', 'createInvitation');
+      setInvitation(JSON.stringify(created));
+      setPairingStatus(device
+        ? `Pairing invitation ready for ${device.name || deviceKindLabel(device)}. Open it on that device to finish pairing.`
+        : 'Pairing invitation ready. Send it to the other UVC device.');
+      if (device) {
+        requestAnimationFrame(() => {
+          document.getElementById('pair-device')?.scrollIntoView({behavior: 'smooth', block: 'center'});
+        });
+      }
+    } catch (error) {
+      setPairingStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingInvitation(false);
+      setPairingDeviceId(null);
+    }
+  };
+
+  const acceptInvitation = async () => {
+    try {
+      const parsed = JSON.parse(invitationInput) as unknown;
+      await window.electronAPI.invokePlan('pairing', 'connectUsingInvitation', parsed);
+      setPairingStatus('Device paired successfully.');
+      setInvitationInput('');
+      await onRefresh();
+    } catch (error) {
+      setPairingStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const openDeviceSetup = (device: DiscoveryDeviceSnapshot) => {
+    setSetupDevice(device);
+    setSetupName(deviceKindLabel(device));
+    setSetupError(null);
+  };
+
+  const submitDeviceSetup = async () => {
+    if (!setupDevice || !setupName.trim()) {
+      return;
+    }
+    setSetupError(null);
+    try {
+      await onSetupDevice(setupDevice.id, setupName.trim());
+      setSetupDevice(null);
+      setSetupName('');
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   return (
     <div className="devices-view">
@@ -218,9 +332,9 @@ export function DevicesView({
           <p>Discover nearby hardware, approve it, and see when it becomes available to use.</p>
         </div>
         <div className="devices-hero__actions">
-          <span className={`authority-state authority-state--${authorityHealthy ? 'online' : 'offline'}`}>
+          <span className={`discovery-state discovery-state--${discoveryHealthy ? 'online' : 'offline'}`}>
             <span aria-hidden="true" />
-            {authorityHealthy ? 'Authority online' : 'Authority unavailable'}
+            {discoveryHealthy ? 'mDNS browsing' : 'Discovery unavailable'}
           </span>
           <button
             className="action-button action-button--primary refresh-button"
@@ -245,7 +359,7 @@ export function DevicesView({
         </article>
         <article>
           <ShieldQuestion />
-          <div><strong>{runtime ? discoveredDevices.length : '—'}</strong><span>Need approval</span></div>
+          <div><strong>{runtime ? discoveredDevices.length : '—'}</strong><span>Need setup</span></div>
         </article>
         <article>
           <CircleDot />
@@ -253,12 +367,48 @@ export function DevicesView({
         </article>
       </section>
 
+      <section className="panel pairing-flow" id="pair-device">
+        <div className="panel__header">
+          <div>
+            <span className="eyebrow">Device pairing</span>
+            <h2>Pair another device</h2>
+            <p>Exchange a pairing invitation to securely connect two UVC devices.</p>
+          </div>
+          <button
+            className="action-button action-button--primary"
+            disabled={isCreatingInvitation}
+            onClick={() => void createInvitation()}
+            type="button"
+          >
+            {isCreatingInvitation ? 'Creating invitation…' : 'Create pairing invitation'}
+          </button>
+        </div>
+        {invitation ? <textarea className="field-input field-input--textarea mono" readOnly value={invitation} /> : null}
+        <div className="action-row">
+          <input
+            className="field-input"
+            onChange={(event) => setInvitationInput(event.target.value)}
+            placeholder="Paste a pairing invitation"
+            value={invitationInput}
+          />
+          <button
+            className="action-button"
+            disabled={!invitationInput.trim()}
+            onClick={() => void acceptInvitation()}
+            type="button"
+          >
+            Pair device
+          </button>
+        </div>
+        {pairingStatus ? <p role="status">{pairingStatus}</p> : null}
+      </section>
+
       {runtimeError ? (
         <section className="runtime-notice" role="status">
           <WifiOff aria-hidden="true" />
           <div>
-            <strong>Cannot reach the UVC authority</strong>
-            <p>No live device state is available from <span className="mono">{runtime?.authorityUrl ?? 'the configured endpoint'}</span>.</p>
+            <strong>No local UVC peers discovered</strong>
+            <p>No peers are currently visible through <span className="mono">{runtime?.discoverySource ?? 'local mDNS'}</span>.</p>
           </div>
           <Link className="device-link" to="/settings">Check connection settings <ChevronRight /></Link>
         </section>
@@ -277,17 +427,21 @@ export function DevicesView({
           <DeviceGroup
             busyDeviceIds={busyDeviceIds}
             devices={discoveredDevices}
-            emptyCopy={discoveryEnabled ? 'No new devices are asking to join.' : 'Discovery is disabled in settings.'}
+            emptyCopy={discoveryEnabled ? 'No new devices are waiting to be set up or paired.' : 'Discovery is disabled in settings.'}
             eyebrow="Step 1"
-            onSetDeviceTrust={onSetDeviceTrust}
-            title="Discovered devices"
+            pairingDeviceId={pairingDeviceId}
+            onPairDevice={(device) => void createInvitation(device)}
+            onSetupDevice={openDeviceSetup}
+            title="New devices"
           />
           <DeviceGroup
             busyDeviceIds={busyDeviceIds}
             devices={connectedDevices}
             emptyCopy="Approved devices will move here once they establish an authenticated connection."
             eyebrow="Ready"
-            onSetDeviceTrust={onSetDeviceTrust}
+            pairingDeviceId={pairingDeviceId}
+            onPairDevice={(device) => void createInvitation(device)}
+            onSetupDevice={openDeviceSetup}
             title="Connected devices"
           />
           <DeviceGroup
@@ -295,9 +449,70 @@ export function DevicesView({
             devices={approvedDevices}
             emptyCopy="No approved devices are waiting or offline."
             eyebrow="Known"
-            onSetDeviceTrust={onSetDeviceTrust}
+            pairingDeviceId={pairingDeviceId}
+            onPairDevice={(device) => void createInvitation(device)}
+            onSetupDevice={openDeviceSetup}
             title="Approved devices"
           />
+        </div>
+      ) : null}
+
+      {setupDevice ? (
+        <div className="setup-dialog-backdrop">
+          <section
+            aria-labelledby="setup-dialog-title"
+            aria-modal="true"
+            className="setup-dialog"
+            role="dialog"
+          >
+            <span className="eyebrow">New device</span>
+            <h2 id="setup-dialog-title">Set up {deviceKindLabel(setupDevice)}</h2>
+            <p>
+              Give this device a name. It will create its security keys on the device and give you administrator access.
+            </p>
+
+            <label className="setup-dialog__field">
+              <span>Device name</span>
+              <input
+                autoFocus
+                className="field-input"
+                disabled={busyDeviceIds.has(setupDevice.id)}
+                maxLength={80}
+                onChange={(event) => setSetupName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void submitDeviceSetup();
+                  if (event.key === 'Escape' && !busyDeviceIds.has(setupDevice.id)) setSetupDevice(null);
+                }}
+                value={setupName}
+              />
+            </label>
+
+            <div className="setup-dialog__summary">
+              <ShieldCheck aria-hidden="true" />
+              <span>This UVC becomes the device administrator.</span>
+            </div>
+
+            {setupError ? <p className="setup-dialog__error" role="alert">{setupError}</p> : null}
+
+            <div className="setup-dialog__actions">
+              <button
+                className="action-button action-button--quiet"
+                disabled={busyDeviceIds.has(setupDevice.id)}
+                onClick={() => setSetupDevice(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="action-button action-button--primary"
+                disabled={busyDeviceIds.has(setupDevice.id) || !setupName.trim()}
+                onClick={() => void submitDeviceSetup()}
+                type="button"
+              >
+                {busyDeviceIds.has(setupDevice.id) ? 'Setting up…' : `Set up ${deviceKindLabel(setupDevice)}`}
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>
