@@ -15,7 +15,7 @@ import { DeviceItem, Device } from '@src/components/devices/DeviceItem';
 import { DeviceDiscoveryModel } from '@src/models/network';
 import { ModelService } from '@src/services/ModelService';
 import VerifiableCredentialModel from '@src/models/credentials/VerifiableCredentialModel';
-import { DeviceType } from '@src/types/device';
+import { DeviceType } from '@src/models/network/deviceTypes';
 import { QuicModel } from '@src/models/network/QuicModel';
 import profiler from '@src/utils/performanceProfiler';
 import { useAppModel } from '@src/hooks/useAppModel';
@@ -456,7 +456,10 @@ export function DeviceListScreen() {
       console.log('[DeviceListScreen] WiFi discovery toggle completed');
     } catch (error) {
       console.error('[DeviceListScreen] Error toggling WiFi discovery:', error);
-      Alert.alert(t('error.title'), t('error.toggleDiscovery'));
+      Alert.alert(
+        t('error.title'),
+        error instanceof Error ? error.message : t('error.toggleDiscovery'),
+      );
     } finally {
       setIsTogglingDiscovery(false);
     }
@@ -815,6 +818,14 @@ export function DeviceListScreen() {
   }, [removeDeviceWithCredentials, handleRefresh, t]);
   
   const handleViewDetails = useCallback((device: Device) => {
+    if (device.type === DeviceType.ESP32 && device.discoveryMethod === 'BTLE') {
+      router.push({
+        pathname: '/(screens)/devices/wifi-setup',
+        params: {deviceId: device.id, deviceName: device.name},
+      });
+      return;
+    }
+
     router.push(`/(screens)/device-detail/${device.id}`);
   }, [router]);
   
@@ -869,6 +880,13 @@ export function DeviceListScreen() {
       );
     }
   }, [t, handleRefresh]);
+
+  const handleConfigureWiFi = useCallback((device: Device) => {
+    router.push({
+      pathname: '/(screens)/devices/wifi-setup',
+      params: {deviceId: device.id, deviceName: device.name},
+    });
+  }, [router]);
   
   const renderDeviceItem = useCallback(({ item }: { item: Device }) => {
     // Find the latest device state in case of race conditions
@@ -900,9 +918,10 @@ export function DeviceListScreen() {
         onToggleLED={toggleBlueLED}
         onRetryAuth={handleRetryAuthentication}
         onAddToRoom={handleAddToRoom}
+        onConfigureWiFi={handleConfigureWiFi}
       />
     );
-  }, [devices, currentUserPersonId, isLoading, claimingDevices, removingDevices, pendingLEDCommands, deviceOrgPaths, handleToggleOwnership, handleRemoveDevice, handleViewDetails, toggleBlueLED, handleRetryAuthentication, handleAddToRoom]);
+  }, [devices, currentUserPersonId, isLoading, claimingDevices, removingDevices, pendingLEDCommands, deviceOrgPaths, handleToggleOwnership, handleRemoveDevice, handleViewDetails, toggleBlueLED, handleRetryAuthentication, handleAddToRoom, handleConfigureWiFi]);
   
   // Only show loading screen if settings are loading AND we haven't discovered any devices yet
   // This prevents the loading screen from appearing when we already have discovered devices
@@ -1106,7 +1125,7 @@ export function DeviceListScreen() {
           </View>
         }
       />
-      
+
       {/* Refresh FAB */}
       <FAB
         icon="refresh"

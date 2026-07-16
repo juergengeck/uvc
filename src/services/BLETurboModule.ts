@@ -78,11 +78,17 @@ class BLETurboModuleService extends EventEmitter {
         return;
       }
       if (device) {
+        const advertisedServices = (device.serviceUUIDs ?? []).map(uuid => uuid.toLowerCase());
+        const advertisedName = device.localName || device.name || '';
+        const isESP32 = advertisedName.toLowerCase().startsWith('quicvc-') ||
+          advertisedName.toLowerCase().includes('esp32') ||
+          advertisedServices.includes('9bdf81ee-8d22-40be-b075-9b5baf9c7880');
         this.emit('deviceDiscovered', {
           id: device.id,
-          name: device.name,
+          name: advertisedName,
           rssi: device.rssi,
-          type: (device.name || '').toLowerCase().includes('esp32') ? 'ESP32' : 'BLE',
+          type: isESP32 ? 'ESP32' : 'BLE',
+          serviceUUIDs: advertisedServices,
           isConnected: false,
           lastSeen: Date.now(),
         });
@@ -121,5 +127,4 @@ class BLETurboModuleService extends EventEmitter {
 }
 
 export const btleService = new BLETurboModuleService();
-
 

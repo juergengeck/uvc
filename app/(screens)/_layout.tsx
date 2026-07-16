@@ -339,6 +339,22 @@ export default function ScreensLayout() {
                     />
 
                     <Stack.Screen
+                        name="devices/wifi-setup"
+                        options={{
+                            headerTitle: 'Connect ESP32 to WiFi',
+                            headerLargeTitle: false,
+                            headerLeft: () => (
+                                <IconButton
+                                    icon="arrow-left"
+                                    onPress={() => router.back()}
+                                    size={24}
+                                    style={{ margin: 0 }}
+                                />
+                            ),
+                        }}
+                    />
+
+                    <Stack.Screen
                         name="devices/camera-feeds"
                         options={{
                             headerTitle: 'Camera Feeds',

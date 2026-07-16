@@ -41,6 +41,7 @@ interface DeviceItemProps {
   onToggleLED?: (device: Device) => void;
   onRetryAuth?: (device: Device) => void;
   onAddToRoom?: (device: Device) => void;
+  onConfigureWiFi?: (device: Device) => void;
 }
 
 export const DeviceItem = React.memo(function DeviceItem({
@@ -54,10 +55,10 @@ export const DeviceItem = React.memo(function DeviceItem({
   onViewDetails,
   onToggleLED,
   onRetryAuth,
-  onAddToRoom
+  onAddToRoom,
+  onConfigureWiFi,
 }: DeviceItemProps) {
-  const { styles: themedStyles } = useTheme();
-  const theme = useTheme();
+  const { styles: themedStyles, theme } = useTheme();
   const [expanded, setExpanded] = React.useState(false);
 
   const handleExpandToggle = React.useCallback(() => {
@@ -166,6 +167,19 @@ export const DeviceItem = React.memo(function DeviceItem({
                 <Text style={{ color: theme.colors?.onSurfaceVariant, fontSize: 14, marginBottom: 8 }}>
                   ID: {device.id}
                 </Text>
+
+                {device.type === DeviceType.ESP32 && device.discoveryMethod === 'BTLE' && (
+                  <Button
+                    mode="contained-tonal"
+                    icon="wifi-plus"
+                    onPress={() => onConfigureWiFi?.(device)}
+                    disabled={!onConfigureWiFi || isLoading}
+                    compact
+                    style={{ marginBottom: 12 }}
+                  >
+                    Connect to WiFi
+                  </Button>
+                )}
                 
                 {/* Organisation Path or Add to Room button for owned devices */}
                 {isOwnedByCurrentUser && (

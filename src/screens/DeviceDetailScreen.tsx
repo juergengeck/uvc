@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from 'react-native-paper';
+import { Button, useTheme } from 'react-native-paper';
 import { Esp32CamFeedCard } from '@src/components/devices/Esp32CamFeedCard';
 
 interface DeviceInfo {
@@ -56,6 +56,7 @@ interface DeviceInfo {
 export const DeviceDetailScreen: React.FC = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const theme = useTheme();
   
   // Device data state
   const [device, setDevice] = useState<DeviceInfo | null>(null);
