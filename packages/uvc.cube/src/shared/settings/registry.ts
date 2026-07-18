@@ -9,6 +9,8 @@ import { registerDeviceSettings } from '@settingscore/sections/device-settings.t
 
 export const UVC_DISCOVERY_SECTION_ID = 'uvc.discovery';
 export const UVC_IDENTITY_SECTION_ID = 'uvc.identity';
+export const DEFAULT_UVC_COMM_SERVER_URL = 'wss://api.glue.one/comm';
+export const LEGACY_UVC_COMM_SERVER_URL = 'wss://comm10.dev.refinio.one';
 
 const uvcDiscoverySettingsSection = defineSection({
   id: UVC_DISCOVERY_SECTION_ID,
@@ -56,7 +58,7 @@ const uvcIdentitySettingsSection = defineSection({
       type: 'string',
       label: 'Communication server',
       description: 'ONE pairing and CHUM transport used to share trie roots.',
-      default: 'wss://comm10.dev.refinio.one',
+      default: DEFAULT_UVC_COMM_SERVER_URL,
     }),
   ],
 });

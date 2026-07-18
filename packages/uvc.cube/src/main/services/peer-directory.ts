@@ -1,4 +1,5 @@
 import Bonjour from 'bonjour-service';
+import {networkInterfaces} from 'node:os';
 
 import type {
   DiscoveryConfigSnapshot,
@@ -22,6 +23,34 @@ function txtString(txt: Record<string, unknown>, key: string): string | undefine
 
 function serviceId(service: BonjourService): string {
   return txtString(service.txt ?? {}, 'deviceId') ?? service.name;
+}
+
+function localIpv4Addresses(): Set<string> {
+  const result = new Set<string>(['127.0.0.1']);
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === 'IPv4' && !address.internal) {
+        result.add(address.address);
+      }
+    }
+  }
+  return result;
+}
+
+function primaryLocalIpv4Address(): string | undefined {
+  return [...localIpv4Addresses()].find(address => address !== '127.0.0.1');
+}
+
+function isHostedLocally(device: DiscoveryDeviceSnapshot): boolean {
+  return Boolean(device.address && localIpv4Addresses().has(device.address));
+}
+
+function quicVcPort(): number {
+  const port = Number(process.env.UVC_QUICVC_PORT ?? 49497);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error(`[CubePeerDirectory] invalid UVC_QUICVC_PORT ${process.env.UVC_QUICVC_PORT ?? ''}`);
+  }
+  return port;
 }
 
 function normalizeService(service: BonjourService, provisioning = false): DiscoveryDeviceSnapshot | undefined {
@@ -77,6 +106,7 @@ class CubePeerDirectory {
   private browser?: BonjourBrowser;
   private provisioningBrowser?: BonjourBrowser;
   private readonly devices = new Map<string, DiscoveryDeviceSnapshot>();
+  private readonly localInstances = new Map<string, DiscoveryDeviceSnapshot>();
   private lastScanAt?: string;
   private identity?: CubeOneIdentity;
   private publishedService?: ReturnType<Bonjour['publish']>;
@@ -118,7 +148,7 @@ class CubePeerDirectory {
       name: this.identity.instanceId.slice(0, 16),
       type: SERVICE_TYPE,
       protocol: 'udp',
-      port: 49497,
+      port: quicVcPort(),
       txt: {
         deviceId: this.identity.instanceId,
         pubkey: this.identity.publicKey,
@@ -145,6 +175,7 @@ class CubePeerDirectory {
     this.bonjour?.destroy();
     this.bonjour = undefined;
     this.devices.clear();
+    this.localInstances.clear();
   }
 
   refresh(): void {
@@ -152,13 +183,45 @@ class CubePeerDirectory {
       this.start();
       return;
     }
-    this.browser?.stop();
-    this.provisioningBrowser?.stop();
-    this.startBrowser();
+    // A browser restart replays bonjour-service's in-memory cache and can make
+    // an offline peer look freshly observed. Recreate the Bonjour instance so
+    // a refresh is backed only by answers received from the network now.
+    this.stop();
+    this.start();
+    this.emitChanged();
   }
 
   async snapshot(): Promise<DiscoveryRuntimeSnapshot> {
     const settings = await getCubeSettingsService().getSettings();
+    const fetchedAt = new Date().toISOString();
+    const localInstances = new Map(this.localInstances);
+    if (this.identity) {
+      const advertised = localInstances.get(this.identity.instanceId);
+      localInstances.set(this.identity.instanceId, {
+        ...advertised,
+        id: this.identity.instanceId,
+        instanceId: this.identity.instanceId,
+        name: this.identity.displayName,
+        type: 'cube',
+        role: 'local runtime',
+        address: advertised?.address ?? primaryLocalIpv4Address(),
+        port: quicVcPort(),
+        online: true,
+        connected: true,
+        ownerId: this.identity.personId,
+        publicKey: this.identity.publicKey,
+        lastSeenAt: fetchedAt,
+        trustState: 'owned',
+        capabilities: ['chum', 'phone-book', 'trie', 'device-control', 'journal'],
+      });
+    }
+    const withPairingState = (device: DiscoveryDeviceSnapshot): DiscoveryDeviceSnapshot => {
+      const paired = Boolean(device.ownerId && this.isPaired?.(device.ownerId));
+      return paired ? {...device, trustState: 'paired'} : device;
+    };
+    const byName = (left: DiscoveryDeviceSnapshot, right: DiscoveryDeviceSnapshot) => (
+      (left.name ?? left.id).localeCompare(right.name ?? right.id)
+    );
     return {
       discoverySource: DISCOVERY_SOURCE,
       status: {
@@ -180,15 +243,34 @@ class CubePeerDirectory {
           lastScanAt: this.lastScanAt,
         },
       },
-      devices: [...this.devices.values()].map(device => {
-        const paired = Boolean(device.ownerId && this.isPaired?.(device.ownerId));
-        return paired ? {...device, trustState: 'paired'} : device;
-      }).sort((left, right) => (
-        (left.name ?? left.id).localeCompare(right.name ?? right.id)
-      )),
+      localInstances: [...localInstances.values()].map(withPairingState).sort(byName),
+      devices: [...this.devices.values()].map(withPairingState).sort(byName),
       config: buildDiscoveryConfig(settings),
-      fetchedAt: new Date().toISOString(),
+      fetchedAt,
     };
+  }
+
+  private consumeStandardService(service: BonjourService): void {
+    const normalized = normalizeService(service);
+    const device = normalized && this.canonicalizeDevice?.(normalized) || normalized;
+    if (!device) return;
+
+    if (isHostedLocally(device) || device.id === this.identity?.instanceId) {
+      if (normalized && normalized.id !== device.id) this.localInstances.delete(normalized.id);
+      this.devices.delete(device.id);
+      this.localInstances.set(device.id, device);
+      this.emitChanged();
+      return;
+    }
+
+    if (normalized && normalized.id !== device.id) this.devices.delete(normalized.id);
+    this.localInstances.delete(device.id);
+    this.devices.set(device.id, device);
+    this.emitChanged();
+    console.log(`[CubePeerDirectory] Discovered ${device.name} at ${device.address}:${device.port}`);
+    void this.onDiscovery?.(device).catch(error => {
+      console.error(`[CubePeerDirectory] failed to record ${device.id}:`, error);
+    });
   }
 
   private startBrowser(): void {
@@ -197,38 +279,15 @@ class CubePeerDirectory {
     }
     this.lastScanAt = new Date().toISOString();
     this.browser = this.bonjour.find({type: SERVICE_TYPE, protocol: 'udp'});
-    this.browser.on('up', service => {
-      const normalized = normalizeService(service);
-      const device = normalized && this.canonicalizeDevice?.(normalized) || normalized;
-      if (device && device.id !== this.identity?.instanceId) {
-        if (normalized && normalized.id !== device.id) this.devices.delete(normalized.id);
-        this.devices.set(device.id, device);
-        this.emitChanged();
-        console.log(`[CubePeerDirectory] Discovered ${device.name} at ${device.address}:${device.port}`);
-        void this.onDiscovery?.(device).catch(error => {
-          console.error(`[CubePeerDirectory] failed to record ${device.id}:`, error);
-        });
-      }
-    });
+    this.browser.on('up', service => this.consumeStandardService(service));
     this.browser.on('down', service => {
       const id = serviceId(service);
-      if (this.devices.delete(id)) {
+      if (this.devices.delete(id) || this.localInstances.delete(id)) {
         this.emitChanged();
         console.log(`[CubePeerDirectory] Lost ${id}`);
       }
     });
-    this.browser.on('txt-update', service => {
-      const normalized = normalizeService(service);
-      const device = normalized && this.canonicalizeDevice?.(normalized) || normalized;
-      if (device && device.id !== this.identity?.instanceId) {
-        if (normalized && normalized.id !== device.id) this.devices.delete(normalized.id);
-        this.devices.set(device.id, device);
-        this.emitChanged();
-        void this.onDiscovery?.(device).catch(error => {
-          console.error(`[CubePeerDirectory] failed to update ${device.id}:`, error);
-        });
-      }
-    });
+    this.browser.on('txt-update', service => this.consumeStandardService(service));
     this.provisioningBrowser = this.bonjour.find({
       type: PROVISIONING_SERVICE_TYPE,
       protocol: 'udp',

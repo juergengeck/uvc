@@ -126,10 +126,39 @@ async function waitForCompletion(options, secret) {
         deliveredActions.add(actionKey);
       }
     }
+    if (latest?.pendingAction?.type === 'expo-control') {
+      const actionKey = latest.pendingAction.action?.actionId;
+      if (!actionKey) throw new Error('Cube returned an invalid Expo control action');
+      if (!deliveredActions.has(actionKey)) {
+        await deliverExpoControlAction(options, latest.pendingAction, secret);
+        deliveredActions.add(actionKey);
+      }
+    }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   process.stdout.write('\n');
   throw new Error(`Client timed out waiting for Cube after ${options.timeoutMs + 15_000}ms`);
+}
+
+async function deliverExpoControlAction(options, pendingAction, secret) {
+  if (process.platform !== 'darwin') {
+    throw new Error('Automatic physical Expo control currently requires macOS devicectl');
+  }
+  if (!options.expoDevice) {
+    throw new Error(
+      'Cube requested physical Expo control; provide --expo-device (or UVC_EXPO_DEVICE)',
+    );
+  }
+  const envelope = encodeURIComponent(JSON.stringify({secret, action: pendingAction.action}));
+  const payloadUrl = `uvc.one://integration/uvc-control#${envelope}`;
+  await execFileAsync('xcrun', [
+    'devicectl', 'device', 'process', 'launch',
+    '--device', options.expoDevice,
+    '--payload-url', payloadUrl,
+    '--activate',
+    'one.uvc',
+  ], {maxBuffer: 1024 * 1024});
+  process.stdout.write(`\n[uvc-full-protocol] requested Expo control action ${pendingAction.action.actionId}\n`);
 }
 
 async function deliverExpoPairingAction(options, action) {

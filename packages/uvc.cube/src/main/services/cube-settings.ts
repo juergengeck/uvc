@@ -5,7 +5,12 @@ import path from 'node:path';
 import { SettingsRegistry, type AllSettings } from '@settingscore/registry/SettingsRegistry.ts';
 
 import type { SettingsFieldSnapshot, SettingsSectionSnapshot, SettingsSnapshot, SettingsValues } from '@shared/contracts';
-import { ensureUvcSettingsSectionsRegistered, getSettingsDefaults } from '@shared/settings/registry';
+import {
+  DEFAULT_UVC_COMM_SERVER_URL,
+  LEGACY_UVC_COMM_SERVER_URL,
+  ensureUvcSettingsSectionsRegistered,
+  getSettingsDefaults,
+} from '@shared/settings/registry';
 
 function cloneSettings<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -33,6 +38,12 @@ class CubeSettingsService {
       const raw = await fs.readFile(this.settingsPath, 'utf8');
       const parsed = JSON.parse(raw) as SettingsSnapshot;
       const merged = this.mergeWithDefaults(parsed, defaults);
+      const identitySettings = merged['uvc.identity'];
+      if (identitySettings?.commServerUrl === LEGACY_UVC_COMM_SERVER_URL) {
+        identitySettings.commServerUrl = DEFAULT_UVC_COMM_SERVER_URL;
+        await this.persist(merged);
+        return cloneSettings(merged);
+      }
       this.cachedSettings = merged;
       return cloneSettings(merged);
     } catch {

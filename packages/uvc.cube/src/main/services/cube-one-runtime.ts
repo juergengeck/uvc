@@ -1,7 +1,13 @@
 import '@refinio/one.core/lib/system/load-nodejs.js';
 
 import {createAccess} from '@refinio/one.core/lib/access.js';
+import {
+  getChumSyncDiagnostics,
+  onChumImportBatch,
+} from '@refinio/one.core/lib/chum-sync.js';
 import {getInstanceIdHash, getInstanceOwnerIdHash} from '@refinio/one.core/lib/instance.js';
+import {createMessageBus} from '@refinio/one.core/lib/message-bus.js';
+import {calculateIdHashForStoredObj} from '@refinio/one.core/lib/microdata-to-id-hash.js';
 import {createCryptoApiFromDefaultKeys} from '@refinio/one.core/lib/keychain/keychain.js';
 import {ensurePublicSignKey, signatureVerify} from '@refinio/one.core/lib/crypto/sign.js';
 import type {Instance, Person} from '@refinio/one.core/lib/recipes.js';
@@ -9,16 +15,19 @@ import {SET_ACCESS_MODE} from '@refinio/one.core/lib/storage-base-common.js';
 import {getObject, storeUnversionedObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import {
   getCurrentVersionHash,
+  getIdObject,
   getObjectByIdHash,
   storeVersionedObject,
+  storeVersionedObjectSilently,
 } from '@refinio/one.core/lib/storage-versioned-objects.js';
-import {calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
-import type {SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
+import {calculateHashOfObj, calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
+import type {SHA256Hash, SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
 import type {HexString} from '@refinio/one.core/lib/util/arraybuffer-to-and-from-hex-string.js';
 import {ConnectionPhoneBookRecipes} from '@refinio/connection.core/recipes';
 import {
   createConnectionFromQuicVC,
   QuicVCConnectionManager,
+  type ConnectionEstablishedEvent,
   type DeviceIdentityCredential,
   type QuicVCPeerTrustInfo,
 } from '@refinio/connection.core';
@@ -29,8 +38,8 @@ import {
 import ConnectionsModel from '@refinio/one.models/lib/models/ConnectionsModel.js';
 import LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
 import MultiUser from '@refinio/one.models/lib/models/Authenticator/MultiUser.js';
-import {objectEvents} from '@refinio/one.models/lib/misc/ObjectEventDispatcher.js';
 import type {Invitation} from '@refinio/one.models/lib/misc/ConnectionEstablishment/PairingManager.js';
+import {isRegisteredInstanceKeyForPerson} from '@refinio/one.models/lib/misc/ConnectionEstablishment/RegisteredInstanceKey.js';
 import {exchangeConnectionGroupName} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangeConnectionGroupName.js';
 import {exchangeDirectChumReady} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangeDirectChumReady.js';
 import {exchangeInstanceIdObjects} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangeInstanceIds.js';
@@ -49,14 +58,25 @@ import {
 import type {OneCoreTrieStorageDeps} from '@refinio/trie.core';
 import {
   UVC_RECIPES,
+  isUvcChumSyncType,
   UvcControlPlan,
   UvcProvisioningController,
   UvcStateTrie,
+  projectUvcStateTrieEntryHashes,
+  makeEarlierUvcControlTrieRootId,
+  makeEarlierUvcPhoneBookTrieRootId,
   makeUvcControlTrieRootId,
   makeUvcJournalTrieRootId,
+  makeLegacyUvcControlTrieRootId,
+  makeLegacyUvcPhoneBookTrieRootId,
+  makeLegacyUvcProvisioningTrieRootId,
+  makePreviousUvcControlTrieRootId,
+  makePreviousUvcPhoneBookTrieRootId,
+  makePreviousUvcProvisioningTrieRootId,
   makeUvcPhoneBookTrieRootId,
   makeUvcProvisioningTrieRootId,
   type UvcDiscoveryObservation,
+  type UvcControlCommand,
   type UvcControlObservation,
   type UvcAdminRoleGrantResult,
   type UvcAdminRoleGrant,
@@ -67,12 +87,68 @@ import {
   type UvcStateEntry,
   type UvcStateTrieRoot,
 } from '@refinio/uvc.core';
-import {QuicVCHeadlessProvisioningClient} from '@uvc/groov-authority';
+import {
+  GroovAuthorityClient,
+  QuicVCHeadlessProvisioningClient,
+  type GroovAuthorityState,
+} from '@uvc/groov-authority';
 import {app} from 'electron';
 import path from 'node:path';
 import {createPublicKey, randomUUID, verify as verifyNodeSignature} from 'node:crypto';
 
 import type {DiscoveryDeviceSnapshot, SettingsSnapshot} from '@shared/contracts';
+import {DEFAULT_UVC_COMM_SERVER_URL} from '@shared/settings/registry';
+
+const chumDiagnostics = createMessageBus('uvc-cube-chum-diagnostics');
+for (const source of ['chum-sync', 'chum-importer']) {
+  chumDiagnostics.on(`${source}:log`, (_source, message, ...details) => {
+    const text = String(message);
+    if (
+      process.env.UVC_CHUM_DEBUG === '1'
+      || text.includes('Failure during chum')
+      || text.includes('IMPORTER ENDED WITH ERROR')
+      || text.includes('Sync cycle had errors')
+      || text.includes('BAD REQUEST')
+    ) {
+      console.error(`[UvcCube][${source}] ${text}`, ...details);
+    }
+  });
+  chumDiagnostics.on(`${source}:debug`, (_source, message, ...details) => {
+    if (process.env.UVC_CHUM_DEBUG === '1') {
+      console.error(`[UvcCube][${source}][debug] ${String(message)}`, ...details);
+    }
+  });
+}
+
+/**
+ * Cube consumes an app peer's phone-book root to learn its locally observed
+ * devices. The app peer only consumes Cube's correlated control results; it
+ * must not spend its foreground data lane importing Cube's discovery view.
+ *
+ * calculateIdHashForStoredObj returns the input for ID microdata and derives the
+ * same ID for a concrete root version. It performs no version-head lookup or
+ * read-time recovery.
+ */
+async function isCubeChumExportObject(
+  hash: SHA256Hash | SHA256IdHash,
+  type: string,
+): Promise<boolean> {
+  if (!isUvcChumSyncType(type)) return false;
+  if (type !== 'UvcStateTrieRoot') return true;
+
+  const idHash = await calculateIdHashForStoredObj(
+    hash as SHA256Hash<UvcStateTrieRoot>,
+    'UvcStateTrieRoot',
+  );
+  if (!idHash) {
+    throw new Error(`[UvcCube] ${String(hash)} is not a versioned UvcStateTrieRoot`);
+  }
+  const rootId = await getIdObject(idHash);
+  if (typeof rootId.id !== 'string') {
+    throw new Error(`[UvcCube] UvcStateTrieRoot ${String(hash)} has no id`);
+  }
+  return rootId.id.startsWith('uvc:control:');
+}
 
 export interface CubeOneIdentity {
   personId: string;
@@ -80,6 +156,14 @@ export interface CubeOneIdentity {
   publicKey: string;
   publicSignKey: string;
   displayName: string;
+}
+
+export interface CubeControlEvidence {
+  commandHash: SHA256Hash<UvcControlCommand>;
+  command: UvcControlCommand;
+  observationHash: SHA256Hash<UvcControlObservation>;
+  observation: UvcControlObservation;
+  recordedAt: number;
 }
 
 function requiredSetting(settings: SettingsSnapshot, key: string, fallback: string): string {
@@ -90,7 +174,11 @@ function requiredSetting(settings: SettingsSnapshot, key: string, fallback: stri
 
 const storage: OneCoreTrieStorageDeps = {
   storeVersionedObject: async object => await storeVersionedObject(object as never) as never,
+  storeVersionedObjectSilently: async object => await storeVersionedObjectSilently(
+    object as never,
+  ) as never,
   getObjectByIdHash: async idHash => await getObjectByIdHash(idHash as never) as never,
+  calculateHashOfObj: async object => await calculateHashOfObj(object as never) as string,
   calculateIdHashOfObj: async object => await calculateIdHashOfObj(object as never) as string,
   getCurrentVersionHash: async idHash => await getCurrentVersionHash(idHash as never) as string,
   getObject: async hash => await getObject(hash as never) as never,
@@ -107,17 +195,30 @@ export class CubeOneRuntime {
   private controlPlan?: UvcControlPlan;
   private provisioningController?: UvcProvisioningController;
   private provisioningClient?: QuicVCHeadlessProvisioningClient;
+  private authorityClient?: GroovAuthorityClient;
   private quicManager?: QuicVCConnectionManager;
   private quicTransport?: NodeQuicVCTransport;
   private leuteModel?: LeuteModel;
   private connectionsModel?: ConnectionsModel;
   private readonly controlTries = new Map<string, UvcStateTrie>();
   private readonly pairedPeople = new Set<SHA256IdHash<Person>>();
-  private readonly consumed = new Set<string>();
   private readonly discoveredDevices = new Map<string, DiscoveryDeviceSnapshot>();
-  private readonly provisionedHardwareIdByPerson = new Map<string, string>();
+  private readonly provisionedDeviceEvidenceByPerson = new Map<string, {
+    hardwareDeviceId: string;
+    publicKey: string;
+    certifiedAt: number;
+  }>();
   private readonly controlPeerConnections = new Map<string, Promise<void>>();
-  private disconnectRootListener?: () => void;
+  private readonly importedDiscoveryAt = new Map<string, number>();
+  private readonly consumed = new Set<string>();
+  private disconnectImportListener?: () => void;
+  /**
+   * Preserve producer ordering without coupling independent peers. A command
+   * imported from Expo can synchronously wait for an ESP-owned observation;
+   * putting both imports on one global tail deadlocks that observation behind
+   * the command that it must complete.
+   */
+  private readonly consumeTails = new Map<SHA256IdHash<Person>, Promise<void>>();
 
   async init(settings: SettingsSnapshot): Promise<CubeOneIdentity> {
     if (this.identity) {
@@ -127,7 +228,8 @@ export class CubeOneRuntime {
     const password = requiredSetting(settings, 'password', 'uvc-cube-local');
     const instanceName = requiredSetting(settings, 'instanceName', 'uvc-cube');
     const displayName = requiredSetting(settings, 'displayName', 'UVC Cube');
-    const commServerUrl = requiredSetting(settings, 'commServerUrl', 'wss://comm10.dev.refinio.one');
+    const commServerUrl = process.env.UVC_COMM_SERVER_URL
+      ?? requiredSetting(settings, 'commServerUrl', DEFAULT_UVC_COMM_SERVER_URL);
     const one = new MultiUser({
       directory: path.join(app.getPath('userData'), 'one'),
       recipes: [
@@ -153,7 +255,44 @@ export class CubeOneRuntime {
     this.ownerPersonId = ownerPersonId;
     this.ownerInstanceId = ownerInstanceId;
     this.leuteModel = new LeuteModel(commServerUrl, true);
-    this.connectionsModel = new ConnectionsModel(this.leuteModel, {commServerUrl});
+    // Cube is the stable service endpoint. App peers initiate its relay lane;
+    // the resulting CHUM session is still bidirectional. If Cube also creates
+    // an outgoing route, both peers repeatedly replace/drop the competing lane
+    // before a newly published trie root can be imported.
+    this.connectionsModel = new ConnectionsModel(this.leuteModel, {
+      commServerUrl,
+      establishOutgoingConnections: false,
+      objectFilter: isCubeChumExportObject,
+      importFilter: async (_hash, type) => isUvcChumSyncType(type),
+      chumSyncOptions: {
+        priorityWakeupObjectTypes: ['UvcStateTrieRoot'],
+        connectedAfterPriorityObjectTypes: ['UvcStateTrieRoot'],
+        traceObjectTypes: ['UvcStateTrieRoot'],
+        importBatchContextObjectTypes: ['UvcStateTrieRoot'],
+      },
+      priorityRootIdHashesFactory: async (
+        localPersonId,
+        _localInstanceId,
+        remotePersonId,
+        remoteInstanceId,
+      ) => await Promise.all([
+        calculateIdHashOfObj({
+          $type$: 'UvcStateTrieRoot',
+          id: makeUvcPhoneBookTrieRootId({
+            ownerPersonId: remotePersonId,
+            ownerInstanceId: remoteInstanceId,
+          }),
+        }),
+        calculateIdHashOfObj({
+          $type$: 'UvcStateTrieRoot',
+          id: makeUvcControlTrieRootId({
+            ownerPersonId: remotePersonId,
+            ownerInstanceId: remoteInstanceId,
+            audiencePersonId: localPersonId,
+          }),
+        }),
+      ]),
+    });
     await this.leuteModel.init();
     await this.connectionsModel.init();
     for (const someone of await this.leuteModel.others()) {
@@ -161,6 +300,24 @@ export class CubeOneRuntime {
         this.pairedPeople.add(personId);
       }
     }
+    this.connectionsModel.setKeyMismatchHandler(async (
+      remotePersonId,
+      message,
+      remotePublicKey,
+    ) => {
+      const registered = await isRegisteredInstanceKeyForPerson(
+        this.leuteModel!,
+        remotePersonId as SHA256IdHash<Person>,
+        remotePublicKey,
+      );
+      const decision = registered ? 'Authorizing' : 'Rejecting';
+      const writeLog = registered ? console.warn : console.error;
+      writeLog(
+        `[UvcCube] ${decision} Person key mismatch for known peer ${remotePersonId.slice(0, 16)} `
+        + `on ${registered ? 'registered' : 'unknown'} route ${remotePublicKey.slice(0, 16)}: ${message}`,
+      );
+      return registered;
+    });
     const cryptoApi = await createCryptoApiFromDefaultKeys(ownerInstanceId);
     const publicKey = Buffer.from(cryptoApi.publicEncryptionKey).toString('hex');
     const publicSignKey = Buffer.from(cryptoApi.publicSignKey).toString('base64');
@@ -173,6 +330,42 @@ export class CubeOneRuntime {
         mode: SET_ACCESS_MODE.ADD,
       }]);
     };
+    const phoneBookRootInput = {ownerPersonId, ownerInstanceId};
+    await Promise.all([
+      makeLegacyUvcPhoneBookTrieRootId(phoneBookRootInput),
+      makeEarlierUvcPhoneBookTrieRootId(phoneBookRootInput),
+      makePreviousUvcPhoneBookTrieRootId(phoneBookRootInput),
+    ].map(async id => {
+      const retiredPhoneBookRootIdHash = await calculateIdHashOfObj({
+        $type$: 'UvcStateTrieRoot',
+        id,
+      });
+      await createAccess([{
+        id: retiredPhoneBookRootIdHash,
+        person: [],
+        hashGroup: [],
+        mode: SET_ACCESS_MODE.REPLACE,
+      }]);
+    }));
+    await Promise.all([...this.pairedPeople].map(async personId => {
+      const controlRootInput = {ownerPersonId, ownerInstanceId, audiencePersonId: personId};
+      await Promise.all([
+        makeLegacyUvcControlTrieRootId(controlRootInput),
+        makeEarlierUvcControlTrieRootId(controlRootInput),
+        makePreviousUvcControlTrieRootId(controlRootInput),
+      ].map(async id => {
+        const retiredControlRootIdHash = await calculateIdHashOfObj({
+          $type$: 'UvcStateTrieRoot',
+          id,
+        });
+        await createAccess([{
+          id: retiredControlRootIdHash,
+          person: [],
+          hashGroup: [],
+          mode: SET_ACCESS_MODE.REPLACE,
+        }]);
+      }));
+    }));
     this.phoneBook = new UvcStateTrie({
       rootId: makeUvcPhoneBookTrieRootId({ownerPersonId, ownerInstanceId}),
       storage,
@@ -189,6 +382,7 @@ export class CubeOneRuntime {
       grantRootAccess,
     });
     await Promise.all([this.phoneBook.init(), this.journal.init(), this.provisioning.init()]);
+    await this.migrateLegacyProvisioningEvidence(ownerPersonId, ownerInstanceId);
     await this.restoreProvisionedDeviceBindings();
     const restoredObservations = await this.phoneBook.list(['phone-book']);
     console.log(`[UvcCube] Restored ${restoredObservations.length} phone-book observations`);
@@ -209,7 +403,12 @@ export class CubeOneRuntime {
       onCommandPublished: async (_commandHash, command) => {
         await this.ensureControlPeerConnection(command.executorPersonId);
       },
+      authority: {
+        read: async deviceId => this.executeAuthorityRequest(deviceId, 'read'),
+        set: async (deviceId, desired) => this.executeAuthorityRequest(deviceId, 'set', desired),
+      },
     });
+    await this.controlPlan.init();
     this.provisioningController = new UvcProvisioningController({
       administrator: {
         personId: ownerPersonId,
@@ -260,14 +459,31 @@ export class CubeOneRuntime {
     ) => {
       this.pairedPeople.add(remotePerson);
       await this.controlPlan!.sharePhoneBookWith(remotePerson);
+      await this.controlPlan!.shareControlWith(remotePerson);
     });
-    this.disconnectRootListener = objectEvents.onNewVersion(
-      result => this.consumeSharedRoot(result.obj as UvcStateTrieRoot),
-      'UvcCube: consume shared trie root',
-      'UvcStateTrieRoot',
-    );
+    this.disconnectImportListener = onChumImportBatch.addListener(event => {
+      if (
+        event.localPersonId !== ownerPersonId
+        || !this.isPaired(event.remotePersonId)
+      ) {
+        return;
+      }
+      const source = event.remotePersonId;
+      const tail = (this.consumeTails.get(source) ?? Promise.resolve())
+        .then(() => this.consumeImportedBatch(event.batch.imported, event.remotePersonId))
+        .catch(error => {
+          console.error('[UvcCube] Failed to project imported UVC trie root:', error);
+        });
+      this.consumeTails.set(source, tail);
+      void tail.then(() => {
+        if (this.consumeTails.get(source) === tail) {
+          this.consumeTails.delete(source);
+        }
+      });
+    });
     for (const remotePerson of this.pairedPeople) {
       await this.controlPlan.sharePhoneBookWith(remotePerson);
+      await this.controlPlan.shareControlWith(remotePerson);
     }
     this.identity = {personId: ownerPersonId, instanceId: ownerInstanceId, publicKey, publicSignKey, displayName};
     console.log(`[UvcCube] ONE Person ${ownerPersonId} Instance ${ownerInstanceId}`);
@@ -283,20 +499,20 @@ export class CubeOneRuntime {
 
   isPaired(personId: string): boolean {
     return this.pairedPeople.has(personId as SHA256IdHash<Person>)
-      || this.provisionedHardwareIdByPerson.has(personId);
+      || this.provisionedDeviceEvidenceByPerson.has(personId);
   }
 
   canonicalizeDiscoveredDevice(device: DiscoveryDeviceSnapshot): DiscoveryDeviceSnapshot {
-    const hardwareDeviceId = device.ownerId
-      ? this.provisionedHardwareIdByPerson.get(device.ownerId)
+    const evidence = device.ownerId
+      ? this.provisionedDeviceEvidenceByPerson.get(device.ownerId)
       : undefined;
-    if (!hardwareDeviceId) {
+    if (!evidence || evidence.publicKey !== device.publicKey) {
       return device;
     }
     return {
       ...device,
-      id: hardwareDeviceId,
-      name: hardwareDeviceId,
+      id: evidence.hardwareDeviceId,
+      name: evidence.hardwareDeviceId,
       trustState: 'paired',
     };
   }
@@ -308,6 +524,21 @@ export class CubeOneRuntime {
     if (!device.address || !device.port) {
       throw new Error(`[UvcCube] discovered device ${device.id} has no endpoint`);
     }
+    if (device.ownerId && device.publicKey) {
+      // The endpoint is mutable discovery state. Trust is the durable binding
+      // between the advertised Person and an instance encryption key registered
+      // during pairing/provisioning (the same anchor used for Person-key
+      // rotation). This deliberately does not depend on the IP address or on a
+      // historical provisioning-trie projection.
+      const registered = await isRegisteredInstanceKeyForPerson(
+        this.leuteModel!,
+        device.ownerId as SHA256IdHash<Person>,
+        device.publicKey as never,
+      );
+      if (registered) {
+        this.pairedPeople.add(device.ownerId as SHA256IdHash<Person>);
+      }
+    }
     this.discoveredDevices.set(device.id, device);
     const observedAt = Date.parse(device.lastSeenAt ?? '') || Date.now();
     await this.controlPlan.recordDiscovery({
@@ -316,7 +547,9 @@ export class CubeOneRuntime {
       address: device.address,
       port: device.port,
       publicKey: device.publicKey ?? '',
-      ...(device.ownerId ? {claimedPersonId: device.ownerId as SHA256IdHash<Person>} : {}),
+      // mDNS ownerId is an unauthenticated claim. Do not persist it as a ONE
+      // referenceToId: the corresponding Person object is not guaranteed to
+      // exist locally, and doing so creates a broken CHUM object graph.
       capabilities: new Set(device.capabilities ?? []),
       observedAt,
       expiresAt: observedAt + 60_000,
@@ -333,6 +566,10 @@ export class CubeOneRuntime {
     return entries.filter((entry: unknown): entry is UvcDiscoveryObservation => (
       (entry as {$type$?: string}).$type$ === 'UvcDiscoveryObservation'
     ));
+  }
+
+  lastImportedDiscoveryAt(personId: string): number | undefined {
+    return this.importedDiscoveryAt.get(personId);
   }
 
   async createInvitation(): Promise<Invitation> {
@@ -384,6 +621,51 @@ export class CubeOneRuntime {
     return await Promise.all(hashes.map(hash => getObject(hash as never) as Promise<UvcStateEntry>));
   }
 
+  /**
+   * Project correlated command/observation evidence from the journal DAG.
+   * The integration runner uses this instead of scanning ambient storage.
+   */
+  async controlEvidence(input: {
+    deviceId: string;
+    issuerPersonId: SHA256IdHash<Person>;
+    since: number;
+  }): Promise<CubeControlEvidence[]> {
+    const events = await this.journalEntries(input.deviceId);
+    const evidence: CubeControlEvidence[] = [];
+    for (const entry of events) {
+      if (
+        entry.$type$ !== 'UvcJournalEvent'
+        || entry.deviceId !== input.deviceId
+        || entry.eventType !== 'device-observed'
+        || entry.recordedAt < input.since
+        || !entry.command
+        || !entry.observation
+      ) {
+        continue;
+      }
+      const [command, observation] = await Promise.all([
+        getObject(entry.command as never) as Promise<UvcStateEntry>,
+        getObject(entry.observation as never) as Promise<UvcStateEntry>,
+      ]);
+      if (
+        command.$type$ !== 'UvcControlCommand'
+        || observation.$type$ !== 'UvcControlObservation'
+        || command.issuerPersonId !== input.issuerPersonId
+        || observation.command !== entry.command
+      ) {
+        continue;
+      }
+      evidence.push({
+        commandHash: entry.command,
+        command,
+        observationHash: entry.observation,
+        observation,
+        recordedAt: entry.recordedAt,
+      });
+    }
+    return evidence.sort((left, right) => left.command.issuedAt - right.command.issuedAt);
+  }
+
   async createHeadlessIdentityAssignment(input: {
     hardwareDeviceId: string;
     deviceKind: 'groov' | 'esp32';
@@ -431,8 +713,61 @@ export class CubeOneRuntime {
     ) {
       throw new Error('[UvcCube] accepted administrator grant does not resolve to the claimed hardware device');
     }
-    this.provisionedHardwareIdByPerson.set(certificate.devicePersonId, certificate.hardwareDeviceId);
+    this.rememberProvisionedDeviceEvidence(certificate);
     return result;
+  }
+
+  private rememberProvisionedDeviceEvidence(certificate: UvcDeviceIdentityCertificate): void {
+    const current = this.provisionedDeviceEvidenceByPerson.get(certificate.devicePersonId);
+    if (current && current.certifiedAt >= certificate.certifiedAt) {
+      return;
+    }
+    this.provisionedDeviceEvidenceByPerson.set(certificate.devicePersonId, {
+      hardwareDeviceId: certificate.hardwareDeviceId,
+      publicKey: certificate.devicePublicKey,
+      certifiedAt: certificate.certifiedAt,
+    });
+  }
+
+  private async migrateLegacyProvisioningEvidence(
+    ownerPersonId: SHA256IdHash<Person>,
+    ownerInstanceId: SHA256IdHash<Instance>,
+  ): Promise<void> {
+    if (!this.provisioning) {
+      throw new Error('[UvcCube] provisioning trie is not initialized');
+    }
+
+    const retired = await Promise.all([
+      makeLegacyUvcProvisioningTrieRootId({ownerPersonId, ownerInstanceId}),
+      makePreviousUvcProvisioningTrieRootId({ownerPersonId, ownerInstanceId}),
+    ].map(async rootId => {
+      const trie = new UvcStateTrie({rootId, storage});
+      await trie.init();
+      return trie;
+    }));
+
+    // Provisioning evidence is local, signed trust state. Consolidate its
+    // canonical entryHashes into the producer-owned v4 trie once, at this
+    // explicit migration write boundary.
+    const currentHashes = new Set(
+      (await this.provisioning.list(['provisioning'])).map(String),
+    );
+    let migrated = 0;
+    for (const trie of retired) {
+      for (const hash of await trie.list(['provisioning'])) {
+        if (currentHashes.has(String(hash))) continue;
+        const entry = await getObject(hash as never) as UvcStateEntry;
+        if (!isProvisioningEvidence(entry)) {
+          throw new Error(`[UvcCube] legacy provisioning trie contains ${entry.$type$}`);
+        }
+        await this.provisioning.append(hash, entry);
+        currentHashes.add(String(hash));
+        migrated += 1;
+      }
+    }
+    if (migrated > 0) {
+      console.log(`[UvcCube] Migrated ${migrated} signed provisioning entries into the v4 trie`);
+    }
   }
 
   private async restoreProvisionedDeviceBindings(): Promise<void> {
@@ -457,17 +792,21 @@ export class CubeOneRuntime {
         && certificate.administratorPersonId === this.ownerPersonId
         && certificate.devicePersonId === grant.devicePersonId
       ) {
-        this.provisionedHardwareIdByPerson.set(
-          certificate.devicePersonId,
-          certificate.hardwareDeviceId,
-        );
+        this.rememberProvisionedDeviceEvidence(certificate);
       }
     }
   }
 
   async shutdown(): Promise<void> {
+    this.disconnectImportListener?.();
+    this.disconnectImportListener = undefined;
+    this.controlPlan?.shutdown();
+    this.controlPlan = undefined;
+    this.consumeTails.clear();
     this.provisioningClient?.stop();
     this.provisioningClient = undefined;
+    this.authorityClient?.stop();
+    this.authorityClient = undefined;
     this.quicManager?.clearTransport();
     this.quicManager = undefined;
     this.quicTransport?.close();
@@ -492,31 +831,51 @@ export class CubeOneRuntime {
     await this.provisioningController.acceptAdminGrant(input);
   }
 
-  private async consumeSharedRoot(root: UvcStateTrieRoot): Promise<void> {
-    const parts = root.id.split(':');
-    if (parts[0] !== 'uvc' || (parts[1] !== 'phone-book' && parts[1] !== 'control')) {
+  private async consumeImportedEntry(hash: string, source: SHA256IdHash<Person>): Promise<void> {
+    if (this.consumed.has(hash)) {
       return;
     }
-    const source = decodeURIComponent(parts[2] ?? '') as SHA256IdHash<Person>;
-    if (!source || source === this.ownerPersonId || !this.isPaired(source)) {
-      return;
+    if (!this.controlPlan) {
+      throw new Error('[UvcCube] control plan is not initialized');
     }
-    if (parts[1] === 'control' && decodeURIComponent(parts[4] ?? '') !== this.ownerPersonId) {
-      return;
+    const entry = await getObject(hash as never) as UvcStateEntry;
+    await this.controlPlan.consume(hash as SHA256Hash<UvcStateEntry>, entry, source);
+    this.consumed.add(hash);
+    if (entry.$type$ === 'UvcDiscoveryObservation') {
+      // Arrival time is Cube-owned lifecycle evidence. The observation's
+      // observedAt belongs to the source event and may legitimately predate a
+      // test that starts after Metro has initialized and CHUM has imported it.
+      this.importedDiscoveryAt.set(source, Date.now());
     }
-    const imported = new UvcStateTrie({rootId: root.id, storage});
-    await imported.init();
-    const paths = parts[1] === 'phone-book'
-      ? [['phone-book']]
-      : [['control', 'command'], ['control', 'observation']];
-    for (const path of paths) {
-      for (const hash of await imported.list(path)) {
-        if (this.consumed.has(hash)) {
-          continue;
-        }
-        const entry = await getObject(hash as never) as UvcStateEntry;
-        await this.controlPlan!.consume(hash, entry, source);
-        this.consumed.add(hash);
+    console.log(`[UvcCube] Consumed imported ${entry.$type$} ${hash}`);
+    if (process.env.UVC_CHUM_DEBUG === '1' && entry.$type$ === 'UvcControlCommand') {
+      const diagnostics = getChumSyncDiagnostics({traceLimit: 80});
+      console.error('[UvcCube][chum-sync][control-response]', JSON.stringify({
+        activeExporters: diagnostics.activeExporters,
+        pendingVersionWakeups: diagnostics.pendingVersionWakeups,
+        traceEvents: diagnostics.traceEvents,
+      }));
+    }
+  }
+
+  private async consumeImportedBatch(
+    imported: readonly {kind: string; hash: string; type: string}[],
+    source: SHA256IdHash<Person>,
+  ): Promise<void> {
+    if (!this.ownerPersonId) {
+      throw new Error('[UvcCube] cannot project imported state before ONE identity');
+    }
+    for (const ref of imported) {
+      if (ref.kind !== 'object' || ref.type !== 'UvcStateTrieRoot') continue;
+      const root = await getObject(ref.hash as never) as UvcStateTrieRoot;
+      const entryHashes = await projectUvcStateTrieEntryHashes({
+        root,
+        remotePersonId: source,
+        localPersonId: this.ownerPersonId,
+        loadObject: async hash => await getObject(hash as never) as never,
+      });
+      for (const hash of entryHashes) {
+        await this.consumeImportedEntry(String(hash), source);
       }
     }
   }
@@ -548,6 +907,8 @@ export class CubeOneRuntime {
     });
     this.quicTransport = transport;
     this.quicManager = manager;
+    this.authorityClient = new GroovAuthorityClient(manager, {defaultTimeoutMs: 10_000});
+    this.authorityClient.start();
     this.provisioningClient = new QuicVCHeadlessProvisioningClient(
       manager,
       this.provisioningController,
@@ -555,19 +916,94 @@ export class CubeOneRuntime {
     console.log(`[UvcCube] QUICVC provisioning transport bound to UDP ${port}`);
   }
 
-  private resolveProvisioningPeer(
+  private async executeAuthorityRequest(
+    targetDeviceId: string,
+    operation: 'read' | 'set',
+    desired?: {enabled: boolean; intensity?: number},
+  ): Promise<{enabled: boolean; intensity?: number}> {
+    if (!this.controlPlan || !this.quicManager) {
+      throw new Error('[UvcCube] hardware authority transport is not initialized');
+    }
+    const device = this.discoveredDevices.get(targetDeviceId)
+      ?? [...this.discoveredDevices.values()].find(candidate => (
+        candidate.id === targetDeviceId || candidate.instanceId === targetDeviceId
+      ));
+    if (!device) {
+      throw new Error(`[UvcCube] control target ${targetDeviceId} is not in the discovered device set`);
+    }
+    if (!device.address || !device.port || !device.publicKey) {
+      throw new Error(`[UvcCube] control target ${targetDeviceId} has no authenticated route`);
+    }
+
+    if (normalizeHeadlessKind(device.type) === 'esp32') {
+      if (!device.ownerId) {
+        throw new Error(`[UvcCube] ESP32 target ${targetDeviceId} has no provisioned Person identity`);
+      }
+      if (device.ownerId === this.ownerPersonId) {
+        throw new Error(`[UvcCube] ESP32 target ${targetDeviceId} cannot delegate back to Cube`);
+      }
+      // Cube is the executor selected by the Expo command, but the ESP32 owns
+      // the hardware observation. Delegate to that provisioned Person through
+      // the same typed control trie/CHUM lane, then publish Cube's correlated
+      // result back to Expo. Groov has its own authority protocol below.
+      const observation = await this.controlPlan.execute({
+        deviceId: device.id,
+        kind: 'esp32',
+        executorPersonId: device.ownerId as SHA256IdHash<Person>,
+      }, operation, desired);
+      if (observation.status !== 'observed' || typeof observation.enabled !== 'boolean') {
+        throw new Error(observation.error ?? `[UvcCube] ESP32 ${targetDeviceId} returned no observed state`);
+      }
+      return {
+        enabled: observation.enabled,
+        ...(observation.intensity !== undefined ? {intensity: observation.intensity} : {}),
+      };
+    }
+
+    if (!this.authorityClient) {
+      throw new Error('[UvcCube] Groov authority transport is not initialized');
+    }
+    const route = await this.connectProvisioningPeer(device);
+    const state: GroovAuthorityState = operation === 'read'
+      ? await this.authorityClient.readState(route.deviceId, {
+          ...(route.connectionId ? {connectionId: route.connectionId} : {}),
+        })
+      : await this.authorityClient.setLight(route.deviceId, desired!, {
+          ...(route.connectionId ? {connectionId: route.connectionId} : {}),
+        });
+    return {
+      enabled: state.light.enabled,
+      ...(Number.isFinite(state.light.intensity) ? {intensity: state.light.intensity} : {}),
+    };
+  }
+
+  private async resolveProvisioningPeer(
     publicKey: string,
     credential?: DeviceIdentityCredential,
-  ): QuicVCPeerTrustInfo | null {
+  ): Promise<QuicVCPeerTrustInfo | null> {
     const device = [...this.discoveredDevices.values()].find(candidate => candidate.publicKey === publicKey);
     if (!device) {
       return null;
     }
     if (device.ownerId) {
+      const evidence = this.provisionedDeviceEvidenceByPerson.get(device.ownerId);
+      const evidenceMatches = Boolean(
+        evidence
+        && evidence.hardwareDeviceId === device.id
+        && evidence.publicKey === publicKey,
+      );
+      const registered = evidenceMatches || await isRegisteredInstanceKeyForPerson(
+        this.leuteModel!,
+        device.ownerId as SHA256IdHash<Person>,
+        publicKey as never,
+      );
+      if (!registered) {
+        return null;
+      }
       return {
         personId: device.ownerId as SHA256IdHash<Person>,
         publicKey,
-        trustLevel: this.isPaired(device.ownerId) ? 'trusted' : 'low',
+        trustLevel: 'trusted',
       };
     }
     // Enrollment pins the route to the exact bootstrap encryption key from
@@ -604,7 +1040,7 @@ export class CubeOneRuntime {
     let unsubscribe = () => {};
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const established = new Promise<{deviceId: string; connectionId?: string}>((resolve, reject) => {
-      unsubscribe = manager.onConnectionEstablished.listen(event => {
+      unsubscribe = manager.onConnectionEstablished.listen((event: ConnectionEstablishedEvent) => {
         const identityMatches = device.ownerId
           ? event.peerPersonId === device.ownerId && event.peerPublicKey === device.publicKey
           : event.deviceId === device.id;
@@ -713,6 +1149,21 @@ export class CubeOneRuntime {
     // parse the first CHUM frame as a connection-establishment command.
     await exchangeDirectChumReady(connection);
 
+    // A relay CHUM may already be active by the time discovery selects the
+    // certified QUICVC route. Retire it at the authenticated direct-handover
+    // barrier so ConnectionsModel does not reject the dedicated control lane
+    // as a duplicate peer.
+    await this.connectionsModel!.disableTransientRelayRouteByPublicKey(
+      device.publicKey as HexString,
+      this.ownerPersonId!,
+      'chum',
+    );
+    this.connectionsModel!.closeRoutedConnectionsByPublicKeys(
+      this.identity!.publicKey as HexString,
+      device.publicKey as HexString,
+      'chum',
+    );
+
     let sessionError: unknown;
     void this.connectionsModel!.startExternalChumConnection(
       connection,
@@ -725,6 +1176,17 @@ export class CubeOneRuntime {
       this.identity!.publicKey as HexString,
       device.publicKey as HexString,
       'uvc-control-quicvc',
+      {
+        objectFilter: isCubeChumExportObject,
+        importFilter: async (_hash, type) => isUvcChumSyncType(type),
+        chumSyncOptions: {
+          priorityWakeupObjectTypes: ['UvcStateTrieRoot'],
+          connectedAfterProtocolReady: true,
+          connectedAfterPriorityObjectTypes: ['UvcStateTrieRoot'],
+          traceObjectTypes: ['UvcStateTrieRoot'],
+          importBatchContextObjectTypes: ['UvcStateTrieRoot'],
+        },
+      },
     ).catch(error => {
       sessionError = error;
     });
@@ -781,6 +1243,17 @@ function normalizeKind(value?: string): UvcDiscoveryObservation['deviceKind'] {
 function normalizeHeadlessKind(value?: string): 'groov' | 'esp32' | undefined {
   const normalized = value?.trim().toLowerCase();
   return normalized === 'groov' || normalized === 'esp32' ? normalized : undefined;
+}
+
+function isProvisioningEvidence(entry: UvcStateEntry): entry is
+  | UvcIdentityAssignmentResult['assignment']
+  | UvcDeviceIdentityProofResult['proof']
+  | UvcDeviceIdentityCertificate
+  | UvcAdminRoleGrant {
+  return entry.$type$ === 'UvcIdentityAssignment'
+    || entry.$type$ === 'UvcDeviceIdentityProof'
+    || entry.$type$ === 'UvcDeviceIdentityCertificate'
+    || entry.$type$ === 'UvcAdminRoleGrant';
 }
 
 function requiredText(value: string, label: string): string {

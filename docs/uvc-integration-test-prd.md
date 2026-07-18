@@ -64,9 +64,10 @@ the Cube-owned state. The client does not implement product assertions.
 6. Require all identity-bound peers to be paired with Cube.
 7. For Groov and ESP32, send a `read` through `UvcControlPlan` and require an
    observed response from the advertised executor Person.
-8. When explicitly requested per device kind, write the already-observed state
-   and require physical/device readback. This exercises write authorization and
-   correlation without intentionally changing the output.
+8. When explicitly requested per device kind, exercise hardware writes through
+   the same plan and require physical/device readback. ESP32 must transition its
+   LED `ON`, then `OFF`, then restore the pre-test state. Groov uses a same-state
+   write so the test does not intentionally alter an externally wired output.
 9. Require `device-read`/`device-set` and `device-observed` journal evidence for
    the exercised devices.
 
@@ -75,6 +76,9 @@ the Cube-owned state. The client does not implement product assertions.
 - Headless provisioning is disabled unless `--provision-headless` is passed.
 - Live writes are disabled unless `--exercise-write=esp32`,
   `--exercise-write=groov`, or both are passed.
+- The ESP32 write exercise must return correlated hardware readback for `ON`,
+  `OFF`, and baseline restoration, with all three writes journaled by the
+  current run.
 - Groov commissioning requirements remain authoritative; the runner must not
   infer a module, channel, or authorization configuration.
 
@@ -85,16 +89,26 @@ devices when provisioning is disabled, unpaired identities, absent readback,
 timeouts, or missing journal evidence are failures. Static source checks and
 partial peer sets never make a full-protocol run pass.
 
-## Follow-up coverage
+## Physical Expo control coverage
 
-The initial Cube-owned slice consumes Cube's canonical runtime DAG. Full Expo
-operation-manifest parity and Expo-owned projection assertions require a
-test-only, authenticated Expo automation bridge. Until that bridge exists,
-the report must describe Expo coverage as discovery and pairing only rather
-than claiming Expo plan execution.
+When the ESP32 write exercise is selected, Cube publishes a pending physical
+Expo action to the loopback runner client. On macOS the client delivers a
+development-only deep link to the selected iPhone. The URL is secret-gated and
+accepted only when `EXPO_PUBLIC_UVC_INTEGRATION=1`; it does not expose an HTTP
+listener on the phone or alter product settings.
+
+The bridge only invokes Expo's real `DeviceControlModel`. Expo becomes the
+`UvcControlCommand` issuer, Cube consumes that command from the paired peer's
+recipient-scoped trie, Cube's authenticated hardware authority talks to ESP32,
+and the producer-owned `UvcControlObservation` returns through CHUM. The runner
+requires the exact Expo-issued read/ON/OFF/restore/final-read sequence and each
+correlated ESP32 readback from Cube's journal DAG.
 
 Physical Expo development clients are started with
-`EXPO_PUBLIC_UVC_INTEGRATION=1`. That development-only mode starts native
-discovery after identity and transport initialization without modifying the
-user's persisted discovery setting. It is not an Expo operation bridge and
-does not expose device-control mutations.
+`EXPO_PUBLIC_UVC_INTEGRATION=1` and an `EXPO_PUBLIC_UVC_E2E_SECRET` matching the
+runner's `UVC_E2E_SECRET`. The integration mode starts native discovery after
+identity and transport initialization without modifying the user's persisted
+discovery setting and accepts only the narrow ESP32 LED-cycle action. Cube and
+Expo use the deployed Glue relay at `wss://api.glue.one/comm`; integration mode
+routes existing paired endpoint keys through that selected relay without
+rewriting the durable peer identity or its trust evidence.

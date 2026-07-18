@@ -1,11 +1,12 @@
 import {app} from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 
 import type {UvcControlObservation, UvcStateEntry} from '@refinio/uvc.core';
 
 import type {DiscoveryDeviceSnapshot, DiscoveryRuntimeSnapshot} from '@shared/contracts';
-import {cubeOneRuntime} from './cube-one-runtime.js';
+import {cubeOneRuntime, type CubeControlEvidence} from './cube-one-runtime.js';
 import {getDiscoveryRuntimeSnapshot, refreshDiscoveryRuntime} from './peer-directory.js';
 
 type HeadlessKind = 'groov' | 'esp32';
@@ -35,7 +36,7 @@ interface RunnerSnapshot {
   pendingAction?: RunnerPendingAction;
 }
 
-interface RunnerPendingAction {
+interface ExpoPairingAction {
   type: 'pair-expo';
   peerId: string;
   invitation: {
@@ -44,6 +45,19 @@ interface RunnerPendingAction {
     url: string;
   };
 }
+
+interface ExpoControlAction {
+  type: 'expo-control';
+  peerId: string;
+  action: {
+    actionId: string;
+    operation: 'esp32-led-cycle';
+    deviceId: string;
+    executorPersonId: string;
+  };
+}
+
+type RunnerPendingAction = ExpoPairingAction | ExpoControlAction;
 
 export interface UvcFullProtocolOptions {
   timeoutMs?: number;
@@ -77,6 +91,7 @@ class UvcTestRunnerDashboardService {
   private stopRequested = false;
   private stepProfiles: StepProfile[] = [];
   private reportContent?: string;
+  private expoPlanExecuted = false;
 
   async getStatus() {
     return {success: true, data: this.snapshot()};
@@ -91,6 +106,7 @@ class UvcTestRunnerDashboardService {
     this.stopRequested = false;
     this.stepProfiles = [];
     this.reportContent = undefined;
+    this.expoPlanExecuted = false;
     this.state = {
       status: 'running',
       message: 'UVC full protocol is running',
@@ -147,10 +163,23 @@ class UvcTestRunnerDashboardService {
   }
 
   private async execute(options: NormalizedOptions): Promise<void> {
-    const controlKinds = options.expectedKinds.filter(isHeadlessKind) as HeadlessKind[];
+    // expectedKinds controls physical discovery coverage. An explicit write
+    // selection controls the executor path as well, so an ESP-only hardware
+    // test does not implicitly require unrelated Groov I/O credentials.
+    const explicitlySelectedControlKinds = [
+      ...options.exerciseWrites,
+      ...options.expectUncommissioned,
+    ];
+    const controlKinds = [...new Set(
+      explicitlySelectedControlKinds.length > 0
+        ? explicitlySelectedControlKinds
+        : options.expectedKinds.filter(isHeadlessKind) as HeadlessKind[],
+    )];
+    const runStartedAt = Date.parse(this.state.startedAt ?? new Date().toISOString());
     let runtime: DiscoveryRuntimeSnapshot;
     let devices: DiscoveryDeviceSnapshot[] = [];
     const observations = new Map<HeadlessKind, UvcControlObservation>();
+    const expoControlEvidence = new Map<HeadlessKind, CubeControlEvidence[]>();
     const totalSteps = 9;
 
     await this.step(1, totalSteps, 'Verify Cube identity and runtime', async () => {
@@ -288,7 +317,59 @@ class UvcTestRunnerDashboardService {
         const device = requireAssignedDevice(devices, kind);
         const baseline = observations.get(kind);
         if (!baseline || typeof baseline.enabled !== 'boolean') {
-          throw new Error(`${kind} has no observed baseline for a safe same-state write`);
+          throw new Error(`${kind} has no observed baseline for a safe write and restore`);
+        }
+        if (kind === 'esp32') {
+          const expo = devices.find(candidate => normalizedKind(candidate.type) === 'expo' && candidate.ownerId);
+          if (!expo?.ownerId) {
+            throw new Error('Physical Expo peer is required for the ESP32 LED integration exercise');
+          }
+          const expoOwnerId = expo.ownerId;
+          // UDP discovery only proves that the development client is visible.
+          // A Metro-restarted Expo runtime is ready to originate durable
+          // control commands only after its initial trie write has crossed the
+          // paired CHUM lane and Cube has projected that observation. Use that
+          // protocol evidence as the control-action readiness boundary.
+          await waitFor(async () => {
+            return cubeOneRuntime.lastImportedDiscoveryAt(expoOwnerId) === undefined
+              ? undefined
+              : true;
+          }, options.timeoutMs, () => this.throwIfStopped(), 'Expo CHUM/trie readiness');
+          this.appendLog('  PASS Expo initial trie state reached Cube through paired CHUM');
+          const cubeIdentity = cubeOneRuntime.getIdentity();
+          const actionStartedAt = Date.now();
+          const actionId = randomUUID();
+          this.state.pendingAction = {
+            type: 'expo-control',
+            peerId: expo.id,
+            action: {
+              actionId,
+              operation: 'esp32-led-cycle',
+              deviceId: device.id,
+              executorPersonId: cubeIdentity.personId,
+            },
+          };
+          this.appendLog(`  INFO waiting for physical Expo peer ${expo.name ?? expo.id} to originate the ESP32 LED cycle`);
+          let evidence: CubeControlEvidence[];
+          try {
+            evidence = await waitFor(async () => {
+              const observed = await cubeOneRuntime.controlEvidence({
+                deviceId: device.id,
+                issuerPersonId: expoOwnerId as never,
+                since: actionStartedAt,
+              });
+              const matching = observed.filter(item => item.command.executorPersonId === cubeIdentity.personId);
+              return matching.length >= 5 ? matching : undefined;
+            }, options.timeoutMs, () => this.throwIfStopped(), 'Expo-originated ESP32 LED cycle');
+          } finally {
+            this.state.pendingAction = undefined;
+          }
+          const cycle = requireExpoLedCycleEvidence(evidence, baseline.enabled);
+          expoControlEvidence.set(kind, cycle);
+          this.expoPlanExecuted = true;
+          this.appendLog('  PASS Expo issued read, LED ON, LED OFF, baseline restore, and final read through paired CHUM');
+          this.appendLog(`  PASS ESP32 producer readback restored enabled=${String(baseline.enabled)}`);
+          continue;
         }
         const observation = await cubeOneRuntime.setLight({
           deviceId: device.id,
@@ -310,16 +391,27 @@ class UvcTestRunnerDashboardService {
       for (const kind of controlKinds) {
         const device = requireAssignedDevice(devices, kind);
         const entries = await cubeOneRuntime.journalEntries(device.id);
-        requireJournalEvent(entries, device.id, 'device-read');
+        requireJournalEvent(entries, device.id, 'device-read', runStartedAt);
         requireJournalEvent(
           entries,
           device.id,
           options.expectUncommissioned.includes(kind) ? 'device-failed' : 'device-observed',
+          runStartedAt,
         );
-        if (options.exerciseWrites.includes(kind)) requireJournalEvent(entries, device.id, 'device-set');
+        if (options.exerciseWrites.includes(kind)) {
+          if (kind === 'esp32' && expoControlEvidence.has(kind)) {
+            if (expoControlEvidence.get(kind)!.length !== 5) {
+              throw new Error('Expo LED cycle is missing correlated command/observation evidence');
+            }
+          } else {
+            requireJournalEventCount(entries, device.id, 'device-set', 1, runStartedAt);
+          }
+        }
         this.appendLog(`  PASS ${kind} journal contains command and observed evidence`);
       }
-      this.appendLog('  INFO Expo coverage in this slice is live discovery and ONE pairing; remote Expo plan execution still requires the authenticated test bridge');
+      this.appendLog(this.expoPlanExecuted
+        ? '  PASS Expo DeviceControlModel originated the physical ESP32 control sequence'
+        : '  INFO Expo coverage was discovery and pairing because no ESP32 write exercise was requested');
     });
   }
 
@@ -347,16 +439,22 @@ class UvcTestRunnerDashboardService {
   }
 
   private snapshot(): RunnerSnapshot {
+    const pendingAction = this.state.pendingAction?.type === 'pair-expo'
+      ? {
+          ...this.state.pendingAction,
+          invitation: {...this.state.pendingAction.invitation},
+        }
+      : this.state.pendingAction?.type === 'expo-control'
+        ? {
+            ...this.state.pendingAction,
+            action: {...this.state.pendingAction.action},
+          }
+        : undefined;
     return {
       ...this.state,
       currentStep: this.state.currentStep ? {...this.state.currentStep} : null,
       logs: [...this.state.logs],
-      ...(this.state.pendingAction ? {
-        pendingAction: {
-          ...this.state.pendingAction,
-          invitation: {...this.state.pendingAction.invitation},
-        },
-      } : {}),
+      ...(pendingAction ? {pendingAction} : {}),
     };
   }
 
@@ -377,7 +475,9 @@ class UvcTestRunnerDashboardService {
       `- Finished: ${finishedAt}`,
       '- Owner: running uvc.cube process',
       '- State source: Cube runtime operations and persisted UVC trie projections',
-      '- Expo coverage: discovery and pairing only until the authenticated Expo test bridge exists',
+      this.expoPlanExecuted
+        ? '- Expo coverage: physical DeviceControlModel plan execution over paired CHUM with ESP32 readback'
+        : '- Expo coverage: discovery and pairing; no Expo control exercise was requested',
       '',
       '## Step Profile',
       '',
@@ -466,6 +566,46 @@ function requireObserved(observation: UvcControlObservation, label: string): voi
   }
 }
 
+function requireObservedState(
+  observation: UvcControlObservation,
+  enabled: boolean,
+  label: string,
+): void {
+  requireObserved(observation, label);
+  if (observation.enabled !== enabled) {
+    throw new Error(`${label} readback expected enabled=${String(enabled)}, observed ${String(observation.enabled)}`);
+  }
+}
+
+function requireExpoLedCycleEvidence(
+  evidence: CubeControlEvidence[],
+  baselineEnabled: boolean,
+): CubeControlEvidence[] {
+  for (let index = 0; index <= evidence.length - 5; index += 1) {
+    const cycle = evidence.slice(index, index + 5);
+    const [baseline, enabled, disabled, restored, finalRead] = cycle;
+    if (
+      baseline.command.operation !== 'read'
+      || enabled.command.operation !== 'set'
+      || enabled.command.desiredEnabled !== true
+      || disabled.command.operation !== 'set'
+      || disabled.command.desiredEnabled !== false
+      || restored.command.operation !== 'set'
+      || restored.command.desiredEnabled !== baselineEnabled
+      || finalRead.command.operation !== 'read'
+    ) {
+      continue;
+    }
+    requireObservedState(baseline.observation, baselineEnabled, 'Expo ESP32 baseline read');
+    requireObservedState(enabled.observation, true, 'Expo ESP32 LED ON');
+    requireObservedState(disabled.observation, false, 'Expo ESP32 LED OFF');
+    requireObservedState(restored.observation, baselineEnabled, 'Expo ESP32 baseline restore');
+    requireObservedState(finalRead.observation, baselineEnabled, 'Expo ESP32 final read');
+    return cycle;
+  }
+  throw new Error('No complete Expo-originated ESP32 LED cycle was found in correlated evidence');
+}
+
 function requireUncommissioned(observation: UvcControlObservation, label: string): void {
   if (
     observation.status !== 'failed'
@@ -475,11 +615,33 @@ function requireUncommissioned(observation: UvcControlObservation, label: string
   }
 }
 
-function requireJournalEvent(entries: UvcStateEntry[], deviceId: string, eventType: string): void {
+function requireJournalEvent(
+  entries: UvcStateEntry[],
+  deviceId: string,
+  eventType: string,
+  since: number,
+): void {
   const found = entries.some(entry => entry.$type$ === 'UvcJournalEvent'
     && entry.deviceId === deviceId
-    && entry.eventType === eventType);
+    && entry.eventType === eventType
+    && entry.recordedAt >= since);
   if (!found) throw new Error(`Journal is missing ${eventType} evidence for ${deviceId}`);
+}
+
+function requireJournalEventCount(
+  entries: UvcStateEntry[],
+  deviceId: string,
+  eventType: string,
+  minimum: number,
+  since: number,
+): void {
+  const count = entries.filter(entry => entry.$type$ === 'UvcJournalEvent'
+    && entry.deviceId === deviceId
+    && entry.eventType === eventType
+    && entry.recordedAt >= since).length;
+  if (count < minimum) {
+    throw new Error(`Journal has ${count}/${minimum} required ${eventType} events for ${deviceId}`);
+  }
 }
 
 function requireIdHash(value: string | undefined, label: string): void {

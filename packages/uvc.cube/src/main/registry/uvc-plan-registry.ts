@@ -1,4 +1,5 @@
 import {OperationRegistry} from '@refinio/api/registry';
+import {getChumSyncDiagnostics} from '@refinio/one.core/lib/chum-sync.js';
 
 import {cubeOneRuntime} from '../services/cube-one-runtime.js';
 import {createUvcTestRunnerOperation} from '../services/test-runner-dashboard.js';
@@ -65,6 +66,11 @@ export function registerUvcPlans(): OperationRegistry {
       cubeOneRuntime.journalEntries(input?.deviceId)
     ),
   }, {category: 'journal'});
+  registry.register('chumDiagnostics', {
+    get: async (input?: {traceLimit?: number}) => getChumSyncDiagnostics({
+      traceLimit: input?.traceLimit,
+    }),
+  }, {category: 'diagnostics'});
   registry.register('discovery', {
     getRuntime: async () => getDiscoveryRuntimeSnapshot(),
     refreshRuntime: async () => refreshDiscoveryRuntime(),

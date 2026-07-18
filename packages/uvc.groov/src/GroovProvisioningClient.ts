@@ -125,10 +125,13 @@ export class QuicVCHeadlessProvisioningClient {
       }
       if (frame.frameType === GroovAuthorityFrameType.DeviceIdentityProofResponse && !pending.certificate) {
         const proof = frame.payload as unknown as UvcDeviceIdentityProofResult;
-        if (proof.proof?.$type$ !== 'UvcDeviceIdentityProof' || typeof proof.proofHash !== 'string') {
+        if (proof.proof?.$type$ !== 'UvcDeviceIdentityProof') {
           throw new Error('Groov returned an invalid device identity proof');
         }
-        pending.certificate = await this.controller.certify({...pending.assignment, ...proof});
+        pending.certificate = await this.controller.certifyDeviceProof({
+          ...pending.assignment,
+          proof: proof.proof,
+        });
         await this.quicManager.sendStreamData(
           pending.deviceId,
           GROOV_PROVISIONING_STREAM_ID,
@@ -143,13 +146,16 @@ export class QuicVCHeadlessProvisioningClient {
       }
       if (frame.frameType === GroovAuthorityFrameType.AdminRoleGrantResponse && pending.certificate) {
         const grant = frame.payload as unknown as UvcAdminRoleGrantResult;
-        if (grant.grant?.$type$ !== 'UvcAdminRoleGrant' || typeof grant.grantHash !== 'string') {
+        if (grant.grant?.$type$ !== 'UvcAdminRoleGrant') {
           throw new Error('Groov returned an invalid admin grant');
         }
-        await this.controller.acceptAdminGrant({...pending.certificate, ...grant});
+        const accepted = await this.controller.acceptDeviceAdminGrant({
+          ...pending.certificate,
+          grant: grant.grant,
+        });
         clearTimeout(pending.timeout);
         this.pending.delete(frame.requestId);
-        pending.resolve(grant);
+        pending.resolve(accepted);
         return;
       }
       throw new Error(`unexpected Groov provisioning response ${frame.frameType}`);

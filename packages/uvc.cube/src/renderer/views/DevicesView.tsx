@@ -91,12 +91,14 @@ function isHeadlessDevice(device: DiscoveryDeviceSnapshot): boolean {
 function DeviceCard({
   busy,
   device,
+  local = false,
   pairing,
   onPairDevice,
   onSetupDevice,
 }: {
   busy: boolean;
   device: DiscoveryDeviceSnapshot;
+  local?: boolean;
   pairing: boolean;
   onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
   onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
@@ -155,7 +157,11 @@ function DeviceCard({
       </div>
 
       <div className="flow-device-card__actions">
-        {setupAvailable ? (
+        {local ? (
+          <span className="device-state device-state--local">
+            <CircleDot /> On this Mac
+          </span>
+        ) : setupAvailable ? (
           <button
             className="action-button action-button--primary"
             disabled={busy}
@@ -257,19 +263,21 @@ export function DevicesView({
   const [invitationInput, setInvitationInput] = useState('');
   const [pairingStatus, setPairingStatus] = useState<string | null>(null);
   const [isCreatingInvitation, setIsCreatingInvitation] = useState(false);
+  const [isPairingManagerOpen, setIsPairingManagerOpen] = useState(false);
   const [pairingDeviceId, setPairingDeviceId] = useState<string | null>(null);
   const [setupDevice, setSetupDevice] = useState<DiscoveryDeviceSnapshot | null>(null);
   const [setupName, setSetupName] = useState('');
   const [setupError, setSetupError] = useState<string | null>(null);
+  const localInstances = runtime?.localInstances ?? [];
   const devices = runtime?.devices ?? [];
-  const connectedDevices = devices.filter((device) => device.connected === true);
-  const discoveredDevices = devices.filter((device) => !isTrusted(device) && device.connected !== true);
-  const approvedDevices = devices.filter((device) => isTrusted(device) && device.connected !== true);
+  const discoveredDevices = devices.filter((device) => !isTrusted(device));
+  const approvedDevices = devices.filter(isTrusted);
   const onlineCount = devices.filter((device) => device.online).length;
   const discoveryEnabled = runtime?.config.discovery?.enabled !== false;
   const discoveryHealthy = runtime?.status.healthy === true;
 
   const createInvitation = async (device?: DiscoveryDeviceSnapshot) => {
+    setIsPairingManagerOpen(true);
     setIsCreatingInvitation(true);
     setPairingDeviceId(device?.id ?? null);
     try {
@@ -348,6 +356,35 @@ export function DevicesView({
         </div>
       </header>
 
+      {runtime ? (
+        <section className="device-group local-instance-group" aria-label="Instances on this Mac">
+          <div className="device-group__header">
+            <div>
+              <span className="eyebrow">This Mac</span>
+              <h2>Local {localInstances.length === 1 ? 'instance' : 'instances'}</h2>
+            </div>
+            <span className="device-group__count">{localInstances.length}</span>
+          </div>
+          {localInstances.length ? (
+            <div className="flow-device-list">
+              {localInstances.map((device) => (
+                <DeviceCard
+                  busy={false}
+                  device={device}
+                  key={device.id}
+                  local
+                  pairing={false}
+                  onPairDevice={() => undefined}
+                  onSetupDevice={() => undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="device-group__empty">Local runtime identity is not available.</div>
+          )}
+        </section>
+      ) : null}
+
       <section className="device-summary" aria-label="Device summary">
         <article>
           <Radio />
@@ -362,45 +399,9 @@ export function DevicesView({
           <div><strong>{runtime ? discoveredDevices.length : '—'}</strong><span>Need setup</span></div>
         </article>
         <article>
-          <CircleDot />
-          <div><strong>{runtime ? connectedDevices.length : '—'}</strong><span>Connected</span></div>
+          <ShieldCheck />
+          <div><strong>{runtime ? approvedDevices.length : '—'}</strong><span>Approved</span></div>
         </article>
-      </section>
-
-      <section className="panel pairing-flow" id="pair-device">
-        <div className="panel__header">
-          <div>
-            <span className="eyebrow">Device pairing</span>
-            <h2>Pair another device</h2>
-            <p>Exchange a pairing invitation to securely connect two UVC devices.</p>
-          </div>
-          <button
-            className="action-button action-button--primary"
-            disabled={isCreatingInvitation}
-            onClick={() => void createInvitation()}
-            type="button"
-          >
-            {isCreatingInvitation ? 'Creating invitation…' : 'Create pairing invitation'}
-          </button>
-        </div>
-        {invitation ? <textarea className="field-input field-input--textarea mono" readOnly value={invitation} /> : null}
-        <div className="action-row">
-          <input
-            className="field-input"
-            onChange={(event) => setInvitationInput(event.target.value)}
-            placeholder="Paste a pairing invitation"
-            value={invitationInput}
-          />
-          <button
-            className="action-button"
-            disabled={!invitationInput.trim()}
-            onClick={() => void acceptInvitation()}
-            type="button"
-          >
-            Pair device
-          </button>
-        </div>
-        {pairingStatus ? <p role="status">{pairingStatus}</p> : null}
       </section>
 
       {runtimeError ? (
@@ -426,36 +427,96 @@ export function DevicesView({
         <div className="device-groups">
           <DeviceGroup
             busyDeviceIds={busyDeviceIds}
-            devices={discoveredDevices}
-            emptyCopy={discoveryEnabled ? 'No new devices are waiting to be set up or paired.' : 'Discovery is disabled in settings.'}
-            eyebrow="Step 1"
-            pairingDeviceId={pairingDeviceId}
-            onPairDevice={(device) => void createInvitation(device)}
-            onSetupDevice={openDeviceSetup}
-            title="New devices"
-          />
-          <DeviceGroup
-            busyDeviceIds={busyDeviceIds}
-            devices={connectedDevices}
-            emptyCopy="Approved devices will move here once they establish an authenticated connection."
-            eyebrow="Ready"
+            devices={approvedDevices}
+            emptyCopy="Devices become available here after setup or pairing."
+            eyebrow="Ready to use"
             pairingDeviceId={pairingDeviceId}
             onPairDevice={(device) => void createInvitation(device)}
             onSetupDevice={openDeviceSetup}
             title="Connected devices"
           />
-          <DeviceGroup
-            busyDeviceIds={busyDeviceIds}
-            devices={approvedDevices}
-            emptyCopy="No approved devices are waiting or offline."
-            eyebrow="Known"
-            pairingDeviceId={pairingDeviceId}
-            onPairDevice={(device) => void createInvitation(device)}
-            onSetupDevice={openDeviceSetup}
-            title="Approved devices"
-          />
         </div>
       ) : null}
+
+      <section className="panel pairing-flow" id="pair-device">
+        <div className="panel__header panel__header--with-actions">
+          <div>
+            <span className="eyebrow">Device pairing</span>
+            <h2>Pair device</h2>
+            <p>Set up or pair a nearby device to make it available here.</p>
+          </div>
+          <button
+            aria-expanded={isPairingManagerOpen}
+            aria-controls="pairing-link-manager"
+            className="action-button pairing-flow__manage-button"
+            onClick={() => setIsPairingManagerOpen((open) => !open)}
+            type="button"
+          >
+            <Link2 aria-hidden="true" />
+            {isPairingManagerOpen ? 'Hide pairing links' : 'Manage pairing links'}
+          </button>
+        </div>
+
+        {isPairingManagerOpen ? (
+          <div className="pairing-flow__manager" id="pairing-link-manager">
+            <div className="pairing-flow__manager-header">
+              <div>
+                <h3>Pairing links</h3>
+                <p>Create a link to share, or paste one received from another UVC device.</p>
+              </div>
+              <button
+                className="action-button action-button--primary pairing-flow__icon-button"
+                disabled={isCreatingInvitation}
+                onClick={() => void createInvitation()}
+                type="button"
+              >
+                <Link2 aria-hidden="true" />
+                {isCreatingInvitation ? 'Creating…' : 'Create pairing link'}
+              </button>
+            </div>
+            {invitation ? <textarea className="field-input field-input--textarea mono" readOnly value={invitation} /> : null}
+            <div className="action-row">
+              <input
+                className="field-input"
+                onChange={(event) => setInvitationInput(event.target.value)}
+                placeholder="Paste a pairing link"
+                value={invitationInput}
+              />
+              <button
+                className="action-button pairing-flow__icon-button"
+                disabled={!invitationInput.trim()}
+                onClick={() => void acceptInvitation()}
+                type="button"
+              >
+                <Link2 aria-hidden="true" />
+                Pair device
+              </button>
+            </div>
+            {pairingStatus ? <p className="pairing-flow__status" role="status">{pairingStatus}</p> : null}
+          </div>
+        ) : null}
+
+        <div className="pairing-flow__devices" aria-label="Nearby devices requiring setup or pairing">
+          {discoveredDevices.length ? (
+            <div className="flow-device-list">
+              {discoveredDevices.map((device) => (
+                <DeviceCard
+                  busy={busyDeviceIds.has(device.id)}
+                  device={device}
+                  key={device.id}
+                  pairing={pairingDeviceId === device.id}
+                  onPairDevice={(candidate) => void createInvitation(candidate)}
+                  onSetupDevice={openDeviceSetup}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="pairing-flow__empty">
+              {discoveryEnabled ? 'No nearby devices need setup or pairing.' : 'Discovery is disabled in settings.'}
+            </div>
+          )}
+        </div>
+      </section>
 
       {setupDevice ? (
         <div className="setup-dialog-backdrop">

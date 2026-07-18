@@ -8,6 +8,7 @@ import {
   createRouter,
 } from '@tanstack/react-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { CalendarDays, MessageCircle, MonitorPlay, Radio, Settings } from 'lucide-react';
 
 import type {
   DiscoveryRuntimeSnapshot,
@@ -22,6 +23,7 @@ import type {
 
 import { ChatView } from './views/ChatView';
 import { DevicesView } from './views/DevicesView';
+import { JournalView } from './views/JournalView';
 import { SettingsView } from './views/SettingsView';
 
 interface UvcRuntime {
@@ -63,6 +65,12 @@ const overviewRoute = createRoute({
   component: OverviewRoute,
 });
 
+const devicesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/devices',
+  component: DevicesRoute,
+});
+
 const feedsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/feeds',
@@ -93,6 +101,7 @@ const routeTree = rootRoute.addChildren([
   chatRoute,
   packagesRoute,
   settingsRoute,
+  devicesRoute,
 ]);
 
 const router = createRouter({
@@ -176,23 +185,31 @@ function AppLayout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <span className="eyebrow">UVC control</span>
+          <span className="eyebrow">Disinfection record</span>
           <h1>UVC Cube</h1>
-          <p>Find, approve, and monitor the devices around you.</p>
+          <p>Document where, when, and with which resources rooms were disinfected.</p>
         </div>
 
         <nav className="nav-list" aria-label="Primary">
-          <Link activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item" to="/">
-            Devices
+          <Link activeOptions={{ exact: true }} activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item" to="/">
+            <CalendarDays aria-hidden="true" />
+            Journal
           </Link>
           <Link activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item" to="/feeds">
+            <MonitorPlay aria-hidden="true" />
             Feeds
           </Link>
           <Link activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item" to="/chat">
+            <MessageCircle aria-hidden="true" />
             Chat
           </Link>
-          <Link activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item" to="/settings">
+          <Link activeOptions={{ exact: true }} activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item" to="/settings">
+            <Settings aria-hidden="true" />
             Settings
+          </Link>
+          <Link activeProps={{ className: 'nav-item nav-item--active' }} className="nav-item nav-item--sub" to="/settings/devices">
+            <Radio aria-hidden="true" />
+            Devices
           </Link>
         </nav>
       </aside>
@@ -205,6 +222,12 @@ function AppLayout() {
 }
 
 function OverviewRoute() {
+  const { discoveryRuntime } = useUvcRuntime();
+
+  return <JournalView devices={discoveryRuntime?.devices ?? []} />;
+}
+
+function DevicesRoute() {
   const {
     busyDeviceIds,
     discoveryRuntime,

@@ -138,6 +138,9 @@ export interface DiscoveryConfigSnapshot {
 export interface DiscoveryRuntimeSnapshot {
   discoverySource: string;
   status: DiscoveryStatusSnapshot;
+  /** ONE instances advertised by this host. They are local context, not peers. */
+  localInstances: DiscoveryDeviceSnapshot[];
+  /** Remote instances eligible for discovery, setup, and pairing. */
   devices: DiscoveryDeviceSnapshot[];
   config: DiscoveryConfigSnapshot;
   fetchedAt: string;
