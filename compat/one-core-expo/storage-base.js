@@ -5,6 +5,7 @@ import { CREATION_STATUS, STORAGE } from '@refinio/one.core/lib/storage-base-com
 import { getInstanceDirectory } from '@refinio/one.core/lib/instance.js';
 import {
   DEFAULT_STORAGE_LOCATION,
+  getBaseDirOrName,
   setBaseDirOrName,
 } from '@refinio/one.core/lib/system/storage-base.js';
 import { getTypeFromMicrodata } from '@refinio/one.core/lib/util/object.js';
@@ -24,6 +25,8 @@ const STORAGE_DIRS = Object.values(STORAGE).reduce((dirs, storageType) => {
 }, {});
 
 let isInitialized = false;
+const MANIFEST_ENTRIES = new Map();
+const MANIFEST_WRITE_TAILS = new Map();
 
 function joinPath(...parts) {
   const normalized = parts
@@ -65,7 +68,20 @@ function getDocumentDirectoryPath() {
 }
 
 function getBaseDirectory(baseDirectoryName) {
-  const dir = baseDirectoryName ?? getInstanceDirectory() ?? DEFAULT_STORAGE_LOCATION;
+  let configuredBaseDirectory;
+  try {
+    configuredBaseDirectory = getBaseDirOrName();
+  } catch {
+    configuredBaseDirectory = undefined;
+  }
+
+  // Authenticator configures the application storage directory before an
+  // instance is opened. Cold-start instanceExists() must inspect that same
+  // directory; getInstanceDirectory() is necessarily empty at that point.
+  const dir = baseDirectoryName
+    ?? getInstanceDirectory()
+    ?? configuredBaseDirectory
+    ?? DEFAULT_STORAGE_LOCATION;
 
   if (!dir) {
     throw createError('SB-NOBASE', { message: 'Base directory not set' });
@@ -84,7 +100,7 @@ async function ensureDirectory(dirPath) {
   }
 }
 
-async function readManifestFile(manifestPath) {
+async function loadManifestFile(manifestPath) {
   try {
     if (!(await RNFS.exists(manifestPath))) {
       return [];
@@ -97,24 +113,63 @@ async function readManifestFile(manifestPath) {
   }
 }
 
+async function readManifestFile(manifestPath) {
+  const cached = MANIFEST_ENTRIES.get(manifestPath);
+  if (cached) {
+    return [...cached];
+  }
+  const entries = await loadManifestFile(manifestPath);
+  MANIFEST_ENTRIES.set(manifestPath, new Set(entries));
+  return entries;
+}
+
+async function enqueueManifestWrite(manifestPath, operation) {
+  const previous = MANIFEST_WRITE_TAILS.get(manifestPath) ?? Promise.resolve();
+  const current = previous.then(operation, operation);
+  MANIFEST_WRITE_TAILS.set(manifestPath, current);
+  try {
+    await current;
+  } finally {
+    if (MANIFEST_WRITE_TAILS.get(manifestPath) === current) {
+      MANIFEST_WRITE_TAILS.delete(manifestPath);
+    }
+  }
+}
+
 async function addToManifest(dirPath, filename) {
   const manifestPath = joinPath(dirPath, '.manifest');
-  const manifest = await readManifestFile(manifestPath);
-
-  if (!manifest.includes(filename)) {
-    manifest.push(filename);
-    await RNFS.writeFile(manifestPath, `${manifest.join('\n')}\n`, UTF8_ENCODING);
+  let manifest = MANIFEST_ENTRIES.get(manifestPath);
+  if (!manifest) {
+    manifest = new Set(await loadManifestFile(manifestPath));
+    MANIFEST_ENTRIES.set(manifestPath, manifest);
+  }
+  if (manifest.has(filename)) {
+    return;
+  }
+  // Claim the entry synchronously before awaiting the native append so two
+  // concurrent ONE writes cannot enqueue the same filename twice.
+  manifest.add(filename);
+  try {
+    await enqueueManifestWrite(manifestPath, async () => {
+      await RNFS.appendFile(manifestPath, `${filename}\n`, UTF8_ENCODING);
+    });
+  } catch (error) {
+    manifest.delete(filename);
+    throw error;
   }
 }
 
 async function removeFromManifest(dirPath, filename) {
   const manifestPath = joinPath(dirPath, '.manifest');
-  const manifest = await readManifestFile(manifestPath);
-  const index = manifest.indexOf(filename);
-
-  if (index !== -1) {
-    manifest.splice(index, 1);
-    await RNFS.writeFile(manifestPath, `${manifest.join('\n')}\n`, UTF8_ENCODING);
+  let manifest = MANIFEST_ENTRIES.get(manifestPath);
+  if (!manifest) {
+    manifest = new Set(await loadManifestFile(manifestPath));
+    MANIFEST_ENTRIES.set(manifestPath, manifest);
+  }
+  if (manifest.delete(filename)) {
+    await enqueueManifestWrite(manifestPath, async () => {
+      await RNFS.writeFile(manifestPath, `${[...manifest].join('\n')}\n`, UTF8_ENCODING);
+    });
   }
 }
 
@@ -173,7 +228,9 @@ export async function initStorage({
       if (!(await RNFS.exists(manifestPath))) {
         await RNFS.writeFile(manifestPath, '\n', UTF8_ENCODING);
       }
+      MANIFEST_ENTRIES.set(manifestPath, new Set(await loadManifestFile(manifestPath)));
     }
+    isInitialized = true;
   } catch (error) {
     throw createError('SB-INIT-FAIL', {
       message: 'Failed to initialize storage',
@@ -186,6 +243,9 @@ export function closeStorage() {
   for (const key of Object.keys(STORAGE_DIRS)) {
     STORAGE_DIRS[key] = '';
   }
+  MANIFEST_ENTRIES.clear();
+  MANIFEST_WRITE_TAILS.clear();
+  isInitialized = false;
 }
 
 export async function deleteStorage(instanceIdHash) {

@@ -14,6 +14,7 @@
  */
 
 import createDebug from 'debug';
+import NetInfo from '@react-native-community/netinfo';
 import { debugLog } from '@src/utils/debugLogger';
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
@@ -37,7 +38,7 @@ import type {
 } from './interfaces';
 import { ESP32ConnectionManager } from './esp32/ESP32ConnectionManager';
 import { OwnedDeviceMonitor } from './OwnedDeviceMonitor';
-import type DeviceSettingsService from '@src/services/DeviceSettingsService';
+import type {InstanceSettingsStorage} from '@refinio/settings.core';
 import { DeviceModel } from '../device/DeviceModel';
 import { VCManager } from './vc/VCManager';
 import { RefactoredBTLEService } from '@src/services/RefactoredBTLEService';
@@ -49,7 +50,11 @@ import type {LocalPeerInfo} from '@refinio/connection.core/discovery/DiscoverySe
 import {NativeMdnsDiscovery} from './mdns/NativeMdnsDiscovery';
 import {storeUnversionedObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import type {JournalEntry} from '@OneObjectInterfaces';
-import {bytesToHex, encodeDiscoveryPacket} from './discovery/DiscoveryPacket';
+import {
+  bytesToHex,
+  calculateIPv4BroadcastAddress,
+  encodeDiscoveryPacket,
+} from './discovery/DiscoveryPacket';
 
 const debug = createDebug('lama:device-discovery');
 
@@ -96,9 +101,11 @@ export class DeviceDiscoveryModel {
   private _discoveryTimer?: NodeJS.Timeout;
   private _availabilityCheckTimer?: NodeJS.Timeout;
   private _forciblyDisabled = false;
+  private _bluetoothDiscoveryEnabled = true;
   
   // Settings
-  private _settingsService?: DeviceSettingsService;
+  private _settingsStorage?: InstanceSettingsStorage;
+  private _settingsUnsubscribe?: () => void;
   
   // Identity for attestation
   private _appOwnDeviceId?: string;
@@ -126,9 +133,11 @@ export class DeviceDiscoveryModel {
   
   // Constants
   private readonly DISCOVERY_INTERVAL = 30000; // 30 seconds
-  private readonly DISCOVERY_BROADCAST_INTERVAL = 5000; // 5 seconds - for app broadcasts
+  private readonly DISCOVERY_BROADCAST_INTERVAL = 30000;
   private readonly AVAILABILITY_CHECK_INTERVAL = 10000; // 10 seconds
   private readonly DEVICE_TIMEOUT = 60000; // 1 minute
+  private _discoveryBroadcastInterval = this.DISCOVERY_BROADCAST_INTERVAL;
+  private _discoveryBroadcastInFlight = false;
 
   private constructor() {
     debug('DeviceDiscoveryModel instance created');
@@ -325,6 +334,10 @@ export class DeviceDiscoveryModel {
     console.log(`[DeviceDiscoveryModel] Setting forcibly disabled to ${disabled}`);
     this._forciblyDisabled = disabled;
   }
+
+  public setBluetoothDiscoveryEnabled(enabled: boolean): void {
+    this._bluetoothDiscoveryEnabled = enabled;
+  }
   
   /**
    * Check if discovery is currently running
@@ -350,31 +363,39 @@ export class DeviceDiscoveryModel {
     debug('QuicModel set, transport obtained.');
   }
 
-  public setSettingsService(settingsService: DeviceSettingsService): void {
-    console.log('[DeviceDiscoveryModel] Setting up settings service listener');
-    this._settingsService = settingsService;
-    
-    // Load saved devices into ESP32ConnectionManager
-    this.loadSavedDevices().catch(error => {
-      console.error('[DeviceDiscoveryModel] Error loading saved devices:', error);
-    });
-    
-    settingsService.onSettingsChanged.listen(() => {
-      const settings = settingsService.getSettings();
-      if (settings) {
-        console.log(`[DeviceDiscoveryModel] Settings changed: discoveryEnabled=${settings.discoveryEnabled}`);
-        this.handleExternalSettingsChange(settings.discoveryEnabled);
-        
-        // Reload saved devices when settings change
-        this.loadSavedDevices().catch(error => {
-          console.error('[DeviceDiscoveryModel] Error reloading saved devices:', error);
-        });
+  public async setSettingsStorage(settingsStorage: InstanceSettingsStorage): Promise<void> {
+    this._settingsUnsubscribe?.();
+    this._settingsStorage = settingsStorage;
+
+    const applyDeviceSettings = async (values: Record<string, unknown>): Promise<void> => {
+      const discoveryEnabled = values.discoveryEnabled === true;
+      const broadcastInterval = values.discoveryBroadcastInterval;
+      if (typeof broadcastInterval !== 'number') {
+        throw new Error('devices.discoveryBroadcastInterval must be a number');
       }
+      // A development client forwards console and network diagnostics through
+      // Metro on the same JS runtime that answers CHUM keepalives. Preserve the
+      // user setting in normal operation, but never run the physical-test
+      // discovery heartbeat faster than the device TTL needs.
+      this._discoveryBroadcastInterval = (
+        __DEV__ && process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1'
+      ) ? this.DISCOVERY_BROADCAST_INTERVAL : broadcastInterval;
+      await this.handleExternalSettingsChange(discoveryEnabled);
+    };
+
+    await applyDeviceSettings(await settingsStorage.getSection('devices'));
+    this._settingsUnsubscribe = settingsStorage.subscribe(settings => {
+      const deviceSettings = settings.devices;
+      if (!deviceSettings) {
+        return;
+      }
+      void applyDeviceSettings(deviceSettings).catch(error => {
+        this.onError.emit(error instanceof Error ? error : new Error(String(error)));
+      });
     });
-    const currentSettings = settingsService.getSettings();
-    this._forciblyDisabled = !(currentSettings?.discoveryEnabled === true);
-    console.log(`[DeviceDiscoveryModel] Initialized with discovery settings: enabled=${!this._forciblyDisabled}`);
-    debug(`Initialized with discovery settings: enabled=${!this._forciblyDisabled}`);
+
+    await this.loadSavedDevices();
+    console.log(`[DeviceDiscoveryModel] Settings storage connected: enabled=${!this._forciblyDisabled}`);
   }
   
   /**
@@ -425,31 +446,18 @@ export class DeviceDiscoveryModel {
     }
   }
   
-  private handleExternalSettingsChange(discoveryEnabled: boolean): void {
+  private async handleExternalSettingsChange(discoveryEnabled: boolean): Promise<void> {
     debug(`Handling external settings change: discoveryEnabled = ${discoveryEnabled}`);
     console.log(`[DeviceDiscoveryModel] Handling external settings change: discoveryEnabled = ${discoveryEnabled}`);
     
-    // IMPORTANT: Since PropertyTree is disabled, settings always return defaults
-    // We should not stop discovery based on default values when other settings change
-    // Only stop discovery if it was explicitly disabled by the user
-    
-    // If discovery is currently running and settings say it should be disabled,
-    // check if this is an actual user action or just a side effect of settings reload
-    if (this._isDiscovering && !discoveryEnabled) {
-      console.log('[DeviceDiscoveryModel] WARNING: Settings show discoveryEnabled=false while discovery is running');
-      console.log('[DeviceDiscoveryModel] This may be due to PropertyTree being disabled - ignoring this change');
-      // Don't stop discovery unless explicitly requested by user through toggle
-      return;
-    }
-    
     this._forciblyDisabled = !discoveryEnabled;
-    
-    if (discoveryEnabled && !this._isDiscovering) {
-      console.log('[DeviceDiscoveryModel] Discovery enabled via settings, but not starting automatically');
-      // Discovery needs to be started explicitly via UI
+
+    if (discoveryEnabled && !this._isDiscovering && this._initialized) {
+      console.log('[DeviceDiscoveryModel] Discovery enabled via settings, starting discovery');
+      await this.startDiscovery();
     } else if (!discoveryEnabled && this._isDiscovering) {
       console.log('[DeviceDiscoveryModel] Discovery disabled via settings, stopping discovery');
-      this.stopDiscovery();
+      await this.stopDiscovery();
     }
   }
 
@@ -614,13 +622,6 @@ export class DeviceDiscoveryModel {
       this.onInitialized.emit();
       debug('DeviceDiscoveryModel initialized successfully');
       console.log('[DeviceDiscoveryModel] Initialized successfully');
-      
-      // Check if discovery should be automatically started based on settings
-      const currentSettings = this._settingsService?.getSettings();
-      if (currentSettings?.discoveryEnabled === true) {
-        console.log('[DeviceDiscoveryModel] Discovery is enabled in settings but not starting automatically');
-        // Don't auto-start discovery - let UI control it
-      }
       
       return true;
     } catch (error) {
@@ -1204,12 +1205,13 @@ export class DeviceDiscoveryModel {
       // QUICVC discovery is handled by QuicVCConnectionManager listening on port 49497
       console.log('[DeviceDiscoveryModel] Using QUICVC discovery on port 49497');
 
-      // Start BTLE discovery for IoT devices and app-to-app discovery
+      // mDNS/QUICVC is the Wi-Fi discovery path used by the physical UVC flow.
       await this.startMdnsDiscovery();
 
-      // Start BTLE discovery for IoT devices and app-to-app discovery
-      await this.initializeBTLEService();
-      if (this._btleService && this._btleInitialized) {
+      if (this._bluetoothDiscoveryEnabled) {
+        await this.initializeBTLEService();
+      }
+      if (this._bluetoothDiscoveryEnabled && this._btleService && this._btleInitialized) {
         try {
           // Start scanning for other devices
           await this._btleService.startDiscovery();
@@ -1234,6 +1236,8 @@ export class DeviceDiscoveryModel {
           console.error('[DeviceDiscoveryModel] Failed to start BTLE discovery/advertising:', error);
           // Don't fail the entire discovery process if BTLE fails
         }
+      } else if (!this._bluetoothDiscoveryEnabled) {
+        console.log('[DeviceDiscoveryModel] BTLE discovery skipped for UVC integration mode');
       }
 
       // Start app discovery broadcasting
@@ -1348,18 +1352,22 @@ export class DeviceDiscoveryModel {
    * Start app discovery broadcasting
    */
   private async startAppDiscoveryBroadcast(): Promise<void> {
-    // Get broadcast interval from settings or use default
-    const settings = this._settingsService?.getSettings();
-    const broadcastInterval = settings?.discoveryBroadcastInterval || this.DISCOVERY_BROADCAST_INTERVAL;
+    const broadcastInterval = this._discoveryBroadcastInterval;
     
     console.log(`[DeviceDiscoveryModel] Starting app discovery broadcast with interval: ${broadcastInterval}ms`);
     
     // Send discovery broadcasts periodically
     this._discoveryTimer = setInterval(async () => {
+      if (this._discoveryBroadcastInFlight) {
+        return;
+      }
+      this._discoveryBroadcastInFlight = true;
       try {
         await this.sendAppDiscoveryBroadcast();
       } catch (error) {
         console.error('[DeviceDiscoveryModel] Error sending app discovery broadcast:', error);
+      } finally {
+        this._discoveryBroadcastInFlight = false;
       }
     }, broadcastInterval);
   }
@@ -1377,9 +1385,9 @@ export class DeviceDiscoveryModel {
       // Create app discovery message
       const discoveryMessage = {
         type: 'app_discovery',
-        deviceId: this._appOwnDeviceId || 'lama-app-' + Math.random().toString(36).substr(2, 9),
+        deviceId: this._appOwnDeviceId || 'vger-app-' + Math.random().toString(36).substr(2, 9),
         deviceType: 'MobileApp',
-        deviceName: 'LAMA.ONE',
+        deviceName: 'UVC VGER',
         capabilities: ['discovery', 'quic-vc', 'chat', 'file-sharing'],
         timestamp: Date.now()
       };
@@ -1392,6 +1400,17 @@ export class DeviceDiscoveryModel {
           capabilities: discoveryMessage.capabilities,
           ownerId: this._personId?.toString()
         });
+        const networkState = await NetInfo.fetch();
+        const details = networkState.details as {ipAddress?: string | null; subnet?: string | null} | null;
+        const directedBroadcast = calculateIPv4BroadcastAddress(details?.ipAddress, details?.subnet);
+        if (directedBroadcast && directedBroadcast !== '255.255.255.255') {
+          await this._quicVCManager.sendDiscoveryBroadcast({
+            deviceId: discoveryMessage.deviceId,
+            deviceType: 0x02,
+            capabilities: discoveryMessage.capabilities,
+            ownerId: this._personId?.toString(),
+          }, directedBroadcast);
+        }
         console.log('[DeviceDiscoveryModel] Sent QUICVC app discovery broadcast');
       } else {
         // Fallback to regular UDP broadcast
@@ -3047,6 +3066,9 @@ export class DeviceDiscoveryModel {
    */
   public async destroy(): Promise<void> {
     console.log('[DeviceDiscoveryModel] Destroying DeviceDiscoveryModel...');
+    this._settingsUnsubscribe?.();
+    this._settingsUnsubscribe = undefined;
+    this._settingsStorage = undefined;
     
     // Stop discovery if running
     if (this._isDiscovering) {

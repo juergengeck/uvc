@@ -9,3 +9,21 @@ export function encodeDiscoveryPacket(serviceType: number, payload: unknown): Ui
   packet.set(json, 1);
   return packet;
 }
+
+export function calculateIPv4BroadcastAddress(
+  address: string | null | undefined,
+  subnet: string | null | undefined,
+): string | undefined {
+  const addressParts = address?.split('.').map(Number);
+  const subnetParts = subnet?.split('.').map(Number);
+  if (
+    addressParts?.length !== 4
+    || subnetParts?.length !== 4
+    || [...addressParts, ...subnetParts].some(part => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return undefined;
+  }
+  return addressParts
+    .map((part, index) => (part | (255 ^ subnetParts[index])) & 255)
+    .join('.');
+}

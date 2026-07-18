@@ -131,7 +131,7 @@ export default function NetworkAdvancedScreen() {
                   style={styles.urlInput}
                   value={tempCommServerUrl}
                   onChangeText={setTempCommServerUrl}
-                  placeholder="wss://comm10.dev.refinio.one"
+                  placeholder="wss://api.glue.one/comm"
                   placeholderTextColor={theme.colors.onSurfaceVariant}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -184,7 +184,7 @@ export default function NetworkAdvancedScreen() {
                     onPress={async () => {
                       Alert.alert(
                         t('settings.network.advanced.commServer.resetTitle', { defaultValue: 'Reset CommServer URL' }),
-                        t('settings.network.advanced.commServer.resetMessage', { defaultValue: 'Reset to default URL (wss://comm10.dev.refinio.one)?' }),
+                        t('settings.network.advanced.commServer.resetMessage', { defaultValue: 'Reset to default URL (wss://api.glue.one/comm)?' }),
                         [
                           { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
                           { 

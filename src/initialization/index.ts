@@ -9,29 +9,10 @@
 // Record app start time for metrics
 global.APP_START_TIME = Date.now();
 
-// Detect hot reload and reset singletons if needed
-if (global.HOT_RELOAD_DETECTED) {
-  console.log('[Initialization] Hot reload detected, resetting singletons...');
-  // Reset network singletons that might have stale state
-  Promise.resolve().then(async () => {
-    try {
-      const { DeviceDiscoveryModel } = await import('@src/models/network/DeviceDiscoveryModel');
-      await DeviceDiscoveryModel.resetInstance();
-      
-      const { QuicModel } = await import('@src/models/network/QuicModel');
-      await QuicModel.resetInstance();
-      
-      const { UdpModel } = await import('@src/models/network/UdpModel');
-      await UdpModel.forceReset();
-      
-      console.log('[Initialization] Singletons reset successfully');
-    } catch (error) {
-      console.error('[Initialization] Error resetting singletons:', error);
-    }
-  });
-}
-// Mark hot reload for next time
-global.HOT_RELOAD_DETECTED = true;
+// Network singletons are process-owned. Fast Refresh re-evaluates modules while
+// the native process and the initialized discovery graph remain alive; tearing
+// the singletons down here closes the sole UDP socket without running the app
+// initialization graph again. Explicit logout/process cleanup owns shutdown.
 
 // -------------------------------------------------------------------------------------
 // Existing initialization debug and configuration follows
@@ -187,13 +168,14 @@ import { hasRecipe, addRecipeToRuntime } from '@refinio/one.core/lib/object-reci
 import { addEnabledRvMapType } from '@refinio/one.core/lib/reverse-map-updater';
 import { ALL_RECIPES } from '../recipes/index';
 import { getInstanceIdHash } from '@refinio/one.core/lib/instance';
-import { createDeviceSettingsService } from '@src/services/createDeviceSettingsService';
-import { registerServices } from '@src/services/registerServices';
+import { registerUvcSettingsSections } from '../settings/uvcSettingsSections';
 import { ModelService } from '../services/ModelService';
+import { ContactCreationService } from '../services/ContactCreationService';
 import LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel';
 import { COMMSERVER_URL } from '@src/config/server';
 import { getNetworkSettingsService } from '../services/NetworkSettingsService';
 import { TransportManager } from '../models/network/TransportManager';
+import { revokeDanglingAccessGrantsForPeople } from '../models/network/revokeDanglingAccessGrants';
 // Using one.leute LeuteAccessRightsManager instead of custom implementation
 import GroupModel from '@refinio/one.models/lib/models/Leute/GroupModel';
 import { calculateIdHashOfObj } from '@refinio/one.core/lib/util/object.js';
@@ -221,15 +203,6 @@ const earlyDebug = (msg: string) => {
   // console.log(`[INIT_EARLY] ${msg}`);
 };
 
-// Global authenticator instance (initialized before login)
-let authInstance: MultiUser | undefined = undefined;
-
-// Global state tracking
-let isLoggedIn = false;
-let handlersAttached = false;
-let isLoginInProgress = false; // NEW: Prevent concurrent login attempts
-let isModelInitInProgress = false; // Prevent concurrent model initialization
-
 const CREDENTIAL_KEYS = {
   email: 'vger_email',
   secret: 'vger_secret',
@@ -242,10 +215,6 @@ const LEGACY_CREDENTIAL_KEYS = {
 const LEGACY_STORAGE_DIRECTORY = 'lama';
 const LEGACY_INSTANCE_NAME = 'lama';
 let activeCredentialInstanceName: string = APP_CONFIG.name;
-
-// Declare variables for object events and platform initialization status
-let objectEventsInitialized = false;
-let platformInitialized = false;
 
 // Add a proper RECIPE_MAPS definition at the top of the file with other declarations
 // Define recipe maps for reverse mapping
@@ -278,6 +247,7 @@ import { subscribeToMessageBus } from '../config/debug';
 import { objectEvents } from '@refinio/one.models/lib/misc/ObjectEventDispatcher';
 import { createMessageBus } from '@refinio/one.core/lib/message-bus';
 import { initializePlatform } from '../platform/init';
+import { appRuntimeState } from './runtimeState';
 import { measureTime } from '../utils/performanceOptimization';
 import { keyCache } from './keyCache';
 import { performanceSummary } from '../utils/performanceSummary';
@@ -326,7 +296,7 @@ export async function loginOrRegisterWithKeys(
  * This is safe to call before login
  */
 export function getAuthenticator(): MultiUser | undefined {
-  return authInstance;
+  return appRuntimeState.authenticator;
 }
 
 /**
@@ -334,7 +304,7 @@ export function getAuthenticator(): MultiUser | undefined {
  * Returns undefined if not logged in
  */
 export function getModel(): AppModel | undefined {
-  return isLoggedIn ? ModelService.getModel() : undefined;
+  return appRuntimeState.isLoggedIn ? ModelService.getModel() : undefined;
 }
 
 /**
@@ -351,7 +321,7 @@ export async function clearModel(): Promise<void> {
       console.error('[Initialization] Error during model shutdown:', error);
     }
   }
-  isLoggedIn = false;
+  appRuntimeState.isLoggedIn = false;
 }
 
 // Note: Previously had EnhancedMultiUser wrapper to fix key generation issues,
@@ -386,12 +356,13 @@ async function migrateLegacyStorageDirectory(): Promise<void> {
  */
 export async function createInstance(): Promise<MultiUser> {
   // Check if instance already exists
-  if (authInstance) {
-    return authInstance;
+  if (appRuntimeState.authenticator) {
+    return appRuntimeState.authenticator;
   }
 
   try {
     await migrateLegacyStorageDirectory();
+    registerUvcSettingsSections();
     // Create auth instance using standard MultiUser (fixed upstream)
     const allRecipes = [
       ...RecipesStable,
@@ -400,7 +371,7 @@ export async function createInstance(): Promise<MultiUser> {
     ];
     console.log('[createInstance] Total recipes count:', allRecipes.length);
 
-    authInstance = new MultiUser({
+    const authenticator = new MultiUser({
       directory: APP_CONFIG.directory,
       recipes: allRecipes,
       reverseMaps: new Map<OneObjectTypeNames, Set<string>>([
@@ -413,8 +384,9 @@ export async function createInstance(): Promise<MultiUser> {
     });
     
     // Attach handlers once - only the first time we create the instance
-    await attachAuthHandlers(authInstance);
-    return authInstance;
+    appRuntimeState.authenticator = authenticator;
+    await attachAuthHandlers(authenticator);
+    return authenticator;
   } catch (error) {
     console.error('[Initialization] Error creating authenticator instance:', error);
     throw error;
@@ -427,7 +399,7 @@ export async function createInstance(): Promise<MultiUser> {
  */
 async function attachAuthHandlers(auth: MultiUser): Promise<void> {
   // Prevent multiple handler attachments
-  if (handlersAttached) {
+  if (appRuntimeState.handlersAttached) {
     return;
   }
 
@@ -446,16 +418,16 @@ async function attachAuthHandlers(auth: MultiUser): Promise<void> {
     const onLoginUnsubscribe = auth.onLogin.listen(async (instanceName: string, secret: string) => {
       try {
         // CRITICAL: Prevent concurrent login attempts
-        if (isLoginInProgress) {
+        if (appRuntimeState.isLoginInProgress) {
           return;
         }
         
-        if (isLoggedIn) {
+        if (appRuntimeState.isLoggedIn) {
           return;
         }
         
         // Set login in progress flag
-        isLoginInProgress = true;
+        appRuntimeState.isLoginInProgress = true;
         
         // MINIMAL WORK: Only store credentials and set basic state
         // Don't let credential storage failure prevent login
@@ -466,13 +438,13 @@ async function attachAuthHandlers(auth: MultiUser): Promise<void> {
         }
         
         // Set logged in state immediately - model initialization will happen later
-        isLoggedIn = true;
+        appRuntimeState.isLoggedIn = true;
         
       } catch (error: any) {
         console.error('[Initialization] ❌ CRITICAL: Login handler failed:', error);
         
         // CRITICAL: If login handler fails, we must not be in logged in state
-        isLoggedIn = false;
+        appRuntimeState.isLoggedIn = false;
         
         // Force auth state back to logged_out if login failed
         try {
@@ -482,14 +454,14 @@ async function attachAuthHandlers(auth: MultiUser): Promise<void> {
         }
       } finally {
         // Always clear login progress flag
-        isLoginInProgress = false;
+        appRuntimeState.isLoginInProgress = false;
       }
     });
 
     auth.onLogout(async () => {
-      const wasLoggedIn = isLoggedIn; // Store previous state
-      isLoggedIn = false; // Update state immediately
-      isLoginInProgress = false; // Reset login progress flag
+      const wasLoggedIn = appRuntimeState.isLoggedIn; // Store previous state
+      appRuntimeState.isLoggedIn = false; // Update state immediately
+      appRuntimeState.isLoginInProgress = false; // Reset login progress flag
       
       // CRITICAL: Wrap everything in try-catch to ensure logout handler NEVER fails
       // If this handler throws, it could prevent MultiUser from completing logout
@@ -551,12 +523,12 @@ async function attachAuthHandlers(auth: MultiUser): Promise<void> {
         }
       }
       
-      // F. Clear authInstance to force recreation on next login
+      // F. Clear the process-owned authenticator to force recreation on next login
       // This is critical to avoid recipe registry conflicts
-      authInstance = undefined;
+      appRuntimeState.authenticator = undefined;
     });
     
-    handlersAttached = true;
+    appRuntimeState.handlersAttached = true;
   } catch (error) {
     console.error('[Initialization] Error attaching auth handlers:', error);
     throw error;
@@ -585,6 +557,7 @@ const initializeMessageBus = async () => {
  */
 export async function initModel(auth?: MultiUser, secret?: string): Promise<AppModel> {
   const initStartTime = Date.now();
+  const integrationMode = __DEV__ && process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1';
   console.log('[PERF] Starting initModel...');
 
   // If model already exists, return it
@@ -620,14 +593,17 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
   });
 
   // CRITICAL: Initialize ObjectEventDispatcher BEFORE any components that depend on it
-  if (!objectEventsInitialized) {
+  if (!appRuntimeState.objectEventsInitialized) {
     await measureTime('objectEvents.init', async () => {
       await objectEvents.init();
-      objectEventsInitialized = true;
+      appRuntimeState.objectEventsInitialized = true;
     });
   }
 
-  const commServerUrl = getNetworkSettingsService().getCommServerUrl();
+  const configuredCommServerUrl = getNetworkSettingsService().getCommServerUrl();
+  const commServerUrl = integrationMode
+    ? process.env.EXPO_PUBLIC_UVC_COMM_SERVER_URL || configuredCommServerUrl
+    : configuredCommServerUrl;
   const leuteModel = await measureTime('LeuteModel.init', async () => {
     const startTime = Date.now();
     const model = new LeuteModel(commServerUrl, true);
@@ -657,66 +633,85 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     return manager;
   });
   
-  // Create groups properly with HashGroup (createGroupIfNotExist ensures HashGroup is created)
-  await measureTime(
-    'Group creation (parallel)',
-    () => Promise.all([
-      createGroupIfNotExist('iom', []),
-      createGroupIfNotExist('leute-replicant', []),
-      createGroupIfNotExist('glue-replicant', []),
-      createGroupIfNotExist('everyone', [])
-    ])
-  );
+  // The physical integration runtime needs pairing trust, not application
+  // channel/profile groups. Its data plane is producer-owned trie roots.
+  let accessGroups: Parameters<LeuteAccessRightsManager['init']>[0];
+  if (!integrationMode) {
+    await measureTime(
+      'Group creation (parallel)',
+      () => Promise.all([
+        createGroupIfNotExist('iom', []),
+        createGroupIfNotExist('leute-replicant', []),
+        createGroupIfNotExist('glue-replicant', []),
+        createGroupIfNotExist('everyone', [])
+      ])
+    );
 
-  // Get the IDs after creation
-  const [iomGroupId, leuteReplicantGroupId, glueReplicantGroupId, everyoneGroupId] = await measureTime(
-    'Get group IDs',
-    () => Promise.all([
-      getGroupIdByName('iom'),
-      getGroupIdByName('leute-replicant'),
-      getGroupIdByName('glue-replicant'),
-      getGroupIdByName('everyone')
-    ])
-  );
+    const [iom, leuteReplicant, glueReplicant, everyone] = await measureTime(
+      'Get group IDs',
+      () => Promise.all([
+        getGroupIdByName('iom'),
+        getGroupIdByName('leute-replicant'),
+        getGroupIdByName('glue-replicant'),
+        getGroupIdByName('everyone')
+      ])
+    );
+    accessGroups = {iom, leuteReplicant, glueReplicant, everyone};
+  }
 
   // Use statically imported LeuteAccessRightsManager
   const leuteAccessRightsManager = new LeuteAccessRightsManager(
     channelManager,
     transportManager.getConnectionsModel(),
-    leuteModel
+    leuteModel,
+    {enableChannelAccess: !integrationMode}
   );
   
   try {
-    // Pass groups configuration like one.leute does
-    const groups = {
-      iom: iomGroupId,
-      leuteReplicant: leuteReplicantGroupId,
-      glueReplicant: glueReplicantGroupId,
-      everyone: everyoneGroupId
-    };
-    await leuteAccessRightsManager.init(groups);
+    await leuteAccessRightsManager.init(accessGroups);
   } catch (error) {
     console.error('[initModel] ❌ CRITICAL: LeuteAccessRightsManager initialization failed:', error);
     console.error('[initModel] ❌ This will prevent CHUM sync from working!');
     throw error; // Don't continue with broken access rights
   }
 
+  // Complete producer-owned access integrity before any CHUM connection can
+  // request accessible roots. Metro full reloads retain durable ONE storage,
+  // so a stale Access from an older bundle must be repaired at this boundary,
+  // not skipped later by the exporter.
+  const knownPeople = new Set<SHA256IdHash<Person>>();
+  for (const someone of await leuteModel.others()) {
+    for (const identity of someone.identities()) {
+      knownPeople.add(identity);
+    }
+  }
+  const revokedDanglingAccess = await revokeDanglingAccessGrantsForPeople(knownPeople);
+  console.log(
+    `[initModel] Access integrity checked for ${knownPeople.size} durable peer identities; `
+    + `revoked ${revokedDanglingAccess} dangling grants`,
+  );
+
   // ChannelManager was already initialized earlier, before creating LeuteAccessRightsManager
 
   // Initialize platform services (UDP, BTLE, QUIC) now that we have user context
-  if (!platformInitialized) {
+  if (!appRuntimeState.platformInitialized) {
     await measureTime('initializePlatform', async () => {
-      await initializePlatform();
-      platformInitialized = true;
+      await initializePlatform({enableBluetooth: !integrationMode});
+      appRuntimeState.platformInitialized = true;
     });
   }
 
-  // Start networking AFTER all core components are properly integrated
-  // But defer this to not block UI
-  const networkingPromise = transportManager.startNetworking().catch(netErr => {
-    console.error('[initModel] ❌ Failed to start networking layer:', netErr);
-    // Continue initialization – the user can still use local features; networking can be retried later
-  });
+  // Metro can still be compiling lazy application chunks while initModel runs.
+  // Starting the commserver before those chunks have evaluated lets a several-
+  // second Hermes stall consume the server's pong window. Normal application
+  // startup retains its existing overlap; the physical integration runtime
+  // starts networking after its complete, fixed module graph is ready.
+  const startNetworking = () => transportManager.startNetworking();
+  const networkingPromise = integrationMode
+    ? undefined
+    : startNetworking().catch(netErr => {
+      console.error('[initModel] ❌ Failed to start networking layer:', netErr);
+    });
 
   // Create AppModel
   const appModel = await measureTime('AppModel.init', async () => {
@@ -726,26 +721,29 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
       transportManager,
       authenticator,
       leuteAccessRightsManager,
-      llmManager: undefined // Will be created after AppModel.init()
+      llmManager: undefined, // Will be created after AppModel.init()
+      integrationMode,
     });
     await model.init();
     return model;
   });
+  await getNetworkSettingsService().setSettingsStorage(appModel.settingsStorage);
 
-  // Wait for networking to complete (non-blocking for UI)
-  await networkingPromise;
+  if (networkingPromise) {
+    await networkingPromise;
+  }
   
   const personId = getInstanceOwnerIdHash();
   if (personId) {
-    const { deferUntilAfterRender } = await import('../utils/startupOptimization');
     const deviceDiscoveryModel = appModel.deviceDiscoveryModel;
     if (!deviceDiscoveryModel) {
       throw new Error('[initModel] DeviceDiscoveryModel not available on AppModel');
     }
-    await deviceDiscoveryModel.setChannelManager(channelManager);
-    console.log('[initModel] ✅ DeviceDiscoveryModel journal channel configured');
+    if (!integrationMode) {
+      const { deferUntilAfterRender } = await import('../utils/startupOptimization');
+      await deviceDiscoveryModel.setChannelManager(channelManager);
+      console.log('[initModel] ✅ DeviceDiscoveryModel journal channel configured');
 
-      // Initialize app journal immediately (but don't block on channel history loading)
       console.log('[initModel] 📱 Initializing app journal...');
       const { initializeAppJournal, logAppStart } = await import('../utils/appJournal');
       const journalChannelId = `app-lifecycle-journal-${personId}`;
@@ -757,7 +755,6 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
         journalChannelId,
       );
 
-      // Initialize immediately so screen tracking works
       initializeAppJournal(
         channelManager,
         journalChannel.participantsHash,
@@ -766,7 +763,6 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
       );
       console.log('[initModel] ✅ App journal initialized');
 
-      // Defer app start logging to avoid blocking
       deferUntilAfterRender(async () => {
         try {
           const startupTime = Date.now() - (global.APP_START_TIME || Date.now());
@@ -776,18 +772,37 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
           console.error('[initModel] Error logging app start:', error);
         }
       });
+    } else {
+      deviceDiscoveryModel.setBluetoothDiscoveryEnabled(false);
+      console.log('[initModel] Skipping app journal and owned-device monitor in UVC integration mode');
+    }
       
       // Initialize DeviceDiscoveryModel core dependencies immediately
       // This ensures it's ready to handle discovery packets when they arrive
       console.log('[initModel] 📱 Setting up DeviceDiscoveryModel prerequisites...');
       try {
-        const { TrustModel } = await import('../models/TrustModel');
         const { QuicModel } = await import('../models/network/QuicModel');
 
-        // Get identity from TrustModel
-        const trustModel = new TrustModel(leuteModel);
-        await trustModel.init();
-        const identity = trustModel.getDeviceCredentials();
+        // Pairing trust is already owned by LeuteModel. The integration runtime
+        // only needs its existing instance signing identity for discovery; a
+        // second AsyncStorage-backed TrustModel database is unrelated work.
+        const identity = integrationMode
+          ? await (async () => {
+            const cryptoApi = await createCryptoApiFromDefaultKeys(instanceId);
+            return {
+              deviceId: personId,
+              secretKey: '',
+              publicKey: Array.from(cryptoApi.publicSignKey)
+                .map(byte => byte.toString(16).padStart(2, '0'))
+                .join(''),
+            };
+          })()
+          : await (async () => {
+            const { TrustModel } = await import('../models/TrustModel');
+            const trustModel = new TrustModel(leuteModel);
+            await trustModel.init();
+            return trustModel.getDeviceCredentials();
+          })();
 
         if (identity) {
           // Get QuicModel instance and initialize with discovery port
@@ -849,11 +864,8 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
 
             // DeviceDiscoveryModel is already attached to AppModel during AppModel.init()
 
-            // Connect DeviceSettingsService if available
-            const { createDeviceSettingsService } = await import('../services/createDeviceSettingsService');
-            const settingsService = await createDeviceSettingsService(appModel);
-            deviceDiscoveryModel.setSettingsService(settingsService);
-            console.log('[initModel] ✅ DeviceSettingsService connected to DeviceDiscoveryModel');
+            await deviceDiscoveryModel.setSettingsStorage(appModel.settingsStorage);
+            console.log('[initModel] ✅ Instance settings connected to DeviceDiscoveryModel');
 
             // Discovery is a runtime service, not a screen lifecycle concern. Start
             // it here once identity, QUICVC, VC verification, and settings are all
@@ -864,9 +876,8 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
               deviceDiscoveryModel.setForciblyDisabled(false);
               await deviceDiscoveryModel.startDiscovery();
               console.log('[initModel] ✅ Device discovery started for integration mode');
-            } else if (settingsService.getSettings()?.discoveryEnabled === true) {
-              await deviceDiscoveryModel.startDiscovery();
-              console.log('[initModel] ✅ Device discovery started');
+            } else if (deviceDiscoveryModel.isDiscovering()) {
+              console.log('[initModel] ✅ Device discovery started from persisted settings');
             } else {
               console.log('[initModel] Device discovery is disabled in settings');
             }
@@ -884,9 +895,20 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     console.warn('[initModel] ⚠️ PersonId not available for DeviceDiscoveryModel journal setup');
   }
 
-  // Initialize AI models in parallel - they don't block the UI since they're async
-  // Starting them immediately ensures they're ready when the user needs them
-  (async () => {
+  if (integrationMode) {
+    // All integration-owned storage listeners, trie projections, discovery
+    // transports, and Metro chunks are ready before the first control socket
+    // can receive a keepalive or CHUM wakeup.
+    await startNetworking();
+  }
+
+  // The physical integration runtime owns ONE storage and CHUM while it drives
+  // correlated device commands. Do not start unrelated channel/AI projections
+  // in that explicit mode: their startup scans contend for the same storage
+  // queue and can starve CHUM keepalive and command publication.
+  if (!integrationMode) {
+    // Initialize AI models in parallel for the normal interactive application.
+    void (async () => {
     console.log('[initModel] 🤖 Creating LLMManager (parallel)...');
     try {
       const llmManager = await LLMManager.getInstance({
@@ -937,7 +959,10 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     } catch (error) {
       console.error('[initModel] ❌ Failed to create LLMManager/AIAssistantModel/MCPManager:', error);
     }
-  })()
+    })();
+  } else {
+    console.log('[initModel] Skipping LLM/MCP/AI startup in UVC integration mode');
+  }
 
 
   // Single lazy-loaded debug helper
@@ -977,8 +1002,7 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
   
   // Now that AppModel is created and stored, set up the pairing success listener to use it
   const connectionsModelForTopics = transportManager.getConnectionsModel();
-  if (connectionsModelForTopics?.pairing?.onPairingSuccess) {
-    const { ContactCreationService } = await import('../services/ContactCreationService');
+  if (!integrationMode && connectionsModelForTopics?.pairing?.onPairingSuccess) {
     const contactService = new ContactCreationService(leuteModel);
     
     connectionsModelForTopics.pairing.onPairingSuccess.listen(async (
@@ -1102,9 +1126,33 @@ async function readStoredCredentials(): Promise<{
  * Restore the last authenticated local ONE instance on cold start.
  */
 export async function restoreStoredCredentials(auth: MultiUser): Promise<boolean> {
-  const credentials = await readStoredCredentials();
+  let credentials = await readStoredCredentials();
   if (!credentials) {
     return false;
+  }
+
+  // Product branding is not a ONE identity migration. Older installations
+  // own a durable, already-paired `lama` Person/Instance in the current VGER
+  // storage directory. A previous key-name migration copied the secret but
+  // selected `vger/vger` on cold start, which silently registered an unrelated
+  // identity and abandoned all existing trust. Prefer the existing durable
+  // identity when that exact legacy instance is present; new installations,
+  // which have no such storage, continue to use VGER identifiers.
+  if (
+    credentials.email === APP_CONFIG.name
+    && credentials.instanceName === APP_CONFIG.name
+    && await auth.isRegistered(LEGACY_INSTANCE_NAME, LEGACY_INSTANCE_NAME)
+  ) {
+    credentials = {
+      email: LEGACY_INSTANCE_NAME,
+      secret: credentials.secret,
+      instanceName: LEGACY_INSTANCE_NAME,
+    };
+    await Promise.all([
+      SettingsStore.setItem(CREDENTIAL_KEYS.email, credentials.email),
+      SettingsStore.setItem(CREDENTIAL_KEYS.instance, credentials.instanceName),
+    ]);
+    console.log('[Initialization] Preserved existing ONE identity across VGER branding migration');
   }
 
   await loginOrRegisterWithKeys(
@@ -1208,7 +1256,7 @@ export function debugAuthState(): void {
   const auth = getAuthenticator();
   if (auth) {
     console.log(`[Debug] Current auth state: ${auth.authState?.currentState}`);
-    console.log(`[Debug] isLoggedIn flag: ${isLoggedIn}`);
+    console.log(`[Debug] isLoggedIn flag: ${appRuntimeState.isLoggedIn}`);
     console.log(`[Debug] Model exists: ${!!ModelService.getModel()}`);
   } else {
     console.log('[Debug] No authenticator available');
@@ -1294,15 +1342,16 @@ export async function deleteAllAppData(): Promise<void> {
     }
     
     // Clear all state flags
-    isLoggedIn = false;
-    isLoginInProgress = false;
-    isModelInitInProgress = false;
-    objectEventsInitialized = false;
-    platformInitialized = false;
-    handlersAttached = false;
+    appRuntimeState.isLoggedIn = false;
+    appRuntimeState.isLoginInProgress = false;
+    appRuntimeState.isModelInitInProgress = false;
+    appRuntimeState.objectEventsInitialized = false;
+    appRuntimeState.platformInitialized = false;
+    appRuntimeState.handlersAttached = false;
     
     // Clear authenticator reference to force recreation
-    authInstance = undefined;
+    appRuntimeState.authenticator = undefined;
+    appRuntimeState.initializationPromise = undefined;
     
     // Clear model reference
     try {

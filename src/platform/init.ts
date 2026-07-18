@@ -12,7 +12,8 @@ import { ensureCryptoReady } from '../initialization/cryptoOptimization';
  * 3. BTLE (transport layer)
  * 4. QUIC (uses UDP as transport)
  */
-export async function initializePlatform(): Promise<void> {
+export async function initializePlatform(options: {enableBluetooth?: boolean} = {}): Promise<void> {
+  const enableBluetooth = options.enableBluetooth !== false;
   const platformStartTime = Date.now();
   console.log('[Platform] Initializing for', Platform.OS);
   
@@ -59,8 +60,9 @@ export async function initializePlatform(): Promise<void> {
   }
   
   // 3. BTLE transport
-  console.log('[Platform] Initializing BTLE...');
-  try {
+  if (enableBluetooth) {
+    console.log('[Platform] Initializing BTLE...');
+    try {
     // Dynamically import to avoid module-load-time errors
     const btleService = new RefactoredBTLEService();
     const initialized = await btleService.initialize();
@@ -82,7 +84,7 @@ export async function initializePlatform(): Promise<void> {
     } else {
       console.warn('[Platform] ⚠️ BTLE init returned false');
     }
-  } catch (error) {
+    } catch (error) {
     // Check if this is a "Bluetooth unsupported" error using same logic as DeviceDiscoveryModel
     const errorMessage = error?.toString() || '';
     if (errorMessage.includes('unsupported') || errorMessage.includes('BluetoothLE') || 
@@ -91,6 +93,9 @@ export async function initializePlatform(): Promise<void> {
     } else {
       console.warn('[Platform] ⚠️ BTLE init failed (non-critical):', error);
     }
+    }
+  } else {
+    console.log('[Platform] BTLE skipped for UVC integration mode');
   }
   
   // 4. QUIC (uses UDP)

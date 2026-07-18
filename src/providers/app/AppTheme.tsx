@@ -3,19 +3,8 @@ import { View, Appearance, Platform } from 'react-native';
 import { configureFonts, MD3DarkTheme, MD3LightTheme, Provider as PaperProvider } from 'react-native-paper';
 import { Colors } from '@src/constants/Colors';
 import { createThemedStyles } from '@src/constants/ThemeStyles';
-import type { Model as BaseModel } from '@refinio/one.models/lib/models/Model.js';
 import * as SecureStore from 'expo-secure-store';
 import { getAuthenticator, getModel } from '@src/initialization';
-
-// Define the interface for propertyTree to match actual implementation
-interface PropertyTree {
-  getValue: (key: string) => Promise<string | null>;
-  setValue: (key: string, value: string) => Promise<void>;
-}
-
-interface Model extends BaseModel {
-  propertyTree: PropertyTree;
-}
 
 type ThemeContextType = {
   isDarkMode: boolean;
@@ -180,8 +169,6 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
   const [theme, setTheme] = useState(defaultTheme);
   const [styles, setStyles] = useState(defaultStyles);
   
-  // Get model instance only when authenticated
-  const [instance, setInstance] = useState<Model | undefined>(undefined);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Check authentication state
@@ -201,37 +188,6 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
     }
   }, []);
   
-  // Try to access model only when logged in
-  useEffect(() => {
-    let isMounted = true;
-    
-    const getModelIfLoggedIn = async () => {
-      if (!isLoggedIn) {
-        if (instance) setInstance(undefined);
-        return;
-      }
-      
-      try {
-        // Use getModel directly since it's imported at the top
-        const appModel = getModel();
-        
-        if (appModel && isMounted) {
-          console.log('[AppTheme] Model available after login');
-          // Cast to appropriate type with propertyTree
-          setInstance(appModel as unknown as Model);
-        }
-      } catch (error) {
-        console.error('[AppTheme] Error accessing model after login:', error);
-      }
-    };
-    
-    getModelIfLoggedIn();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [isLoggedIn, instance]);
-
   const updateTheme = useCallback((isDark: boolean) => {
     const newTheme = createCustomTheme(isDark);
     setTheme(newTheme);
@@ -259,35 +215,6 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
   }, [updateTheme]);
 
   /**
-   * Sync theme settings to propertyTree after login
-   * TEMPORARILY DISABLED: Prevents Settings infinite loop during initialization
-   */
-  const syncThemeToPropertyTree = useCallback(async () => {
-    if (!instance?.propertyTree || !isLoggedIn) {
-      return;
-    }
-    
-    // TEMPORARILY DISABLED: This causes infinite Settings object creation loop
-    // that prevents AppModel initialization from completing
-    console.log(`[AppTheme] PropertyTree sync temporarily disabled to prevent Settings loop`);
-    return;
-    
-    try {
-      await instance?.propertyTree?.setValue('darkMode', String(isDarkMode));
-      console.log(`[AppTheme] Synced darkMode to propertyTree: ${isDarkMode}`);
-    } catch (error) {
-      console.error('[AppTheme] Failed to sync theme to propertyTree:', error);
-    }
-  }, [instance?.propertyTree, isLoggedIn, isDarkMode]);
-
-  // Sync theme to propertyTree when user logs in
-  useEffect(() => {
-    if (instance?.propertyTree && isLoggedIn) {
-      syncThemeToPropertyTree();
-    }
-  }, [instance?.propertyTree, isLoggedIn, syncThemeToPropertyTree]);
-
-  /**
    * Toggles between light and dark mode
    */
   const toggleTheme = useCallback(async () => {
@@ -301,15 +228,16 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
       // Update the theme immediately for better UX
       updateTheme(newDarkMode);
       
-      // Save to direct storage
-      await setStoredDarkMode(newDarkMode);
-      
-      // Save to propertyTree if logged in
-      // TEMPORARILY DISABLED: Prevents Settings infinite loop during initialization
-      if (instance?.propertyTree && isLoggedIn) {
-        console.log(`[AppTheme] PropertyTree sync in toggleTheme temporarily disabled to prevent Settings loop`);
-        // await instance.propertyTree.setValue('darkMode', String(newDarkMode));
+      if (isLoggedIn) {
+        const appModel = getModel();
+        if (!appModel?.settingsStorage) {
+          throw new Error('Cannot persist theme before settings storage is initialized');
+        }
+        await appModel.settingsStorage.updateField('ui', 'darkMode', newDarkMode);
       }
+
+      // Keep the small pre-login cache in sync with the canonical value.
+      await setStoredDarkMode(newDarkMode);
     } catch (error) {
       console.error('[AppTheme] Failed to toggle theme:', error);
       // Revert on error
@@ -318,7 +246,7 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [instance?.propertyTree, isDarkMode, updateTheme]);
+  }, [isDarkMode, isLoggedIn, updateTheme]);
 
   const contextValue = {
     isDarkMode,

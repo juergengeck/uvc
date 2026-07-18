@@ -6,7 +6,6 @@
 
 import { NetworkConnectivityService } from './NetworkConnectivityService';
 import Debug from 'debug';
-import { createDeviceSettingsService, createDefaultDeviceSettingsService } from './createDeviceSettingsService';
 import { ModelService } from './ModelService';
 import { getNetworkSettingsService } from './NetworkSettingsService';
 
@@ -20,9 +19,8 @@ let networkConnectivityService: NetworkConnectivityService | null = null;
  * Register all services with the application model
  * 
  * @param appModel The application model
- * @param deviceSettingsService Optional device settings service instance
  */
-export function registerServices(appModel: any, customDeviceSettingsService?: any): void {
+export function registerServices(appModel: any): void {
   debug('Registering services with app model');
   
   try {
@@ -39,14 +37,6 @@ export function registerServices(appModel: any, customDeviceSettingsService?: an
       debug('NetworkConnectivityService created');
     }
     
-    // Handle device settings service
-    let deviceSettingsService = customDeviceSettingsService;
-    
-    if (!deviceSettingsService) {
-      debug('Creating DeviceSettingsService with model');
-      deviceSettingsService = createDeviceSettingsService(appModel);
-    }
-    
     // Initialize NetworkSettingsService lazily to prevent early chum operations
     // NOTE: NetworkSettingsService will be created on first access via getNetworkSettingsService()
     const networkSettingsServiceLazy = {
@@ -58,11 +48,6 @@ export function registerServices(appModel: any, customDeviceSettingsService?: an
       if (typeof appModel.registerService === 'function') {
         // Register using registerService method
         debug('Registering services with app model.registerService');
-        
-        if (deviceSettingsService) {
-          appModel.registerService('deviceSettings', deviceSettingsService);
-          debug('DeviceSettingsService registered');
-        }
         
         if (networkConnectivityService) {
           appModel.registerService('networkConnectivity', networkConnectivityService);
@@ -76,7 +61,6 @@ export function registerServices(appModel: any, customDeviceSettingsService?: an
         // Register using services Map
         debug('Registering services with app model.services Map');
         
-        appModel.services.set('deviceSettings', deviceSettingsService);
         appModel.services.set('networkConnectivity', networkConnectivityService);
         appModel.services.set('networkSettings', networkSettingsServiceLazy);
       } else {
@@ -89,7 +73,6 @@ export function registerServices(appModel: any, customDeviceSettingsService?: an
       console.log('[registerServices] Services initialized - ConnectionsModel handles all connection functionality');
       
       (global as any).services = {
-        deviceSettings: deviceSettingsService,
         modelService: ModelService,
         network: () => getNetworkSettingsService() // Lazy access for debugging
       };
@@ -133,4 +116,4 @@ export default {
   registerServices,
   getNetworkConnectivityService,
   cleanupServices
-}; 
+};

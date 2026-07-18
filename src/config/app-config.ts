@@ -30,7 +30,7 @@ type AppConfig = {
 export function getDefaultConfig(): AppConfig {
     return {
         app: "vger",
-        commServerUrl: "wss://comm10.dev.refinio.one",
+        commServerUrl: "wss://api.glue.one/comm",
         initialIopPeers: [
             {
                 identityFile: "leute.id.json",
@@ -42,7 +42,7 @@ export function getDefaultConfig(): AppConfig {
                     personSignKeyPublic: "a00b362cb59d1a5ff87bf297d50b77b99e0385848ad380797a7e837042e86c34",
                     instanceKeyPublic: "d5fa8fcb554c57145104405d8d8631d5ce04cbe3d6fb393542140c994e70cb29",
                     instanceSignKeyPublic: "776bd21b76b541ac91bcd972f692dd05b4a49969c2c7dddbb00da732d08c667e",
-                    url: "wss://comm10.dev.refinio.one"
+                    url: "wss://api.glue.one/comm"
                 },
                 initialName: "Refinio LEUTE.ONE Replicant",
                 group: "leuteReplicant"
@@ -57,7 +57,7 @@ export function getDefaultConfig(): AppConfig {
                     personSignKeyPublic: "9cb08179555679eb8129bffddcb464df1dc3803b2fbd64a5b03e5b065fbe1aa6",
                     instanceKeyPublic: "6f90865cc45b3e162df687e5c10136f934c6bddd32036db8fed5e0f192c71151",
                     instanceSignKeyPublic: "2419c68fb5afeafccaa4c81742aee4ea6936889410820388fca4d8df5202fab8",
-                    url: "wss://comm10.dev.refinio.one"
+                    url: "wss://api.glue.one/comm"
                 },
                 initialName: "Refinio GLUE.ONE Replicant",
                 group: "glueReplicant"

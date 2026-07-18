@@ -42,13 +42,18 @@ const appNativeModules = {
 };
 
 const refinioPackages = {
+  '@glueone/glue.core': path.resolve(oneWorkspaceRoot, 'packages/glue.core'),
   '@refinio/api': path.resolve(oneWorkspaceRoot, 'packages/refinio.api'),
   '@refinio/connection.btle': path.resolve(oneWorkspaceRoot, 'packages/connection.btle'),
   '@refinio/connection.core': path.resolve(oneWorkspaceRoot, 'packages/connection.core'),
+  '@refinio/meaning.core': path.resolve(oneWorkspaceRoot, 'packages/meaning.core'),
   '@refinio/one.core': path.resolve(oneWorkspaceRoot, 'packages/one.core'),
   '@refinio/one.core-expo': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo'),
   '@refinio/one.models': path.resolve(oneWorkspaceRoot, 'packages/one.models'),
   '@refinio/quicvc-protocol': path.resolve(oneWorkspaceRoot, 'packages/quicvc-protocol'),
+  '@refinio/settings.core': path.resolve(oneWorkspaceRoot, 'packages/settings.core'),
+  '@refinio/trie.core': path.resolve(oneWorkspaceRoot, 'packages/trie.core'),
+  '@refinio/uvc.core': path.resolve(oneWorkspaceRoot, 'packages/uvc.core'),
 };
 
 function resolveRefinioPackageSubpath(moduleName) {
@@ -75,7 +80,7 @@ module.exports = {
   projectRoot,
   watchFolders: [
     ...(config.watchFolders || []),
-    oneWorkspaceRoot,
+    ...new Set(Object.values(refinioPackages)),
   ],
   resolver: {
     ...config.resolver,

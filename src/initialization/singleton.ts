@@ -9,60 +9,49 @@
 console.log('[SingletonInitializer] Starting import from ./index');
 
 import { getAuthenticator, createInstance } from './index';
-import { QuicModel } from '@src/models/network/QuicModel';
-import { UdpModel } from '@src/models/network/UdpModel';
 import { preInitializeCrypto, prewarmCrypto } from './cryptoOptimization';
+import { appRuntimeState } from './runtimeState';
 
 console.log('[SingletonInitializer] Import successful - functions available:', {
   getAuthenticator: typeof getAuthenticator,
   createInstance: typeof createInstance
 });
 
-class SingletonInitializer {
-  private initializationPromise: Promise<void> | null = null;
-
-  public initialize(): Promise<void> {
-    if (this.initializationPromise) {
-      console.log('[SingletonInitializer] Initialization already in progress/complete. Returning existing promise.');
-      return this.initializationPromise;
-    }
-
-    console.log('[SingletonInitializer] Starting one-time system initialization...');
-    this.initializationPromise = (async () => {
-      try {
-        // Pre-initialize crypto early to speed up login
-        console.log('[SingletonInitializer] Pre-initializing crypto...');
-        await preInitializeCrypto();
-
-        // Prewarm crypto libraries (non-blocking)
-        prewarmCrypto().catch(err =>
-          console.warn('[SingletonInitializer] Crypto prewarm failed (non-critical):', err)
-        );
-
-        // Reset network layer to ensure clean state after reload
-        console.log('[SingletonInitializer] Resetting network layer...');
-        await UdpModel.resetInstance();
-        await QuicModel.resetInstance();
-        
-        let auth = getAuthenticator();
-        if (!auth) {
-          console.log('[SingletonInitializer] No existing authenticator, creating new instance.');
-          auth = await createInstance();
-        } else {
-          console.log('[SingletonInitializer] Reusing existing authenticator instance.');
-        }
-        console.log('[SingletonInitializer] ✅ System initialization complete.');
-      } catch (error) {
-        console.error('❌ CRITICAL: Singleton initialization failed.', error);
-        // Reset promise on failure to allow a retry if the app logic supports it.
-        this.initializationPromise = null;
-        throw error;
-      }
-    })();
-
-    return this.initializationPromise;
+export function initializeApp(): Promise<void> {
+  const existing = appRuntimeState.initializationPromise;
+  if (existing) {
+    console.log('[SingletonInitializer] Initialization already in progress/complete. Returning process-owned promise.');
+    return existing;
   }
-}
 
-const initializer = new SingletonInitializer();
-export const initializeApp = () => initializer.initialize(); 
+  console.log('[SingletonInitializer] Starting one-time system initialization...');
+  const initializationPromise = (async () => {
+    // Pre-initialize crypto early to speed up login
+    console.log('[SingletonInitializer] Pre-initializing crypto...');
+    await preInitializeCrypto();
+
+    // Prewarm crypto libraries (non-blocking)
+    prewarmCrypto().catch(err =>
+      console.warn('[SingletonInitializer] Crypto prewarm failed (non-critical):', err)
+    );
+
+    // Network models are process-owned and initialize as part of the authenticated
+    // model graph. Re-entering this module during Fast Refresh must not reset them.
+    let auth = getAuthenticator();
+    if (!auth) {
+      console.log('[SingletonInitializer] No existing authenticator, creating new instance.');
+      auth = await createInstance();
+    } else {
+      console.log('[SingletonInitializer] Reusing existing authenticator instance.');
+    }
+    console.log('[SingletonInitializer] ✅ System initialization complete.');
+  })();
+  appRuntimeState.initializationPromise = initializationPromise;
+  void initializationPromise.catch(error => {
+    console.error('❌ CRITICAL: Singleton initialization failed.', error);
+    if (appRuntimeState.initializationPromise === initializationPromise) {
+      appRuntimeState.initializationPromise = undefined;
+    }
+  });
+  return initializationPromise;
+}

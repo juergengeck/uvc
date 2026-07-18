@@ -2235,7 +2235,7 @@ export class QuicVCConnectionManager {
         deviceType: number;
         ownerId?: string;
         capabilities: string[];
-    }): Promise<void> {
+    }, targetAddress: string = '255.255.255.255'): Promise<void> {
         // Create DISCOVERY frame
         const discoveryFrame = {
             type: QuicVCFrameType.DISCOVERY,
@@ -2261,9 +2261,9 @@ export class QuicVCConnectionManager {
         
         const packetBytes = this.serializeDiscoveryPacket(packet);
         
-        // Broadcast to 255.255.255.255:49497
+        // Broadcast to the requested interface broadcast address.
         const quicModel = this.getQuicModel();
-        await quicModel.send(packetBytes, '255.255.255.255', this.QUICVC_PORT);
+        await quicModel.send(packetBytes, targetAddress, this.QUICVC_PORT);
         
         debug(`Sent QUICVC discovery broadcast for device ${deviceInfo.deviceId}`);
     }

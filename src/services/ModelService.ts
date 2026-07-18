@@ -3,8 +3,7 @@ import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js'
 import type TopicModel from '@refinio/one.models/lib/models/Chat/TopicModel.js';
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
 import type DeviceModel from '../models/device/DeviceModel';
-
-let modelInstance: AppModel | undefined;
+import { appRuntimeState } from '../initialization/runtimeState';
 
 /**
  * Service for accessing global model instances
@@ -15,55 +14,55 @@ export class ModelService {
    * Set the global model instance
    */
   static setModel(model: AppModel) {
-    modelInstance = model;
+    appRuntimeState.model = model;
   }
 
   /**
    * Clear the global model instance
    */
   static clearModel() {
-    modelInstance = undefined;
+    appRuntimeState.model = undefined;
   }
 
   /**
    * Get the global model instance
    */
   static getModel(): AppModel | undefined {
-    return modelInstance;
+    return appRuntimeState.model;
   }
 
   /**
    * Get the LeuteModel instance
    */
   static getLeuteModel(): LeuteModel | undefined {
-    return modelInstance?.leuteModel;
+    return appRuntimeState.model?.leuteModel;
   }
 
   /**
    * Get the TopicModel instance
    */
   static getTopicModel(): TopicModel | undefined {
-    return modelInstance?.topicModel;
+    return appRuntimeState.model?.topicModel;
   }
 
   /**
    * Get the ChannelManager instance
    */
   static getChannelManager(): ChannelManager | undefined {
-    return modelInstance?.channelManager;
+    return appRuntimeState.model?.channelManager;
   }
 
   /**
    * Get the DeviceModel instance
    */
   static getDeviceModel(): DeviceModel | undefined {
-    return modelInstance?.deviceModel;
+    return appRuntimeState.model?.deviceModel;
   }
 
   /**
    * Get the AppModel instance (alias for getModel)
    */
   static getAppModel(): AppModel | undefined {
-    return modelInstance;
+    return appRuntimeState.model;
   }
-} 
+}

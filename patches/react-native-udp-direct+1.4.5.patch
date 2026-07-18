@@ -1,0 +1,482 @@
+--- node_modules/react-native-udp-direct/ios/UDPDirectJSI.h
++++ node_modules/react-native-udp-direct/ios/UDPDirectJSI.h
+@@ -14,6 +14,7 @@
+ class UDPDirectJSI {
+ public:
+     static void install(jsi::Runtime& runtime, void* socketManager, std::shared_ptr<CallInvoker> jsInvoker);
++    static void invalidate(void* socketManager);
+     
+ private:
+     // Core JSI functions
+@@ -57,4 +58,4 @@
+ };
+ 
+ } // namespace react
+-} // namespace facebook
+\ No newline at end of file
++} // namespace facebook
+--- node_modules/react-native-udp-direct/ios/UDPDirectJSI.mm
++++ node_modules/react-native-udp-direct/ios/UDPDirectJSI.mm
+@@ -2,6 +2,7 @@
+ #import "UDPSocketManager.h"
+ #import <React/RCTLog.h>
+ #import <jsi/jsi.h>
++#include <atomic>
+ #include <memory>
+ #include <mutex>
+ #include <unordered_map>
+@@ -11,10 +12,24 @@
+ 
+ using namespace facebook::jsi;
+ 
+-// Global weak references
+-static void* g_socketManager = nullptr;
++// These bindings are process-global because JSI host functions are installed on
++// the runtime global object. Keep an explicit runtime generation token so a
++// callback queued by the old bridge cannot touch the replacement runtime.
++static std::mutex g_bindingMutex;
++static __strong UDPSocketManager *g_socketManager = nil;
+ static std::weak_ptr<CallInvoker> g_jsInvoker;
++static std::shared_ptr<std::atomic<bool>> g_runtimeAlive;
+ 
++static std::shared_ptr<CallInvoker> currentJSInvoker() {
++    std::lock_guard<std::mutex> lock(g_bindingMutex);
++    return g_jsInvoker.lock();
++}
++
++static std::shared_ptr<std::atomic<bool>> currentRuntimeToken() {
++    std::lock_guard<std::mutex> lock(g_bindingMutex);
++    return g_runtimeAlive;
++}
++
+ // MutableBuffer implementation for NSData
+ class NSDataBuffer : public MutableBuffer {
+ public:
+@@ -36,11 +51,17 @@
+ 
+ void UDPDirectJSI::install(Runtime& runtime, void* socketManager, std::shared_ptr<CallInvoker> jsInvoker) {
+     NSLog(@"[UDPDirectJSI] Installing JSI bindings with CallInvoker");
++
++    {
++        std::lock_guard<std::mutex> lock(g_bindingMutex);
++        if (g_runtimeAlive) {
++            g_runtimeAlive->store(false, std::memory_order_release);
++        }
++        g_socketManager = (__bridge UDPSocketManager *)socketManager;
++        g_jsInvoker = jsInvoker;
++        g_runtimeAlive = std::make_shared<std::atomic<bool>>(true);
++    }
+     
+-    // Store references
+-    g_socketManager = socketManager;
+-    g_jsInvoker = jsInvoker;
+-    
+     // Install udpSendDirect function
+     auto udpSendDirectFunc = Function::createFromHostFunction(
+         runtime,
+@@ -95,11 +116,31 @@
+     NSLog(@"[UDPDirectJSI] JSI bindings installed successfully");
+ }
+ 
++void UDPDirectJSI::invalidate(void* socketManager) {
++    UDPSocketManager *manager = (__bridge UDPSocketManager *)socketManager;
++    std::lock_guard<std::mutex> lock(g_bindingMutex);
++
++    // A replacement bridge may already have installed a new manager. Never let
++    // teardown of the old bridge invalidate the new runtime's bindings.
++    if (g_socketManager != manager) {
++        return;
++    }
++
++    if (g_runtimeAlive) {
++        g_runtimeAlive->store(false, std::memory_order_release);
++    }
++    g_jsInvoker.reset();
++    g_runtimeAlive.reset();
++    g_socketManager = nil;
++    NSLog(@"[UDPDirectJSI] Invalidated JSI bindings");
++}
++
+ void* UDPDirectJSI::getSocketManager(Runtime& runtime) {
++    std::lock_guard<std::mutex> lock(g_bindingMutex);
+     if (!g_socketManager) {
+         throw JSError(runtime, "UDP socket manager not initialized");
+     }
+-    return g_socketManager;
++    return (__bridge void *)g_socketManager;
+ }
+ 
+ Value UDPDirectJSI::udpSendDirect(
+@@ -150,9 +191,10 @@
+         
+         // Create NSData with the specified range
+         uint8_t* dataPtr = arrayBuffer.data(runtime) + offset;
+-        NSData *data = [NSData dataWithBytesNoCopy:dataPtr
+-                                             length:length
+-                                       freeWhenDone:NO];
++        // The native send is queued. Copy before returning to JS so the queued
++        // GCDAsyncUdpSocket send never points into an ArrayBuffer that Hermes is
++        // free to collect after this host function returns.
++        NSData *data = [NSData dataWithBytes:dataPtr length:length];
+         
+         // Extract port and address
+         if (!arguments[4].isNumber()) {
+@@ -347,6 +389,11 @@
+         
+         // Set up native callbacks that invoke JSI functions
+         UDPSocketManager *manager = (__bridge UDPSocketManager *)getSocketManager(runtime);
++        auto runtimeToken = currentRuntimeToken();
++
++        if (!runtimeToken) {
++            throw JSError(runtime, "UDP JSI runtime is no longer active");
++        }
+         
+         if (onMessage) {
+             // Capture the handler
+@@ -362,14 +409,17 @@
+                 NSMutableData *mutableData = [data mutableCopy];
+                 
+                 // Get the JS invoker
+-                auto jsInvoker = g_jsInvoker.lock();
++                auto jsInvoker = currentJSInvoker();
+                 if (!jsInvoker) {
+                     NSLog(@"[UDPDirectJSI] JS invoker no longer available");
+                     return;
+                 }
+                 
+                 // Use the JS invoker to run on the JS thread
+-                jsInvoker->invokeAsync([&runtime, messageHandler, socketIdStr, hostStr, portNum, mutableData]() {
++                jsInvoker->invokeAsync([runtimeToken, &runtime, messageHandler, socketIdStr, hostStr, portNum, mutableData]() {
++                    if (!runtimeToken->load(std::memory_order_acquire)) {
++                        return;
++                    }
+                     try {
+                         // Create a MutableBuffer that wraps NSData
+                         auto buffer = std::make_shared<NSDataBuffer>(mutableData);
+@@ -399,24 +449,48 @@
+         }
+         
+         if (onError) {
++            auto errorHandler = onError;
+             manager.onSendFailure = ^(NSNumber* sockId, long tag, NSError* error) {
+-                auto event = Object(runtime);
+-                event.setProperty(runtime, "socketId", String::createFromUtf8(runtime, [[sockId stringValue] UTF8String]));
+-                event.setProperty(runtime, "error", String::createFromUtf8(runtime, [[error localizedDescription] UTF8String]));
+-                
+-                onError->call(runtime, event);
++                auto jsInvoker = currentJSInvoker();
++                if (!jsInvoker) {
++                    return;
++                }
++
++                std::string socketIdString = [[sockId stringValue] UTF8String];
++                std::string errorString = [[error localizedDescription] UTF8String];
++                jsInvoker->invokeAsync([runtimeToken, &runtime, errorHandler, socketIdString, errorString]() {
++                    if (!runtimeToken->load(std::memory_order_acquire)) {
++                        return;
++                    }
++                    auto event = Object(runtime);
++                    event.setProperty(runtime, "socketId", String::createFromUtf8(runtime, socketIdString));
++                    event.setProperty(runtime, "error", String::createFromUtf8(runtime, errorString));
++                    errorHandler->call(runtime, event);
++                });
+             };
+         }
+         
+         if (onClose) {
++            auto closeHandler = onClose;
+             manager.onSocketClosed = ^(NSNumber* sockId, NSError* _Nullable error) {
+-                auto event = Object(runtime);
+-                event.setProperty(runtime, "socketId", String::createFromUtf8(runtime, [[sockId stringValue] UTF8String]));
+-                if (error) {
+-                    event.setProperty(runtime, "error", String::createFromUtf8(runtime, [[error localizedDescription] UTF8String]));
++                auto jsInvoker = currentJSInvoker();
++                if (!jsInvoker) {
++                    return;
+                 }
+-                
+-                onClose->call(runtime, event);
++
++                std::string socketIdString = [[sockId stringValue] UTF8String];
++                std::string errorString = error ? [[error localizedDescription] UTF8String] : "";
++                jsInvoker->invokeAsync([runtimeToken, &runtime, closeHandler, socketIdString, errorString]() {
++                    if (!runtimeToken->load(std::memory_order_acquire)) {
++                        return;
++                    }
++                    auto event = Object(runtime);
++                    event.setProperty(runtime, "socketId", String::createFromUtf8(runtime, socketIdString));
++                    if (!errorString.empty()) {
++                        event.setProperty(runtime, "error", String::createFromUtf8(runtime, errorString));
++                    }
++                    closeHandler->call(runtime, event);
++                });
+             };
+         }
+         
+@@ -433,4 +507,4 @@
+ }
+ 
+ } // namespace react
+-} // namespace facebook
+\ No newline at end of file
++} // namespace facebook
+--- node_modules/react-native-udp-direct/ios/NativeUDPDirectModule.mm
++++ node_modules/react-native-udp-direct/ios/NativeUDPDirectModule.mm
+@@ -92,10 +92,15 @@
+ - (void)invalidate {
+     NSLog(@"[NativeUDPDirectModule] invalidate called - JS context is being destroyed");
+ 
+-    // Clean up all sockets synchronously to prevent crashes on reload
++    // Make every callback from this bridge inert before closing sockets. Socket
++    // close delegate methods can run while Hermes is tearing its runtime down.
+     if (_socketManager) {
+-        // Use the synchronous version to ensure complete cleanup before JS reload
++        UDPDirectJSI::invalidate((__bridge void *)_socketManager);
+         dispatch_sync(_socketManager.delegateQueue, ^{
++            self->_socketManager.onDataReceived = nil;
++            self->_socketManager.onSocketClosed = nil;
++            self->_socketManager.onSendSuccess = nil;
++            self->_socketManager.onSendFailure = nil;
+             [self->_socketManager closeAllSocketsSynchronously];
+         });
+         NSLog(@"[NativeUDPDirectModule] All sockets closed synchronously");
+@@ -117,4 +122,4 @@
+     // Additional cleanup if needed, but invalidate should handle most of it
+ }
+ 
+-@end
+\ No newline at end of file
++@end
+--- node_modules/react-native-udp-direct/ios/UDPDirectModuleCxxImpl.mm
++++ node_modules/react-native-udp-direct/ios/UDPDirectModuleCxxImpl.mm
+@@ -32,25 +32,12 @@
+     // Set destruction flag IMMEDIATELY to prevent any callback execution
+     isBeingDestroyed_ = true;
+     
+-    // Simple cleanup - socket manager may not even exist if never used
+-    if (socketManager_) {
+-        NSLog(@"[UDPDirectModuleCxxImpl] Releasing socket manager");
+-        UDPSocketManager *manager = (__bridge_transfer UDPSocketManager *)socketManager_;
+-        // Clear callbacks to prevent any lingering references
+-        manager.onDataReceived = nil;
+-        manager.onSocketClosed = nil;
+-        manager.onSendSuccess = nil;
+-        manager.onSendFailure = nil;
+-        // Let ARC handle the rest - no complex synchronous operations
+-        manager = nil;
+-        socketManager_ = nullptr;
+-        NSLog(@"[UDPDirectModuleCxxImpl] Socket manager released via ARC");
+-    } else {
+-        NSLog(@"[UDPDirectModuleCxxImpl] No socket manager to clean up");
+-    }
++    // NativeUDPDirectModule owns the manager. Never manufacture ARC ownership
++    // from this opaque, injected pointer during C++ destruction.
++    socketManager_ = nullptr;
+ }
+ 
+-// Helper to get the socket manager - creates it lazily when first needed
++// Helper to get the socket manager injected by NativeUDPDirectModule.
+ UDPSocketManager* UDPDirectModuleCxxImpl::getSocketManager() {
+     NSLog(@"[UDPDirectModuleCxxImpl] getSocketManager called");
+     
+@@ -60,33 +47,9 @@
+         return nil;
+     }
+     
+-    // Lazy initialization - only create when first needed
+     if (!socketManager_) {
+-        NSLog(@"[UDPDirectModuleCxxImpl] Lazy initialization of socket manager");
+-        
+-        // Create the Objective-C socket manager with a dedicated queue
+-        dispatch_queue_t udpQueue = dispatch_queue_create("com.lama.udp.socket.queue", DISPATCH_QUEUE_SERIAL);
+-        UDPSocketManager *manager = [[UDPSocketManager alloc] initWithDelegateQueue:udpQueue];
+-        
+-        // Initialize with safe default callbacks
+-        manager.onDataReceived = ^(NSNumber* socketId, NSData* data, NSString* host, uint16_t port, NSNumber* bufferId) {
+-            NSLog(@"[UDPDirectModuleCxxImpl] Default data callback - socket %@", socketId);
+-        };
+-        
+-        manager.onSocketClosed = ^(NSNumber* socketId, NSError* _Nullable error) {
+-            NSLog(@"[UDPDirectModuleCxxImpl] Default close callback - socket %@", socketId);
+-        };
+-        
+-        manager.onSendSuccess = ^(NSNumber* socketId, long tag) {
+-            NSLog(@"[UDPDirectModuleCxxImpl] Default success callback - socket %@", socketId);
+-        };
+-        
+-        manager.onSendFailure = ^(NSNumber* socketId, long tag, NSError* error) {
+-            NSLog(@"[UDPDirectModuleCxxImpl] Default failure callback - socket %@: %@", socketId, error.localizedDescription);
+-        };
+-        
+-        socketManager_ = (__bridge_retained void *)manager;
+-        NSLog(@"[UDPDirectModuleCxxImpl] Socket manager created lazily: %p", socketManager_);
++        NSLog(@"[UDPDirectModuleCxxImpl] Socket manager has not been injected");
++        return nil;
+     }
+     
+     @try {
+--- node_modules/react-native-udp-direct/ios/UDPSocketManager.mm
++++ node_modules/react-native-udp-direct/ios/UDPSocketManager.mm
+@@ -356,20 +356,21 @@
+ }
+ 
+ - (void)sendData:(NSData *)data onSocket:(NSNumber *)socketId toHost:(NSString *)host port:(uint16_t)port tag:(long)tag {
+-    // Perform a quick lookup synchronously so we don’t capture a nil socket
+-    GCDAsyncUdpSocket *udpSocket = _asyncSockets[socketId];
+-    if (!udpSocket) {
+-        UDP_SM_ERROR(@"Socket %@ not found for sending.", socketId);
+-        if (self.onSendFailure) {
+-            NSDictionary *userInfo = @{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Socket %@ not found for sending.", socketId]};
+-            NSError *notFoundError = [NSError errorWithDomain:UDPErrorDomain code:UDPErrorCodeSocketNotFound userInfo:userInfo];
+-            self.onSendFailure(socketId, tag, notFoundError);
++    // The registry is owned by _delegateQueue. Lookup and send must be one
++    // serialized operation so close/reload cannot invalidate a socket between
++    // an off-queue lookup and the queued send.
++    dispatch_async(_delegateQueue, ^{
++        GCDAsyncUdpSocket *udpSocket = self->_asyncSockets[socketId];
++        if (!udpSocket) {
++            UDP_SM_LOG(@"Socket %@ is closed; rejecting send.", socketId);
++            if (self.onSendFailure) {
++                NSDictionary *userInfo = @{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Socket %@ not found for sending.", socketId]};
++                NSError *notFoundError = [NSError errorWithDomain:UDPErrorDomain code:UDPErrorCodeSocketNotFound userInfo:userInfo];
++                self.onSendFailure(socketId, tag, notFoundError);
++            }
++            return;
+         }
+-        return;
+-    }
+ 
+-    // Use async queue for the real send to preserve ordering with delegate callbacks
+-    dispatch_async(_delegateQueue, ^{
+         UDP_SM_LOG(@"Socket %@: Sending %lu bytes to %@:%u with tag %ld", socketId, (unsigned long)data.length, host, port, tag);
+         [udpSocket sendData:data toHost:host port:port withTimeout:-1 tag:tag];
+     });
+@@ -987,4 +988,4 @@
+     UDP_SM_LOG(@"Dealloc - cleaned up resources.");
+ }
+ 
+-@end 
+\ No newline at end of file
++@end 
+--- node_modules/react-native-udp-direct/ios/UDPDirectModuleCxxImpl.mm
++++ node_modules/react-native-udp-direct/ios/UDPDirectModuleCxxImpl.mm
+@@ -844,9 +844,19 @@
+     
+     if (socketManager_) {
+         NSLog(@"[UDPDirectModuleCxxImpl] Warning: Socket manager already set, replacing");
++        UDPSocketManager *previousManager = (__bridge_transfer UDPSocketManager *)socketManager_;
++        previousManager.onDataReceived = nil;
++        previousManager.onSocketClosed = nil;
++        previousManager.onSendSuccess = nil;
++        previousManager.onSendFailure = nil;
++        previousManager = nil;
+     }
+-    
+-    socketManager_ = socketManager;
++
++    // The destructor releases socketManager_ with __bridge_transfer, so this
++    // assignment must acquire a matching retain. The Objective-C module also
++    // owns the manager; these are two independent, balanced ownership claims.
++    UDPSocketManager *manager = (__bridge UDPSocketManager *)socketManager;
++    socketManager_ = manager ? (__bridge_retained void *)manager : nullptr;
+ }
+ 
+ void UDPDirectModuleCxxImpl::installJSIBindings(jsi::Runtime& runtime) {
+@@ -875,4 +885,4 @@
+ }
+ 
+ } // namespace react
+-} // namespace facebook 
+\ No newline at end of file
++} // namespace facebook 
+--- node_modules/react-native-udp-direct/ios/NativeUDPDirectModule.mm
++++ node_modules/react-native-udp-direct/ios/NativeUDPDirectModule.mm
+@@ -18,6 +18,7 @@
+     std::shared_ptr<UDPDirectModuleCxxImpl> _cppImpl;
+     UDPSocketManager *_socketManager;
+     BOOL _jsiInstalled;
++    BOOL _invalidated;
+     NSTimeInterval _moduleCreationTime;
+ }
+ 
+@@ -43,6 +44,7 @@
+         dispatch_queue_t udpQueue = dispatch_queue_create("com.lama.udp.socket.queue", DISPATCH_QUEUE_SERIAL);
+         _socketManager = [[UDPSocketManager alloc] initWithDelegateQueue:udpQueue];
+         _jsiInstalled = NO;
++        _invalidated = NO;
+ 
+         NSLog(@"[NativeUDPDirectModule] Module created at time: %.0f", _moduleCreationTime);
+     }
+@@ -90,18 +92,23 @@
+ #pragma mark - Cleanup
+ 
+ - (void)invalidate {
++    if (_invalidated) {
++        return;
++    }
++    _invalidated = YES;
+     NSLog(@"[NativeUDPDirectModule] invalidate called - JS context is being destroyed");
+ 
+     // Make every callback from this bridge inert before closing sockets. Socket
+     // close delegate methods can run while Hermes is tearing its runtime down.
+-    if (_socketManager) {
+-        UDPDirectJSI::invalidate((__bridge void *)_socketManager);
+-        dispatch_sync(_socketManager.delegateQueue, ^{
+-            self->_socketManager.onDataReceived = nil;
+-            self->_socketManager.onSocketClosed = nil;
+-            self->_socketManager.onSendSuccess = nil;
+-            self->_socketManager.onSendFailure = nil;
+-            [self->_socketManager closeAllSocketsSynchronously];
++    UDPSocketManager *socketManager = _socketManager;
++    if (socketManager) {
++        UDPDirectJSI::invalidate((__bridge void *)socketManager);
++        dispatch_sync(socketManager.delegateQueue, ^{
++            socketManager.onDataReceived = nil;
++            socketManager.onSocketClosed = nil;
++            socketManager.onSendSuccess = nil;
++            socketManager.onSendFailure = nil;
++            [socketManager closeAllSocketsSynchronously];
+         });
+         NSLog(@"[NativeUDPDirectModule] All sockets closed synchronously");
+     }
+@@ -113,13 +120,16 @@
+     if (_cppImpl) {
+         _cppImpl.reset();
+     }
++    // This Objective-C module is the sole owner of the manager. Clear it only
++    // after the TurboModule has dropped its non-owning pointer.
++    _socketManager = nil;
+ 
+     NSLog(@"[NativeUDPDirectModule] Module invalidation complete");
+ }
+ 
+ - (void)dealloc {
+     NSLog(@"[NativeUDPDirectModule] dealloc called");
+-    // Additional cleanup if needed, but invalidate should handle most of it
++    [self invalidate];
+ }
+ 
+ @end
+--- node_modules/react-native-udp-direct/ios/UDPDirectModuleCxxImpl.mm
++++ node_modules/react-native-udp-direct/ios/UDPDirectModuleCxxImpl.mm
+@@ -844,19 +844,8 @@
+     
+     if (socketManager_) {
+         NSLog(@"[UDPDirectModuleCxxImpl] Warning: Socket manager already set, replacing");
+-        UDPSocketManager *previousManager = (__bridge_transfer UDPSocketManager *)socketManager_;
+-        previousManager.onDataReceived = nil;
+-        previousManager.onSocketClosed = nil;
+-        previousManager.onSendSuccess = nil;
+-        previousManager.onSendFailure = nil;
+-        previousManager = nil;
+     }
+-
+-    // The destructor releases socketManager_ with __bridge_transfer, so this
+-    // assignment must acquire a matching retain. The Objective-C module also
+-    // owns the manager; these are two independent, balanced ownership claims.
+-    UDPSocketManager *manager = (__bridge UDPSocketManager *)socketManager;
+-    socketManager_ = manager ? (__bridge_retained void *)manager : nullptr;
++    socketManager_ = socketManager;
+ }
+ 
+ void UDPDirectModuleCxxImpl::installJSIBindings(jsi::Runtime& runtime) {

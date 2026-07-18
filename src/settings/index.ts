@@ -1,2 +1,3 @@
-export * from './SettingsManager';
-export * from './types'; 
+export * from './types';
+export * from './uvcSettingsSections';
+export * from './migrateLegacySettings';

@@ -10,6 +10,11 @@ import type Connection from '@refinio/one.models/lib/misc/Connection/Connection'
 import type { Invitation } from '@refinio/one.models/lib/misc/ConnectionEstablishment/PairingManager.js';
 import ConnectionsModel from '@refinio/one.models/lib/models/ConnectionsModel.js';
 import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
+import {isRegisteredInstanceKeyForPerson} from '@refinio/one.models/lib/misc/ConnectionEstablishment/RegisteredInstanceKey.js';
+import type {Instance, Person} from '@refinio/one.core/lib/recipes.js';
+import {calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
+import type {SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
+import {isUvcChumSyncType, makeUvcControlTrieRootId} from '@refinio/uvc.core';
 import { TransportType, TransportStatus, type ITransport, type ConnectionTarget, type CommServerTransportConfig } from '../../../types/transport';
 import BlacklistModel from '../../BlacklistModel';
 import { getLogger } from '../../../utils/logger';
@@ -65,6 +70,12 @@ export default class CommServerManager implements ITransport {
       // Create ConnectionsModel exactly like one.leute
       this.connectionsModel = new ConnectionsModel(this.leuteModel, {
           commServerUrl,
+          // The physical integration environment selects one relay for both
+          // peers. Existing paired endpoints may still name a prior relay;
+          // override only their runtime route URL, never their identity/key.
+          ...(process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1'
+            ? {publicCommServerUrl: commServerUrl}
+            : {}),
           acceptIncomingConnections: true,
           acceptUnknownInstances: true,
           acceptUnknownPersons: false,
@@ -72,6 +83,31 @@ export default class CommServerManager implements ITransport {
           allowDebugRequests: true,
           pairingTokenExpirationDuration: 60000 * 15, // 15 minutes like one.leute
           establishOutgoingConnections: true,
+          // This product connection carries the UVC state graph. Pulling chat,
+          // profile, topic, and legacy phone-book roots into the physical control
+          // lane makes Metro service an unrelated full-store CHUM scan between
+          // every command and observation.
+          objectFilter: async (_hash, type) => isUvcChumSyncType(type),
+          importFilter: async (_hash, type) => isUvcChumSyncType(type),
+          chumSyncOptions: {
+            priorityWakeupObjectTypes: ['UvcStateTrieRoot'],
+            connectedAfterPriorityObjectTypes: ['UvcStateTrieRoot'],
+            traceObjectTypes: ['UvcStateTrieRoot'],
+            importBatchContextObjectTypes: ['UvcStateTrieRoot'],
+          },
+          priorityRootIdHashesFactory: async (
+            localPersonId: SHA256IdHash<Person>,
+            _localInstanceId: SHA256IdHash<Instance>,
+            remotePersonId: SHA256IdHash<Person>,
+            remoteInstanceId: SHA256IdHash<Instance>,
+          ) => [await calculateIdHashOfObj({
+            $type$: 'UvcStateTrieRoot',
+            id: makeUvcControlTrieRootId({
+              ownerPersonId: remotePersonId,
+              ownerInstanceId: remoteInstanceId,
+              audiencePersonId: localPersonId,
+            }),
+          })],
           incomingConnectionConfigurations: [
             {
               type: 'commserver',
@@ -81,20 +117,26 @@ export default class CommServerManager implements ITransport {
           ],
       });
 
-      // ONE invokes this handler only after the remote peer has proved possession
-      // of its presented Person key and the Person id matches the identity bound
-      // to the registered route/invitation. The route key is the durable trust
-      // anchor here; allow the legacy Person encryption key to rotate beneath it.
+      // A changed Person key is accepted only through a route whose instance key
+      // was persisted for that same Person during pairing. The handshake has
+      // already proved possession of the presented Person key at this point.
       this.connectionsModel.setKeyMismatchHandler(async (
         remotePersonId,
         message,
         remotePublicKey,
       ) => {
-        log.warn(
-          `Authorizing Person key replacement for registered peer ${remotePersonId.slice(0, 16)} `
-          + `on route ${remotePublicKey.slice(0, 16)}: ${message}`,
+        const registered = await isRegisteredInstanceKeyForPerson(
+          this.leuteModel,
+          remotePersonId as SHA256IdHash<Person>,
+          remotePublicKey,
         );
-        return true;
+        const decision = registered ? 'Authorizing' : 'Rejecting';
+        const writeLog = registered ? log.warn.bind(log) : log.error.bind(log);
+        writeLog(
+          `${decision} Person key mismatch for known peer ${remotePersonId.slice(0, 16)} `
+          + `on ${registered ? 'registered' : 'unknown'} route ${remotePublicKey.slice(0, 16)}: ${message}`,
+        );
+        return registered;
       });
 
       // Create BlacklistModel exactly like one.leute

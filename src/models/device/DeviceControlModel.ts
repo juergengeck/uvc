@@ -5,6 +5,7 @@ import {
 } from '@uvc/groov-authority';
 import {Buffer} from 'buffer';
 import {createAccess} from '@refinio/one.core/lib/access.js';
+import {onChumImportBatch} from '@refinio/one.core/lib/chum-sync.js';
 import {ensurePublicSignKey, signatureVerify} from '@refinio/one.core/lib/crypto/sign.js';
 import {createCryptoApiFromDefaultKeys} from '@refinio/one.core/lib/keychain/keychain.js';
 import type {Instance, Person} from '@refinio/one.core/lib/recipes.js';
@@ -15,19 +16,26 @@ import {
   getObjectByIdHash,
   getVersionsHashes,
   storeVersionedObject,
-  type VersionedObjectResult,
+  storeVersionedObjectSilently,
 } from '@refinio/one.core/lib/storage-versioned-objects.js';
-import {calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
+import {calculateHashOfObj, calculateIdHashOfObj} from '@refinio/one.core/lib/util/object.js';
 import type {SHA256Hash, SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
 import type ConnectionsModel from '@refinio/one.models/lib/models/ConnectionsModel.js';
-import {objectEvents} from '@refinio/one.models/lib/misc/ObjectEventDispatcher.js';
+import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
 import type {OneCoreTrieStorageDeps} from '@refinio/trie.core';
 import {
   UvcControlPlan,
   UvcProvisioningController,
   UvcStateTrie,
+  projectUvcStateTrieEntryHashes,
+  makeEarlierUvcControlTrieRootId,
+  makeEarlierUvcPhoneBookTrieRootId,
   makeUvcControlTrieRootId,
   makeUvcJournalTrieRootId,
+  makeLegacyUvcControlTrieRootId,
+  makeLegacyUvcPhoneBookTrieRootId,
+  makePreviousUvcControlTrieRootId,
+  makePreviousUvcPhoneBookTrieRootId,
   makeUvcPhoneBookTrieRootId,
   makeUvcProvisioningTrieRootId,
   type UvcAdminRoleGrantResult,
@@ -74,7 +82,11 @@ interface DiscoveredDeviceRecord {
 
 const storage: OneCoreTrieStorageDeps = {
   storeVersionedObject: async object => await storeVersionedObject(object as never) as never,
+  storeVersionedObjectSilently: async object => await storeVersionedObjectSilently(
+    object as never,
+  ) as never,
   getObjectByIdHash: async idHash => await getObjectByIdHash(idHash as never) as never,
+  calculateHashOfObj: async object => await calculateHashOfObj(object as never) as string,
   calculateIdHashOfObj: async object => await calculateIdHashOfObj(object as never) as string,
   getCurrentVersionHash: async idHash => await getCurrentVersionHash(idHash as never) as string,
   getVersionsHashes: async idHash => await getVersionsHashes(idHash as never) as string[],
@@ -92,16 +104,46 @@ export class DeviceControlModel {
   private provisioningController!: UvcProvisioningController;
   private readonly controlTries = new Map<string, UvcStateTrie>();
   private readonly consumed = new Set<string>();
+  private readonly pairedPeople = new Set<SHA256IdHash<Person>>();
   private readonly disconnectors: Array<() => void> = [];
+  private readonly deferredDiscovery = new Map<string, DiscoveryDevice>();
+  private discoveryDrainActive = false;
+  private integrationDiscoveryRecorded = false;
+  private controlOperationsInFlight = 0;
+  private discoveryResumeTimer?: ReturnType<typeof setTimeout>;
+  /** Keep import order per producer without blocking observations from peers. */
+  private readonly consumeTails = new Map<SHA256IdHash<Person>, Promise<void>>();
 
   constructor(
     private readonly discovery: DeviceDiscoveryModel,
     private readonly connections: ConnectionsModel,
+    private readonly leuteModel: LeuteModel,
     private readonly personId: SHA256IdHash<Person>,
     private readonly instanceId: SHA256IdHash<Instance>,
+    private readonly integrationMode = false,
   ) {}
 
   async init(): Promise<void> {
+    const phoneBookRootInput = {
+      ownerPersonId: this.personId,
+      ownerInstanceId: this.instanceId,
+    };
+    await Promise.all([
+      makeLegacyUvcPhoneBookTrieRootId(phoneBookRootInput),
+      makeEarlierUvcPhoneBookTrieRootId(phoneBookRootInput),
+      makePreviousUvcPhoneBookTrieRootId(phoneBookRootInput),
+    ].map(async id => {
+      const retiredPhoneBookRootIdHash = await calculateIdHashOfObj({
+        $type$: 'UvcStateTrieRoot',
+        id,
+      });
+      await createAccess([{
+        id: retiredPhoneBookRootIdHash,
+        person: [],
+        hashGroup: [],
+        mode: SET_ACCESS_MODE.REPLACE,
+      }]);
+    }));
     this.phoneBook = this.makeTrie(makeUvcPhoneBookTrieRootId({
       ownerPersonId: this.personId,
       ownerInstanceId: this.instanceId,
@@ -115,6 +157,42 @@ export class DeviceControlModel {
       ownerInstanceId: this.instanceId,
     }), true);
     await Promise.all([this.phoneBook.init(), this.journal.init(), this.provisioning.init()]);
+    for (const someone of await this.leuteModel.others()) {
+      for (const identity of someone.identities()) {
+        this.pairedPeople.add(identity);
+      }
+    }
+    // Control roots belong to the durable paired relationship, not to a
+    // transient command. Materialize them before discovery listeners begin
+    // writing phone-book snapshots so the first physical command never has to
+    // initialize its sync root behind background device traffic.
+    await Promise.all([...this.pairedPeople].map(async personId => {
+      const controlRootInput = {
+        ownerPersonId: this.personId,
+        ownerInstanceId: this.instanceId,
+        audiencePersonId: personId,
+      };
+      await Promise.all([
+        makeLegacyUvcControlTrieRootId(controlRootInput),
+        makeEarlierUvcControlTrieRootId(controlRootInput),
+        makePreviousUvcControlTrieRootId(controlRootInput),
+      ].map(async id => {
+        const retiredControlRootIdHash = await calculateIdHashOfObj({
+          $type$: 'UvcStateTrieRoot',
+          id,
+        });
+        await createAccess([{
+          id: retiredControlRootIdHash,
+          person: [],
+          hashGroup: [],
+          mode: SET_ACCESS_MODE.REPLACE,
+        }]);
+      }));
+      // Pairing and its IdAccess are durable. Reassert every producer-owned
+      // root when a Metro runtime is recreated instead of depending on the
+      // one-shot onPairingSuccess event from the original app process.
+      await this.getControlTrie(personId);
+    }));
     const cryptoApi = await createCryptoApiFromDefaultKeys(this.instanceId);
     this.provisioningController = new UvcProvisioningController({
       administrator: {
@@ -156,7 +234,16 @@ export class DeviceControlModel {
       controlFor: personId => this.getControlTrie(personId),
       store: async entry => (await storeUnversionedObject(entry as never)).hash as never,
       load: async hash => await getObject(hash as never) as UvcStateEntry,
-      isPaired: personId => this.connections.getActiveConnectionPersonIds().includes(personId),
+      // Pairing is a durable Leute identity relationship. Socket presence only
+      // selects whether CHUM can transfer right now; it must not revoke trust
+      // while a relay lane reconnects.
+      isPaired: personId => this.isPaired(personId),
+      onCommandPublished: async (commandHash, command) => {
+        console.log(
+          `[DeviceControlModel] Published ${command.operation} command ${commandHash} `
+          + `for executor ${command.executorPersonId}`,
+        );
+      },
       authority: {
         read: async deviceId => this.executeAgainstAuthority(this.requireTarget(deviceId), 'read'),
         set: async (deviceId, desired) => this.executeAgainstAuthority(
@@ -166,6 +253,11 @@ export class DeviceControlModel {
         ),
       },
     });
+    await this.plan.init();
+    await Promise.all([...this.pairedPeople].map(async personId => {
+      await this.plan.sharePhoneBookWith(personId);
+      await this.plan.shareControlWith(personId);
+    }));
 
     this.disconnectors.push(
       this.discovery.onDeviceDiscovered.listen(device => this.recordDiscovery(device)),
@@ -180,12 +272,31 @@ export class DeviceControlModel {
         _localPerson,
         _localInstance,
         remotePerson,
-      ) => this.plan.sharePhoneBookWith(remotePerson)),
-      objectEvents.onNewVersion(
-        result => this.consumeSharedRoot(result as VersionedObjectResult<UvcStateTrieRoot>),
-        'DeviceControlModel: consume trie root',
-        'UvcStateTrieRoot',
-      ),
+      ) => {
+        this.pairedPeople.add(remotePerson);
+        await this.plan.sharePhoneBookWith(remotePerson);
+        await this.plan.shareControlWith(remotePerson);
+      }),
+      onChumImportBatch.addListener(event => {
+        if (
+          event.localPersonId !== this.personId
+          || !this.isPaired(event.remotePersonId)
+        ) {
+          return;
+        }
+        const source = event.remotePersonId;
+        const tail = (this.consumeTails.get(source) ?? Promise.resolve())
+          .then(() => this.consumeImportedBatch(event.batch.imported, event.remotePersonId))
+          .catch(error => {
+            console.error('[DeviceControlModel] Failed to project imported UVC trie root:', error);
+          });
+        this.consumeTails.set(source, tail);
+        void tail.then(() => {
+          if (this.consumeTails.get(source) === tail) {
+            this.consumeTails.delete(source);
+          }
+        });
+      }),
     );
     for (const device of this.discovery.getDevices()) {
       await this.recordDiscovery(device);
@@ -193,6 +304,11 @@ export class DeviceControlModel {
   }
 
   shutdown(): void {
+    if (this.discoveryResumeTimer) {
+      clearTimeout(this.discoveryResumeTimer);
+      this.discoveryResumeTimer = undefined;
+    }
+    this.deferredDiscovery.clear();
     this.groovClient?.stop();
     this.groovClient = undefined;
     this.headlessProvisioningClient?.stop();
@@ -201,6 +317,7 @@ export class DeviceControlModel {
     for (const disconnect of this.disconnectors.splice(0)) {
       disconnect();
     }
+    this.consumeTails.clear();
   }
 
   async readLight(target: UvcControlTarget): Promise<UvcLightState> {
@@ -261,20 +378,49 @@ export class DeviceControlModel {
     operation: 'read' | 'set',
     desired?: UvcSetLightInput,
   ): Promise<UvcControlObservation> {
-    const executorPersonId = await this.canExecuteLocally(target)
-      ? this.personId
-      : target.executorPersonId ?? this.claimedPerson(target.deviceId);
+    // An explicit executor is part of the caller's trust/routing decision and
+    // must not be replaced merely because this runtime can also see the
+    // hardware locally. Automatic local execution is only the default when no
+    // executor was selected.
+    const executorPersonId = target.executorPersonId
+      ?? (await this.canExecuteLocally(target)
+        ? this.personId
+        : this.claimedPerson(target.deviceId));
     if (!executorPersonId) {
       throw new Error(`Device ${target.deviceId} has no paired executor`);
     }
-    return await this.plan.execute({
-      deviceId: target.deviceId,
-      kind: target.kind,
-      executorPersonId,
-    }, operation, desired);
+    if (this.discoveryResumeTimer) {
+      clearTimeout(this.discoveryResumeTimer);
+      this.discoveryResumeTimer = undefined;
+    }
+    this.controlOperationsInFlight += 1;
+    try {
+      return await this.plan.execute({
+        deviceId: target.deviceId,
+        kind: target.kind,
+        executorPersonId,
+      }, operation, desired);
+    } finally {
+      this.controlOperationsInFlight -= 1;
+      if (this.controlOperationsInFlight === 0) {
+        this.scheduleDeferredDiscovery();
+      }
+    }
   }
 
   private async recordDiscovery(device: DiscoveryDevice): Promise<void> {
+    if (this.integrationMode && this.integrationDiscoveryRecorded) {
+      return;
+    }
+    const discovered = device as unknown as DiscoveredDeviceRecord;
+    // Discovery is coalesced current state. Keep one producer-side drain so
+    // callbacks cannot pre-submit a backlog of background trie operations
+    // that would resume between a control command and its observation.
+    this.deferredDiscovery.set(discovered.deviceId, device);
+    await this.drainDiscovery();
+  }
+
+  private async persistDiscovery(device: DiscoveryDevice): Promise<void> {
     const discovered = device as unknown as DiscoveredDeviceRecord;
     const metadata = parseMetadata(discovered.metadata);
     const publicKey = typeof metadata.publicKey === 'string' ? metadata.publicKey : '';
@@ -288,52 +434,98 @@ export class DeviceControlModel {
       address: discovered.address,
       port: discovered.port,
       publicKey,
-      ...(typeof metadata.claimedPersonId === 'string'
-        ? {claimedPersonId: metadata.claimedPersonId as SHA256IdHash<Person>}
-        : {}),
+      // The mDNS person id is only an external claim at this point. Persisting
+      // it as referenceToId would require a locally materialized Person object
+      // and makes the shared phone-book graph invalid when that object is not
+      // present. Verified execution still resolves identity from pairing.
       capabilities: new Set(discovered.capabilities ?? []),
       observedAt,
       expiresAt: observedAt + 60_000,
     });
+    // The physical integration flow only needs one producer-owned trie write
+    // as evidence that the Expo CHUM lane is ready. Cube owns live discovery
+    // during that flow; persisting every later broadcast here creates a long
+    // background root write that can block the foreground LED command.
+    if (this.integrationMode) {
+      this.integrationDiscoveryRecorded = true;
+      this.deferredDiscovery.clear();
+    }
   }
 
-  private async consumeSharedRoot(result: VersionedObjectResult<UvcStateTrieRoot>): Promise<void> {
-    const parts = result.obj.id.split(':');
-    if (parts[0] !== 'uvc' || (parts[1] !== 'phone-book' && parts[1] !== 'control')) {
+  private scheduleDeferredDiscovery(): void {
+    if (this.deferredDiscovery.size === 0 || this.discoveryResumeTimer) {
       return;
     }
-    const source = decodeURIComponent(parts[2] ?? '') as SHA256IdHash<Person>;
-    if (!source || source === this.personId || !this.isPaired(source)) {
+    this.discoveryResumeTimer = setTimeout(() => {
+      this.discoveryResumeTimer = undefined;
+      void this.drainDiscovery().catch(error => {
+        console.error('[DeviceControlModel] Failed to persist deferred discovery:', error);
+      });
+    }, 250);
+  }
+
+  private async drainDiscovery(): Promise<void> {
+    if (this.controlOperationsInFlight > 0 || this.discoveryDrainActive) {
       return;
     }
-    if (parts[1] === 'control') {
-      const audience = decodeURIComponent(parts[4] ?? '');
-      if (audience !== this.personId) {
-        return;
-      }
-    }
-    const imported = this.makeTrie(result.obj.id);
-    await imported.init();
-    const paths = parts[1] === 'phone-book'
-      ? [['phone-book']]
-      : [['control', 'command'], ['control', 'observation']];
-    for (const path of paths) {
-      for (const hash of await imported.list(path)) {
-        if (this.consumed.has(hash)) {
-          continue;
+    this.discoveryDrainActive = true;
+    try {
+      while (this.controlOperationsInFlight === 0 && this.deferredDiscovery.size > 0) {
+        if (this.integrationMode && this.integrationDiscoveryRecorded) {
+          this.deferredDiscovery.clear();
+          break;
         }
-        const entry = await getObject(hash as never) as UvcStateEntry;
-        await this.plan.consume(hash as SHA256Hash<UvcStateEntry>, entry, source);
-        this.consumed.add(hash);
+        const next = this.deferredDiscovery.entries().next().value as
+          | [string, DiscoveryDevice]
+          | undefined;
+        if (!next) {
+          break;
+        }
+        const [deviceId, device] = next;
+        this.deferredDiscovery.delete(deviceId);
+        await this.persistDiscovery(device);
+      }
+    } finally {
+      this.discoveryDrainActive = false;
+      if (this.controlOperationsInFlight === 0 && this.deferredDiscovery.size > 0) {
+        this.scheduleDeferredDiscovery();
       }
     }
   }
 
-  private makeTrie(rootId: string, repairIncompleteLocalRoot = false): UvcStateTrie {
+  private async consumeImportedEntry(hash: string, source: SHA256IdHash<Person>): Promise<void> {
+    if (this.consumed.has(hash)) {
+      return;
+    }
+    const entry = await getObject(hash as never) as UvcStateEntry;
+    await this.plan.consume(hash as SHA256Hash<UvcStateEntry>, entry, source);
+    this.consumed.add(hash);
+    console.log(`[DeviceControlModel] Consumed imported ${entry.$type$} ${hash}`);
+  }
+
+  private async consumeImportedBatch(
+    imported: readonly {kind: string; hash: string; type: string}[],
+    source: SHA256IdHash<Person>,
+  ): Promise<void> {
+    for (const ref of imported) {
+      if (ref.kind !== 'object' || ref.type !== 'UvcStateTrieRoot') continue;
+      const root = await getObject(ref.hash as never) as UvcStateTrieRoot;
+      const entryHashes = await projectUvcStateTrieEntryHashes({
+        root,
+        remotePersonId: source,
+        localPersonId: this.personId,
+        loadObject: async hash => await getObject(hash as never) as never,
+      });
+      for (const hash of entryHashes) {
+        await this.consumeImportedEntry(String(hash), source);
+      }
+    }
+  }
+
+  private makeTrie(rootId: string): UvcStateTrie {
     return new UvcStateTrie({
       rootId,
       storage,
-      repairIncompleteLocalRoot,
       grantRootAccess: async (rootIdHash, remotePerson) => {
         await createAccess([{
           id: rootIdHash,
@@ -354,14 +546,14 @@ export class DeviceControlModel {
       ownerPersonId: this.personId,
       ownerInstanceId: this.instanceId,
       audiencePersonId: personId,
-    }), true);
+    }));
     await trie.init();
     this.controlTries.set(personId, trie);
     return trie;
   }
 
   private isPaired(personId: SHA256IdHash<Person>): boolean {
-    return this.connections.getActiveConnectionPersonIds().includes(personId);
+    return this.pairedPeople.has(personId);
   }
 
   private claimedPerson(deviceId: string): SHA256IdHash<Person> | undefined {

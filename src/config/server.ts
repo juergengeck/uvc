@@ -5,20 +5,20 @@
  */
 
 // Server URLs for different environments
-// All environments now use comm10.dev.refinio.one
+// All environments use the deployed glue.one communication infrastructure.
 export const SERVERS = {
   DEVELOPMENT: {
-    COMM_SERVER: 'wss://comm10.dev.refinio.one',
+    COMM_SERVER: 'wss://api.glue.one/comm',
     GLUE_CHANNEL: 'wss://comm10.dev.refinio.one/glue',
     API_SERVER: 'https://api.refinio.one',
   },
   PRODUCTION: {
-    COMM_SERVER: 'wss://comm10.dev.refinio.one',
+    COMM_SERVER: 'wss://api.glue.one/comm',
     GLUE_CHANNEL: 'wss://comm10.dev.refinio.one/glue',
     API_SERVER: 'https://api.refinio.one',
   },
   STAGING: {
-    COMM_SERVER: 'wss://comm10.dev.refinio.one',
+    COMM_SERVER: 'wss://api.glue.one/comm',
     GLUE_CHANNEL: 'wss://comm10.dev.refinio.one/glue',
     API_SERVER: 'https://api.refinio.one',
   }
@@ -72,4 +72,4 @@ export function isStagingUrl(url: string): boolean {
  */
 export function isValidCommServerUrl(url: string): boolean {
   return url.startsWith('ws://') || url.startsWith('wss://');
-} 
+}

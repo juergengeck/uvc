@@ -22,6 +22,15 @@ export default function Index() {
   // The credential restoration happens in _layout.tsx, so by the time we get here
   // the auth state should reflect whether auto-login was successful
   if (authState === 'logged_in') {
+    if (__DEV__ && process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1') {
+      console.log('[Index] UVC integration mode, routing directly to the physical control surface');
+      return (
+        <View style={{ flex: 1, backgroundColor: '#121212' }}>
+          <Redirect href="/integration/uvc-control" />
+        </View>
+      );
+    }
+
     console.log('[Index] User is logged in, redirecting to tabs');
     return (
       <View style={{ flex: 1, backgroundColor: '#121212' }}>
@@ -38,4 +47,4 @@ export default function Index() {
       </View>
     );
   }
-} 
+}

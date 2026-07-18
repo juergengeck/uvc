@@ -33,8 +33,15 @@ export async function loadDiagnostics() {
     }
 }
 
-// Auto-load diagnostics when this module is imported
-loadDiagnostics().catch(console.error);
+// Diagnostic split bundles are optional developer tools. The physical
+// integration runtime keeps Metro focused on the application graph it is
+// exercising; loading every diagnostic entry point adds unrelated lazy-bundle
+// failures to the device error overlay and can fail model initialization.
+if (process.env.EXPO_PUBLIC_UVC_INTEGRATION !== '1') {
+    loadDiagnostics().catch(console.error);
+} else {
+    console.log('[Diagnostics] Auto-load skipped in UVC integration mode');
+}
 
 // Also make the loader available globally
 (globalThis as any).loadDiagnostics = loadDiagnostics;

@@ -33,6 +33,9 @@ import OrganisationModel from './OrganisationModel';
 import { getGroupIdByName } from '../utils/groupUtils';
 import {DeviceControlModel} from './device/DeviceControlModel';
 import {getInstanceIdHash, getInstanceOwnerIdHash} from '@refinio/one.core/lib/instance.js';
+import {InstanceSettingsStorage} from '@refinio/settings.core';
+import {migrateLegacySettings} from '../settings/migrateLegacySettings';
+import {ContactCreationService} from '../services/ContactCreationService';
 
 export type AppModelState = 'Uninitialised' | 'Initialising' | 'Initialised' | 'ShuttingDown';
 export type AppModelEvent = 'init' | 'shutdown';
@@ -45,6 +48,7 @@ export interface AppModelOptions {
     authenticator: any; // Replace 'any' with a more specific type if available
     leuteAccessRightsManager: any; // Replace 'any' with a more specific type
     llmManager?: LLMManager; // Optional - will be created in init() if not provided
+    integrationMode?: boolean;
 }
 
 let appModelInstance: AppModel | null = null;
@@ -70,6 +74,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
     
     // Settings and LLM management
     private _settingsModel!: SettingsModel;
+    public settingsStorage!: InstanceSettingsStorage;
     private _llmManager?: LLMManager; // Optional - created in init() if not provided in constructor
     public mcpManager?: any; // MCP Manager for tool management
     
@@ -91,6 +96,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
     public organisationModel?: OrganisationModel;
     
     private isInitialized = false;
+    private readonly integrationMode: boolean;
 
     constructor(options: AppModelOptions) {
         super();
@@ -107,7 +113,8 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             transportManager,
             authenticator,
             leuteAccessRightsManager, // This is now available from options
-            llmManager
+            llmManager,
+            integrationMode = false,
         } = options;
 
         this.leuteModel = leuteModel;
@@ -116,6 +123,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
         this.auth = authenticator;
         this.leuteAccessRightsManager = leuteAccessRightsManager;
         this._llmManager = llmManager || undefined; // Will be set in init() if not provided
+        this.integrationMode = integrationMode;
         
         // Initialize TopicModel and JournalModel
         this.topicModel = new TopicModel(this._channelManager, this.leuteModel);
@@ -163,25 +171,27 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             
             // LLMManager and AIAssistantModel will be created in initModel after LeuteModel is ready
             
-            // Initialize TopicModel and JournalModel
-            const topicStartTime = Date.now();
-            await this.topicModel.init();
-            console.log(`[PERF] TopicModel.init: ${Date.now() - topicStartTime}ms`);
+            if (!this.integrationMode) {
+                const topicStartTime = Date.now();
+                await this.topicModel.init();
+                console.log(`[PERF] TopicModel.init: ${Date.now() - topicStartTime}ms`);
 
-            const journalStartTime = Date.now();
-            await this.journalModel.init();
-            console.log(`[PERF] JournalModel.init: ${Date.now() - journalStartTime}ms`);
+                const journalStartTime = Date.now();
+                await this.journalModel.init();
+                console.log(`[PERF] JournalModel.init: ${Date.now() - journalStartTime}ms`);
+            }
             
             // TransportManager already initialized
             // Networking will be started later in initModel() AFTER LeuteAccessRightsManager is ready
 
             // Note: "everyone" group is created in initModel() before AppModel initialization
 
-            // Create and initialize InviteManager
-            const inviteStartTime = Date.now();
-            this.inviteManager = new InviteManager(this.leuteModel, this.transportManager);
-            await this.inviteManager.init();
-            console.log(`[PERF] InviteManager.init: ${Date.now() - inviteStartTime}ms`);
+            if (!this.integrationMode) {
+                const inviteStartTime = Date.now();
+                this.inviteManager = new InviteManager(this.leuteModel, this.transportManager);
+                await this.inviteManager.init();
+                console.log(`[PERF] InviteManager.init: ${Date.now() - inviteStartTime}ms`);
+            }
 
             // Initialize DeviceModel
             const deviceStartTime = Date.now();
@@ -204,25 +214,37 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
             if (!ownPersonId || !ownInstanceId) {
                 throw new Error('Cannot initialize device control without a ONE person and instance identity');
             }
+            this.settingsStorage = new InstanceSettingsStorage({
+                instanceIdHash: ownInstanceId,
+                ownerPersonIdHash: ownPersonId,
+            });
+            await migrateLegacySettings({
+                instanceId: ownInstanceId,
+                propertyTree: this._settingsModel.propertyTree,
+                storage: this.settingsStorage,
+            });
+            await this.settingsStorage.get();
             this.deviceControlModel = new DeviceControlModel(
                 this.deviceDiscoveryModel,
                 this.connections,
+                this.leuteModel,
                 ownPersonId,
                 ownInstanceId,
+                this.integrationMode,
             );
             await this.deviceControlModel.init();
             // DeviceDiscoveryModel will be fully configured later in initModel() after TrustModel is available
 
-            // Initialize OrganisationModel
-            const orgStartTime = Date.now();
-            this.organisationModel = new OrganisationModel(this._channelManager);
-            await this.organisationModel.init();
-            console.log(`[PERF] OrganisationModel.init: ${Date.now() - orgStartTime}ms`);
-            
-            // Create system topics
-            const systemTopicsStartTime = Date.now();
-            await this.createSystemTopics();
-            console.log(`[PERF] System topics creation: ${Date.now() - systemTopicsStartTime}ms`);
+            if (!this.integrationMode) {
+                const orgStartTime = Date.now();
+                this.organisationModel = new OrganisationModel(this._channelManager);
+                await this.organisationModel.init();
+                console.log(`[PERF] OrganisationModel.init: ${Date.now() - orgStartTime}ms`);
+
+                const systemTopicsStartTime = Date.now();
+                await this.createSystemTopics();
+                console.log(`[PERF] System topics creation: ${Date.now() - systemTopicsStartTime}ms`);
+            }
             
             // Setup connection monitoring
             const chumStartTime = Date.now();
@@ -239,8 +261,9 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
 
             console.log(`[PERF] AppModel.init TOTAL: ${Date.now() - initStartTime}ms`);
             
-            // Initialize debugging utilities
-            try {
+            // Message-transfer diagnostics subscribe to every channel update and
+            // are deliberately absent from the physical integration runtime.
+            if (!this.integrationMode) try {
               // Make appModel available globally for debugging
               const globalObj = typeof window !== 'undefined' ? window : global;
               (globalObj as any).appModel = this;
@@ -266,7 +289,6 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
     public async enableConnectionsForExistingContacts(): Promise<number> {
         console.log('[AppModel] 🌐 Enabling connections for existing contacts...');
         try {
-            const { ContactCreationService } = await import('../services/ContactCreationService');
             const contactService = new ContactCreationService(this.leuteModel);
             const enabledCount = await contactService.enableConnectionsForAllExistingContacts();
             console.log(`[AppModel] ✅ Enabled connections for ${enabledCount} existing contacts`);

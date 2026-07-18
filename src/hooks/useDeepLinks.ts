@@ -3,6 +3,10 @@ import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useInstance } from '@src/providers/app/useInstance';
 import { parseInvitationUrl } from '@src/utils/invitation-url-parser';
+import {
+  parseUvcIntegrationControlUrl,
+  runUvcIntegrationControlAction,
+} from '@src/services/UvcIntegrationTestBridge';
 
 /**
  * Hook to handle deep links for invitation URLs
@@ -15,13 +19,39 @@ export function useDeepLinks() {
   const completedUrls = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!instance?.inviteManager) {
+    if (!instance) {
       console.log('[useDeepLinks] Instance not ready, skipping deep link setup');
       return;
     }
 
     const handleUrl = async (url: string) => {
       try {
+        if (process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1') {
+          const action = parseUvcIntegrationControlUrl(
+            url,
+            process.env.EXPO_PUBLIC_UVC_E2E_SECRET ?? '',
+          );
+          if (action) {
+            if (activeUrls.current.has(url) || completedUrls.current.has(url)) {
+              console.log('[UvcIntegrationBridge] Ignoring duplicate control action');
+              return;
+            }
+            if (!instance.deviceControlModel) {
+              throw new Error('[UvcIntegrationBridge] DeviceControlModel is not ready');
+            }
+            activeUrls.current.add(url);
+            try {
+              console.log(`[UvcIntegrationBridge] Running ${action.actionId}`);
+              await runUvcIntegrationControlAction(instance.deviceControlModel, action);
+              completedUrls.current.add(url);
+              console.log(`[UvcIntegrationBridge] Completed ${action.actionId}`);
+            } finally {
+              activeUrls.current.delete(url);
+            }
+            return;
+          }
+        }
+
         // Check if this is an invitation URL
         const parsed = parseInvitationUrl(url);
         
@@ -39,6 +69,9 @@ export function useDeepLinks() {
           
           // Process the invitation
           try {
+            if (!instance.inviteManager) {
+              throw new Error('[useDeepLinks] InviteManager is not ready');
+            }
             await instance.inviteManager.acceptInvitationFromUrl(url);
             completedUrls.current.add(url);
             console.log('[useDeepLinks] Invitation accepted successfully');

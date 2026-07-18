@@ -35,13 +35,13 @@ import {
   OwnershipRemovalCommandRecipe
 } from '../types/device-control-recipes';
 import {
-  UVC_PHONE_BOOK_RECIPES,
   UvcPhoneBookEntryRecipe,
   UvcPhoneBookRecipe,
   UvcPhoneBookRegistryRecipe,
 } from './UvcPhoneBookRecipes';
 import {ConnectionPhoneBookRecipes} from '@refinio/connection.core/recipes';
 import {UVC_RECIPES} from '@refinio/uvc.core';
+import {SettingsRecipes} from '@refinio/settings.core';
 import {
   UVC_DEVICE_CONTROL_RECIPES,
   UvcDeviceControlCommandRecipe,
@@ -57,6 +57,9 @@ console.log('[RECIPES] LLMSettingsRecipes array:',
 // Application recipes in registration order 
 // Make sure each recipe appears exactly once
 export const ALL_RECIPES: Recipe[] = [
+  // Unified instance-scoped settings storage
+  ...SettingsRecipes,
+
   // Core functionality
   RoleCertificate.Recipe,
   LLMRecipe,
@@ -106,9 +109,8 @@ export const ALL_RECIPES: Recipe[] = [
 
   // Certified UVC-to-UVC contact/device directory
   // connection.core owns reachability, route memory, and trusted instance
-  // introductions; UVC_PHONE_BOOK_RECIPES owns certified contact/device data.
+  // introductions; UVC_RECIPES owns certified contact/device data.
   ...ConnectionPhoneBookRecipes,
-  ...UVC_PHONE_BOOK_RECIPES,
 
   // Organisational hierarchy
   OrganisationRecipe,

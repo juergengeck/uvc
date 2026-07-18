@@ -138,6 +138,9 @@ export default function RootLayout() {
   
   // Handle app state changes (background/foreground)
   useEffect(() => {
+    if (process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1') {
+      return;
+    }
     let previousAppState: AppStateStatus = AppState.currentState;
     
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {

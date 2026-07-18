@@ -36,6 +36,15 @@ type GroupConfig = {
     everyone?: SHA256IdHash<Group>;
 };
 
+type LeuteAccessRightsManagerOptions = {
+    /**
+     * Pairing trust is required by every runtime. Channel/profile sharing is
+     * application work and is deliberately absent from the physical UVC
+     * integration runtime, which communicates through typed trie roots.
+     */
+    enableChannelAccess?: boolean;
+};
+
 /**
  * This class manages all access rights for IoM & IoP.
  *
@@ -46,6 +55,7 @@ export default class LeuteAccessRightsManager {
     private readonly channelManager: ChannelManager;
     // private readonly connectionsModel: ConnectionsModel;
     private readonly leuteModel: LeuteModel;
+    private readonly enableChannelAccess: boolean;
     // private initialized: boolean;
     private groupConfig: GroupConfig = {};
 
@@ -59,11 +69,13 @@ export default class LeuteAccessRightsManager {
     constructor(
         channelManager: ChannelManager,
         connectionsModel: ConnectionsModel,
-        leuteModel: LeuteModel
+        leuteModel: LeuteModel,
+        options: LeuteAccessRightsManagerOptions = {}
     ) {
         this.channelManager = channelManager;
         // this.connectionsModel = connectionsModel;
         this.leuteModel = leuteModel;
+        this.enableChannelAccess = options.enableChannelAccess ?? true;
         // this.initialized = false;
 
         // Register hook for new connections && contacts
@@ -71,9 +83,11 @@ export default class LeuteAccessRightsManager {
             LeuteAccessRightsManager.trustPairingKeys.bind(this, leuteModel.trust)
         );
 
-        this.leuteModel.afterMainIdSwitch(() => {
-            this.giveAccessToMainProfileForEverybody().catch(console.error);
-        });
+        if (this.enableChannelAccess) {
+            this.leuteModel.afterMainIdSwitch(() => {
+                this.giveAccessToMainProfileForEverybody().catch(console.error);
+            });
+        }
 
         // Commented, so that not al profiles are shared with everybody
         // objectEvents.onNewVersion.addListener(
@@ -82,7 +96,7 @@ export default class LeuteAccessRightsManager {
         // );
 
         // Share all questionnaire channels with IoM
-        channelManager.onUpdated(
+        if (this.enableChannelAccess) channelManager.onUpdated(
             async (
                 channelInfoIdHash: SHA256IdHash<ChannelInfo>,
                 channelId: string,
@@ -183,6 +197,9 @@ export default class LeuteAccessRightsManager {
     public async init(groups?: GroupConfig): Promise<void> {
         if (groups) {
             this.groupConfig = groups;
+        }
+        if (!this.enableChannelAccess) {
+            return;
         }
         await this.giveAccessToChannels();
         await this.giveAccessToMainProfileForEverybody();

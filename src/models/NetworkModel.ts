@@ -14,7 +14,6 @@ import { UdpModel } from './network/UdpModel';
 import type { UdpSocket, UdpSocketOptions } from './network/UdpModel';
 import { DeviceDiscoveryModel } from './network/DeviceDiscoveryModel';
 import type { IQuicTransport } from './network/interfaces';
-import type { DeviceSettingsService } from '@src/services/DeviceSettingsService';
 import { btleService } from '@refinio/connection.btle';
 
 export class NetworkModel {
@@ -190,22 +189,6 @@ export class NetworkModel {
     }
 
     /**
-     * Connect DeviceSettingsService to DeviceDiscoveryModel
-     */
-    public connectSettingsService(deviceSettingsService: DeviceSettingsService): void {
-        try {
-            if (this._deviceDiscoveryModel && typeof this._deviceDiscoveryModel.setSettingsService === 'function') {
-                this._deviceDiscoveryModel.setSettingsService(deviceSettingsService);
-                console.log('[NetworkModel] Connected DeviceDiscoveryModel with DeviceSettingsService');
-            } else {
-                console.warn('[NetworkModel] DeviceDiscoveryModel not available for settings service connection');
-            }
-        } catch (discoveryError) {
-            console.error('[NetworkModel] Error connecting DeviceDiscoveryModel:', discoveryError);
-        }
-    }
-
-    /**
      * Gets the QuicTransport instance.
      * This is a convenience method to access the QuicTransport from the QuicModel.
      */
@@ -361,4 +344,4 @@ export class NetworkModel {
             return undefined;
         }
     }
-} 
+}

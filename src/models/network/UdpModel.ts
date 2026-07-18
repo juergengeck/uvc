@@ -717,7 +717,7 @@ export class UdpModel {
         
         if (data instanceof Uint8Array) {
           // Always use zero-copy with offset and length
-          console.log(`[UdpModel] Attempting send on socket ${socketId} to ${address}:${port}`);
+          debug(`Attempting send on socket ${socketId} to ${address}:${port}`);
           
           try {
             globalAny.udpSendDirect(socketId, data.buffer, data.byteOffset, data.byteLength, port, address);

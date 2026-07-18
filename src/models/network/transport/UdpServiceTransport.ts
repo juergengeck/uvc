@@ -317,11 +317,6 @@ export class UdpServiceTransport extends EventEmitter implements IQuicTransport 
         : data.length;
 
       debug(`Calling socket.send with ${byteLength} bytes to ${address}:${port}`);
-      // Only log sends to external addresses (not broadcast or loopback)
-      if (!address.endsWith('.255') && address !== '127.0.0.1') {
-        console.log(`[UdpServiceTransport] Sending ${byteLength} bytes to ${address}:${port}`);
-      }
-      
       try {
         await this.socket.send(data, port, address);
         debug(`socket.send completed successfully`);

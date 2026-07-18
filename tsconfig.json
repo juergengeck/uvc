@@ -42,6 +42,8 @@
     "src/@OneObjectInterfaces.d.ts",
     "src/types/@OneObjectInterfaces.d.ts",
     "one.leute.replicant/**/*",
+    "packages/chat.core/packages/**/*",
+    "packages/connection.core/connection.core/**/*",
     "examples/**/*"
   ]
 }

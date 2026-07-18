@@ -4,6 +4,15 @@ import { ModelService } from './ModelService';
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
 import type { Invitation } from '@refinio/one.models/lib/misc/ConnectionEstablishment/PairingManager.js';
 import { parseInvitationUrl } from '../utils/invitation-url-parser';
+import type {InstanceSettingsStorage} from '@refinio/settings.core';
+import {
+  DEFAULT_UVC_COMM_SERVER_URL,
+  LEGACY_UVC_COMM_SERVER_URL,
+  getUvcDeviceSettingsDefaults,
+  getUvcNetworkSettingsDefaults,
+  type UvcDeviceSettingsValues,
+  type UvcNetworkSettingsValues,
+} from '@src/settings/uvcSettingsSections';
 
 /**
  * NetworkSettingsService
@@ -15,9 +24,11 @@ import { parseInvitationUrl } from '../utils/invitation-url-parser';
  */
 export class NetworkSettingsService {
   private static _instance: NetworkSettingsService | null = null;
-  private _deviceSettingsService: any = null;
   private _commServerReadyLogged = false;
-  private _headlessAuthorityUrlFallback: string | null = null;
+  private _settingsStorage?: InstanceSettingsStorage;
+  private _settingsUnsubscribe?: () => void;
+  private _deviceSettings: UvcDeviceSettingsValues = getUvcDeviceSettingsDefaults();
+  private _networkSettings: UvcNetworkSettingsValues = getUvcNetworkSettingsDefaults();
 
   // Events for network state changes
   public readonly onNetworkStateChanged = new OEvent<(isConnected: boolean) => void>();
@@ -30,12 +41,46 @@ export class NetworkSettingsService {
    * Private constructor - use getInstance() instead
    */
   private constructor() {
-    // Get device settings service from app model
-    const appModel = ModelService.getModel();
-    // Note: services property removed from AppModel, device settings handled differently now
-    this._deviceSettingsService = null;
-    
     console.log('[NetworkSettingsService] Full-featured service initialized - using CommServerManager');
+  }
+
+  public async setSettingsStorage(storage: InstanceSettingsStorage): Promise<void> {
+    this._settingsUnsubscribe?.();
+    this._settingsStorage = storage;
+    let settings = await storage.get();
+    if (settings.network?.commServerUrl === LEGACY_UVC_COMM_SERVER_URL) {
+      await storage.updateField('network', 'commServerUrl', DEFAULT_UVC_COMM_SERVER_URL);
+      settings = await storage.get();
+    }
+    this.applySettings(settings);
+    this._settingsUnsubscribe = storage.subscribe(updated => this.applySettings(updated));
+  }
+
+  private applySettings(settings: Record<string, Record<string, unknown>>): void {
+    const previousDiscovery = this._deviceSettings.discoveryEnabled;
+    const previousAutoConnect = this._deviceSettings.autoConnect;
+    const previousCommServerUrl = this._networkSettings.commServerUrl;
+    const previousHeadlessAuthorityUrl = this._networkSettings.headlessAuthorityUrl;
+
+    if (settings.devices) {
+      this._deviceSettings = settings.devices as unknown as UvcDeviceSettingsValues;
+    }
+    if (settings.network) {
+      this._networkSettings = settings.network as unknown as UvcNetworkSettingsValues;
+    }
+
+    if (
+      previousDiscovery !== this._deviceSettings.discoveryEnabled
+      || previousAutoConnect !== this._deviceSettings.autoConnect
+    ) {
+      this.onDeviceDiscoveryChanged.emit();
+    }
+    if (previousCommServerUrl !== this._networkSettings.commServerUrl) {
+      this.onCommServerUrlChanged.emit(this._networkSettings.commServerUrl);
+    }
+    if (previousHeadlessAuthorityUrl !== this._networkSettings.headlessAuthorityUrl) {
+      this.onHeadlessAuthorityUrlChanged.emit(this._networkSettings.headlessAuthorityUrl);
+    }
   }
   
   /**
@@ -205,11 +250,7 @@ export class NetworkSettingsService {
    * Uses the actual DeviceDiscoveryModel
    */
   public isDeviceDiscoveryEnabled(): boolean {
-    const appModel = ModelService.getModel();
-    if (!appModel?.deviceDiscoveryModel) {
-      return false;
-    }
-    return appModel.deviceDiscoveryModel.isDiscovering();
+    return this._deviceSettings.discoveryEnabled;
   }
 
   /**
@@ -218,23 +259,10 @@ export class NetworkSettingsService {
    */
   public async setDeviceDiscoveryEnabled(enabled: boolean): Promise<void> {
     console.log(`[NetworkSettingsService] Setting device discovery enabled: ${enabled}`);
-    const appModel = ModelService.getModel();
-    if (!appModel?.deviceDiscoveryModel) {
-      console.warn('[NetworkSettingsService] DeviceDiscoveryModel not available');
-      return;
+    if (!this._settingsStorage) {
+      throw new Error('Settings storage is not initialized');
     }
-
-    try {
-      if (enabled) {
-        await appModel.deviceDiscoveryModel.startDiscovery();
-      } else {
-        await appModel.deviceDiscoveryModel.stopDiscovery();
-      }
-      this.onDeviceDiscoveryChanged.emit();
-    } catch (error) {
-      console.error('[NetworkSettingsService] Error toggling device discovery:', error);
-      throw error;
-    }
+    await this._settingsStorage.updateField('devices', 'discoveryEnabled', enabled);
   }
 
   /**
@@ -242,20 +270,7 @@ export class NetworkSettingsService {
    * Delegates to device settings
    */
   public isDeviceAutoConnectEnabled(): boolean {
-    try {
-      // Import device settings service dynamically to avoid circular dependencies
-      const appModel = ModelService.getModel();
-      if (!appModel) {
-        return false;
-      }
-
-      // Check if there's a device settings service available
-      // For now, return false as auto-connect is handled separately
-      return false;
-    } catch (error) {
-      console.warn('[NetworkSettingsService] Error checking auto-connect state:', error);
-      return false;
-    }
+    return this._deviceSettings.autoConnect;
   }
 
   /**
@@ -264,21 +279,10 @@ export class NetworkSettingsService {
    */
   public async setDeviceAutoConnectEnabled(enabled: boolean): Promise<void> {
     console.log(`[NetworkSettingsService] Device auto-connect setting: ${enabled}`);
-    try {
-      // Import device settings service dynamically to avoid circular dependencies
-      const appModel = ModelService.getModel();
-      if (!appModel) {
-        console.warn('[NetworkSettingsService] AppModel not available for auto-connect setting');
-        return;
-      }
-
-      // For now, just emit the event - auto-connect is handled in device settings
-      this.onDeviceDiscoveryChanged.emit();
-      console.log('[NetworkSettingsService] Auto-connect setting is handled by device settings');
-    } catch (error) {
-      console.error('[NetworkSettingsService] Error setting auto-connect:', error);
-      throw error;
+    if (!this._settingsStorage) {
+      throw new Error('Settings storage is not initialized');
     }
+    await this._settingsStorage.updateField('devices', 'autoConnect', enabled);
   }
 
   /**
@@ -424,96 +428,41 @@ export class NetworkSettingsService {
    * Get edda domain from settings
    */
   public getEddaDomain(): string {
-    const appModel = ModelService.getModel();
-    if (appModel?.propertyTree) {
-      try {
-        // Try to get from property tree first
-        const savedDomain = appModel.propertyTree.getValue('eddaDomain');
-        if (savedDomain) {
-          return savedDomain;
-        }
-      } catch (error) {
-        console.warn('[NetworkSettingsService] Could not get edda domain from property tree:', error);
-      }
-    }
-    
-    // Return default domain if not found
-    return 'edda.dev.refinio.one';
+    return this._networkSettings.eddaDomain;
   }
 
   /**
    * Set edda domain in settings
    */
   public async setEddaDomain(domain: string): Promise<void> {
-    const appModel = ModelService.getModel();
-    if (!appModel?.propertyTree) {
-      throw new Error('PropertyTree not available');
+    if (!this._settingsStorage) {
+      throw new Error('Settings storage is not initialized');
     }
-    
-    try {
-      // Save to property tree
-      await appModel.propertyTree.setValue('eddaDomain', domain);
-      console.log('[NetworkSettingsService] Edda domain saved:', domain);
-    } catch (error) {
-      console.error('[NetworkSettingsService] Error saving edda domain:', error);
-      throw error;
-    }
+    await this._settingsStorage.updateField('network', 'eddaDomain', domain);
   }
 
   /**
    * Get current CommServer URL from settings
    */
   public getCommServerUrl(): string {
-    const appModel = ModelService.getModel();
-    if (appModel?.propertyTree) {
-      try {
-        // Try to get from property tree first
-        const savedUrl = appModel.propertyTree.getValue('commServerUrl');
-        if (savedUrl) {
-          return savedUrl;
-        }
-      } catch (error) {
-        console.warn('[NetworkSettingsService] Could not get CommServer URL from property tree:', error);
-      }
-    }
-    
-    // Return default URL if not found
-    return 'wss://comm10.dev.refinio.one';
+    return this._networkSettings.commServerUrl;
   }
 
   /**
    * Set CommServer URL in settings
    */
   public async setCommServerUrl(url: string): Promise<void> {
-    const appModel = ModelService.getModel();
-    if (!appModel?.propertyTree) {
-      throw new Error('PropertyTree not available');
+    if (!this._settingsStorage) {
+      throw new Error('Settings storage is not initialized');
     }
-    
-    try {
-      // Validate URL format
-      if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
-        throw new Error('CommServer URL must start with wss:// or ws://');
-      }
-      
-      // Save to property tree
-      await appModel.propertyTree.setValue('commServerUrl', url);
-      console.log('[NetworkSettingsService] CommServer URL saved:', url);
-      
-      // Emit change event
-      this.onCommServerUrlChanged.emit(url);
-    } catch (error) {
-      console.error('[NetworkSettingsService] Error saving CommServer URL:', error);
-      throw error;
-    }
+    await this._settingsStorage.updateField('network', 'commServerUrl', url);
   }
 
   /**
    * Reset CommServer URL to default
    */
   public async resetCommServerUrl(): Promise<void> {
-    const defaultUrl = 'wss://comm10.dev.refinio.one';
-    await this.setCommServerUrl(defaultUrl);
+    await this.setCommServerUrl(DEFAULT_UVC_COMM_SERVER_URL);
   }
 
   /**
@@ -521,24 +470,7 @@ export class NetworkSettingsService {
    * Falls back to an in-memory value when PropertyTree is unavailable.
    */
   public getHeadlessAuthorityUrl(): string {
-    if (this._headlessAuthorityUrlFallback) {
-      return this._headlessAuthorityUrlFallback;
-    }
-
-    const appModel = ModelService.getModel();
-    if (appModel?.propertyTree) {
-      try {
-        const savedUrl = appModel.propertyTree.getValue('headlessAuthorityUrl');
-        if (typeof savedUrl === 'string' && savedUrl) {
-          this._headlessAuthorityUrlFallback = savedUrl;
-          return savedUrl;
-        }
-      } catch (error) {
-        console.warn('[NetworkSettingsService] Could not get headless authority URL from property tree:', error);
-      }
-    }
-
-    return 'http://uvc-pi.local:3000';
+    return this._networkSettings.headlessAuthorityUrl;
   }
 
   /**
@@ -546,23 +478,10 @@ export class NetworkSettingsService {
    * Uses PropertyTree when available and otherwise persists for the current session.
    */
   public async setHeadlessAuthorityUrl(url: string): Promise<void> {
-    const normalizedUrl = url.trim();
-    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-      throw new Error('Headless authority URL must start with http:// or https://');
+    if (!this._settingsStorage) {
+      throw new Error('Settings storage is not initialized');
     }
-
-    this._headlessAuthorityUrlFallback = normalizedUrl;
-
-    const appModel = ModelService.getModel();
-    if (appModel?.propertyTree) {
-      try {
-        await appModel.propertyTree.setValue('headlessAuthorityUrl', normalizedUrl);
-      } catch (error) {
-        console.warn('[NetworkSettingsService] Failed to persist headless authority URL, keeping session value only:', error);
-      }
-    }
-
-    this.onHeadlessAuthorityUrlChanged.emit(normalizedUrl);
+    await this._settingsStorage.updateField('network', 'headlessAuthorityUrl', url);
   }
 
   /**
