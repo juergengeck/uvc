@@ -169,6 +169,31 @@ export default function SettingsScreen() {
           </HelperText>
         )}
 
+        {/* UVC resources are managed from Settings, not primary navigation. */}
+        <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
+          {t('settings.resources.title', { defaultValue: 'RESOURCES' }).toUpperCase()}
+        </Text>
+        <View style={themedStyles.settingsSection}>
+          <List.Item
+            title={t('settings.resources.devices.title', { defaultValue: 'Devices' })}
+            description={t('settings.resources.devices.description', {
+              defaultValue: 'Lamps, sensors, rooms, and device assignments',
+            })}
+            onPress={() => router.push('/(tabs)/contacts')}
+            left={props => <List.Icon {...props} icon="devices" />}
+            right={props => <List.Icon {...props} icon="chevron-right" />}
+          />
+          <List.Item
+            title={t('settings.resources.feeds.title', { defaultValue: 'Camera feeds' })}
+            description={t('settings.resources.feeds.description', {
+              defaultValue: 'Inspect camera-equipped room resources',
+            })}
+            onPress={() => router.push('/(screens)/devices/camera-feeds')}
+            left={props => <List.Icon {...props} icon="cctv" />}
+            right={props => <List.Icon {...props} icon="chevron-right" />}
+          />
+        </View>
+
         {/* Appearance Settings */}
         <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
           {t('settings.appearance.title').toUpperCase()}
@@ -335,4 +360,4 @@ export default function SettingsScreen() {
       </ScrollView>
     </SafeAreaView>
   );
-} 
+}

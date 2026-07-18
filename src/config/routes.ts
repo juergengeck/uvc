@@ -45,7 +45,7 @@ export const routes: Routes = {
     login: '/(auth)/login',
   },
   tabs: {
-    index: '/(tabs)/home',
+    index: '/(tabs)/journal',
     contacts: '/(tabs)/contacts',
     journal: '/(tabs)/journal', 
     profile: '/(tabs)/profile',

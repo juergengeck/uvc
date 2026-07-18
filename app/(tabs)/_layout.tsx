@@ -27,7 +27,8 @@ export default function TabsLayout() {
   // Once ready, render tabs without OneProvider (already wrapped in _layout.tsx)
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <Tabs 
+      <Tabs
+        initialRouteName="journal"
         screenOptions={{ 
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -72,6 +73,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="home" 
           options={{
+            href: null,
             title: t('navigation:home.title', { defaultValue: 'Home' }),
             tabBarLabel: 'Home',
             tabBarIcon: ({ color, size }) => (
@@ -131,25 +133,25 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="journal" 
           options={{
-            title: t('navigation:journal.title', { defaultValue: 'Journal' }),
+            title: t('navigation:journal.title', { defaultValue: 'Disinfection journal' }),
             tabBarLabel: 'Journal',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="notebook" size={size} color={theme.colors.primary} />
+              <MaterialCommunityIcons name="calendar-month" size={size} color={theme.colors.primary} />
             ),
             headerRight: () => (
               <View style={{ flexDirection: 'row', marginRight: 8 }}>
-                <IconButton
-                  icon="home"
-                  size={24}
-                  iconColor={theme.colors.primary}
-                  onPress={() => router.push('/(tabs)/')}
-                  style={{ margin: 0, marginRight: 8 }}
-                />
                 <IconButton
                   icon="calendar"
                   size={24}
                   iconColor={theme.colors.primary}
                   onPress={() => router.push('/(screens)/calendar')}
+                  style={{ margin: 0, marginRight: 8 }}
+                />
+                <IconButton
+                  icon="cog"
+                  size={24}
+                  iconColor={theme.colors.primary}
+                  onPress={() => router.push('/(screens)/settings')}
                   style={{ margin: 0 }}
                 />
               </View>
@@ -159,6 +161,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="contacts" 
           options={{
+            href: null,
             title: t('navigation:devices.title', { defaultValue: 'Devices' }),
             tabBarLabel: 'Devices',
             tabBarIcon: ({ color, size }) => (

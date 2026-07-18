@@ -174,10 +174,10 @@ export default function CalendarScreen() {
         </Text>
         <View style={styles.headerRight}>
           <IconButton
-            icon="home"
+            icon="cog"
             size={24}
             iconColor={theme.colors.primary}
-            onPress={() => router.push('/(tabs)/')}
+            onPress={() => router.push('/(screens)/settings')}
             style={{ margin: 0, marginRight: 8 }}
           />
           <IconButton
@@ -308,4 +308,4 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 16,
   },
-}); 
+});
