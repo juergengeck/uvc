@@ -1,7 +1,36 @@
 {
-  "noEntries": "Pas encore d'entrées",
+  "noEntries": "Aucune désinfection documentée pour le moment",
   "addEntry": "Ajouter une entrée",
-  "loading": "Chargement des entrées...",
+  "loading": "Chargement du journal",
+  "loadingSubtitle": "Préparation des données des salles et des appareils…",
+  "refreshing": "Actualisation des enregistrements",
   "notAuthenticated": "Veuillez vous connecter pour voir votre journal",
-  "journalDescription": "Votre journal affichera vos conversations et activités dans l'application. Commencez par discuter avec des contacts ou des assistants IA."
-} 
+  "journalDescription": "Votre journal affichera vos conversations et activités dans l'application. Commencez par discuter avec des contacts ou des assistants IA.",
+  "headline": "Où et quand les salles ont été traitées",
+  "description": "Un registre partagé de chaque traitement de salle et des lampes et capteurs utilisés.",
+  "devices": "Paramètres · Appareils",
+  "demoTitle": "Journal de démonstration",
+  "demoDescription": "des exemples illustrent le flux prévu avec la salle, l'heure et les ressources.",
+  "start": "Démarrer le traitement",
+  "stop": "Arrêter le traitement",
+  "cancel": "Annuler",
+  "noRooms": "Aucune salle configurée",
+  "startConfirmTitle": "Démarrer le traitement UVC ?",
+  "startConfirmDescription": "Cette action active les ressources de traitement configurées dans {{room}}. Confirmez que la salle est vide et sécurisée.",
+  "stopConfirmTitle": "Arrêter le traitement UVC ?",
+  "stopConfirmDescription": "Les lampes et contrôleurs affectés à {{room}} seront éteints et vérifiés.",
+  "startFailed": "Le traitement n'a pas pu démarrer",
+  "stopFailed": "Le traitement n'a pas pu être arrêté en toute sécurité",
+  "activeTitle": "Traitement en cours",
+  "activeDescription": "{{room}} · démarré à {{time}}",
+  "verifiedEvidence_one": "{{count}} observation vérifiée",
+  "verifiedEvidence_other": "{{count}} observations vérifiées",
+  "status": {
+    "completed": "Terminé",
+    "planned": "Planifié",
+    "running": "En cours",
+    "failed": "Échoué",
+    "device": "Activité de l'appareil",
+    "note": "Entrée du journal"
+  }
+}

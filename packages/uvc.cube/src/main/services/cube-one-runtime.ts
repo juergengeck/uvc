@@ -60,6 +60,7 @@ import {
   UVC_RECIPES,
   isUvcChumSyncType,
   UvcControlPlan,
+  UvcFacilityPlan,
   UvcProvisioningController,
   UvcStateTrie,
   projectUvcStateTrieEntryHashes,
@@ -76,6 +77,9 @@ import {
   makeUvcPhoneBookTrieRootId,
   makeUvcProvisioningTrieRootId,
   type UvcDiscoveryObservation,
+  type UvcDisinfectionRun,
+  type UvcRoom,
+  type UvcRoomResource,
   type UvcControlCommand,
   type UvcControlObservation,
   type UvcAdminRoleGrantResult,
@@ -96,7 +100,7 @@ import {app} from 'electron';
 import path from 'node:path';
 import {createPublicKey, randomUUID, verify as verifyNodeSignature} from 'node:crypto';
 
-import type {DiscoveryDeviceSnapshot, SettingsSnapshot} from '@shared/contracts';
+import type {CubeDisinfectionRecord, DiscoveryDeviceSnapshot, SettingsSnapshot} from '@shared/contracts';
 import {DEFAULT_UVC_COMM_SERVER_URL} from '@shared/settings/registry';
 
 const chumDiagnostics = createMessageBus('uvc-cube-chum-diagnostics');
@@ -193,6 +197,7 @@ export class CubeOneRuntime {
   private journal?: UvcStateTrie;
   private provisioning?: UvcStateTrie;
   private controlPlan?: UvcControlPlan;
+  private facility?: UvcFacilityPlan;
   private provisioningController?: UvcProvisioningController;
   private provisioningClient?: QuicVCHeadlessProvisioningClient;
   private authorityClient?: GroovAuthorityClient;
@@ -211,6 +216,7 @@ export class CubeOneRuntime {
   private readonly controlPeerConnections = new Map<string, Promise<void>>();
   private readonly importedDiscoveryAt = new Map<string, number>();
   private readonly consumed = new Set<string>();
+  private readonly importedDisinfectionRuns = new Map<string, UvcDisinfectionRun>();
   private disconnectImportListener?: () => void;
   /**
    * Preserve producer ordering without coupling independent peers. A command
@@ -289,6 +295,13 @@ export class CubeOneRuntime {
             ownerPersonId: remotePersonId,
             ownerInstanceId: remoteInstanceId,
             audiencePersonId: localPersonId,
+          }),
+        }),
+        calculateIdHashOfObj({
+          $type$: 'UvcStateTrieRoot',
+          id: makeUvcJournalTrieRootId({
+            ownerPersonId: remotePersonId,
+            ownerInstanceId: remoteInstanceId,
           }),
         }),
       ]),
@@ -382,6 +395,20 @@ export class CubeOneRuntime {
       grantRootAccess,
     });
     await Promise.all([this.phoneBook.init(), this.journal.init(), this.provisioning.init()]);
+    this.facility = new UvcFacilityPlan({
+      ownerPersonId,
+      ownerInstanceId,
+      journal: this.journal,
+      storage: {
+        storeResource: async resource => (
+          await storeUnversionedObject(resource as never)
+        ).hash as SHA256Hash<UvcRoomResource>,
+        storeVersioned: async object => await storeVersionedObject(object as never) as never,
+        load: async hash => await getObject(hash as never) as UvcStateEntry | UvcRoomResource,
+        loadVersioned: async idHash => await getObjectByIdHash(idHash as never) as unknown as UvcRoom | UvcDisinfectionRun,
+        calculateIdHash: async object => await calculateIdHashOfObj(object as never) as SHA256IdHash,
+      },
+    });
     await this.migrateLegacyProvisioningEvidence(ownerPersonId, ownerInstanceId);
     await this.restoreProvisionedDeviceBindings();
     const restoredObservations = await this.phoneBook.list(['phone-book']);
@@ -621,6 +648,38 @@ export class CubeOneRuntime {
     return await Promise.all(hashes.map(hash => getObject(hash as never) as Promise<UvcStateEntry>));
   }
 
+  async disinfectionRecords(): Promise<CubeDisinfectionRecord[]> {
+    if (!this.facility) {
+      throw new Error('[UvcCube] facility plan is not initialized');
+    }
+    const latest = new Map<string, UvcDisinfectionRun>();
+    for (const run of [
+      ...await this.facility.listDisinfectionRuns(),
+      ...this.importedDisinfectionRuns.values(),
+    ]) {
+      const key = `${run.ownerPersonId}:${run.runId}`;
+      const previous = latest.get(key);
+      if (!previous || run.updatedAt > previous.updatedAt) latest.set(key, run);
+    }
+    return await Promise.all([...latest.values()].map(async run => ({
+      id: run.runId,
+      timestamp: run.startedAt ?? run.scheduledAt ?? run.createdAt,
+      ...(run.startedAt !== undefined && run.endedAt !== undefined
+        ? {durationMinutes: Math.max(1, Math.round((run.endedAt - run.startedAt) / 60_000))}
+        : {}),
+      evidenceCount: (run.startObservations?.size ?? 0) + (run.stopObservations?.size ?? 0),
+      location: run.roomName,
+      resources: await Promise.all([...run.resources].map(async hash => {
+        const resource = await getObject(hash as never) as UvcRoomResource;
+        if (resource.$type$ !== 'UvcRoomResource') {
+          throw new Error(`[UvcCube] run ${run.runId} has invalid resource ${String(hash)}`);
+        }
+        return resource.label;
+      })),
+      status: run.status,
+    }))).then(records => records.sort((left, right) => right.timestamp - left.timestamp));
+  }
+
   /**
    * Project correlated command/observation evidence from the journal DAG.
    * The integration runner uses this instead of scanning ambient storage.
@@ -846,6 +905,13 @@ export class CubeOneRuntime {
       // observedAt belongs to the source event and may legitimately predate a
       // test that starts after Metro has initialized and CHUM has imported it.
       this.importedDiscoveryAt.set(source, Date.now());
+    }
+    if (entry.$type$ === 'UvcDisinfectionRun') {
+      const key = `${entry.ownerPersonId}:${entry.runId}`;
+      const previous = this.importedDisinfectionRuns.get(key);
+      if (!previous || entry.updatedAt > previous.updatedAt) {
+        this.importedDisinfectionRuns.set(key, entry);
+      }
     }
     console.log(`[UvcCube] Consumed imported ${entry.$type$} ${hash}`);
     if (process.env.UVC_CHUM_DEBUG === '1' && entry.$type$ === 'UvcControlCommand') {

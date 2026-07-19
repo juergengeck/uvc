@@ -110,6 +110,16 @@ export interface DiscoveryDeviceSnapshot {
   capabilities?: string[];
 }
 
+export interface CubeDisinfectionRecord {
+  id: string;
+  timestamp: number;
+  durationMinutes?: number;
+  evidenceCount?: number;
+  location: string;
+  resources: string[];
+  status: 'planned' | 'running' | 'completed' | 'failed';
+}
+
 export interface CubeIdentitySnapshot {
   personId: string;
   instanceId: string;

@@ -1,4 +1,8 @@
 {
-  "title": "Calendar",
-  "noEntries": "No entries for this date"
-} 
+  "title": "Disinfection calendar",
+  "description": "Room treatments by date and resource",
+  "demoDescription": "Demonstration records are shown until device journal data is available.",
+  "recordCount_one": "{{count}} record",
+  "recordCount_other": "{{count}} records",
+  "noEntries": "No treatments recorded for this date"
+}

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarDays,
   CheckCircle2,
@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
-import type { DiscoveryDeviceSnapshot } from '@shared/contracts';
+import type { CubeDisinfectionRecord, DiscoveryDeviceSnapshot } from '@shared/contracts';
 
 interface JournalViewProps {
   devices: DiscoveryDeviceSnapshot[];
@@ -20,11 +20,12 @@ interface JournalViewProps {
 
 interface DemoJournalEntry {
   date: Date;
-  durationMinutes: number;
+  durationMinutes?: number;
+  evidenceCount?: number;
   id: string;
   location: string;
   resources: string[];
-  status: 'completed' | 'planned';
+  status: 'completed' | 'planned' | 'running' | 'failed';
 }
 
 function dateKey(date: Date): string {
@@ -48,7 +49,7 @@ function resourceNames(devices: DiscoveryDeviceSnapshot[]): string[] {
     .map((device) => device.name || device.type || device.id)
     .slice(0, 2);
 
-  return names.length ? names : ['UVC lamp 01', 'ESP32 room sensor'];
+  return names.length ? names : ['UVC lamp 01 · groov RIO', 'ESP32 room sensor'];
 }
 
 function createDemoEntries(devices: DiscoveryDeviceSnapshot[]): DemoJournalEntry[] {
@@ -167,14 +168,21 @@ function JournalEntryCard({ entry }: { entry: DemoJournalEntry }) {
         <div className="journal-entry-card__heading">
           <div>
             <h3>{entry.location}</h3>
-            <p>{entry.status === 'completed' ? 'Disinfection completed' : 'Disinfection planned'}</p>
+            <p>{entry.status === 'completed'
+              ? 'Disinfection completed'
+              : entry.status === 'planned'
+                ? 'Disinfection planned'
+                : entry.status === 'running'
+                  ? 'Disinfection in progress'
+                  : 'Disinfection failed'}</p>
           </div>
           <time dateTime={entry.date.toISOString()}>
             {entry.date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
           </time>
         </div>
         <div className="journal-entry-card__meta">
-          <span><Clock3 /> {entry.durationMinutes} min</span>
+          {entry.durationMinutes !== undefined ? <span><Clock3 /> {entry.durationMinutes} min</span> : null}
+          {entry.evidenceCount ? <span><ShieldCheck /> {entry.evidenceCount} verified control observations</span> : null}
           <span><Radio /> {entry.resources.join(' · ')}</span>
         </div>
       </div>
@@ -186,7 +194,29 @@ export function JournalView({ devices }: JournalViewProps) {
   const [mode, setMode] = useState<'calendar' | 'journal'>('calendar');
   const [month, setMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const entries = useMemo(() => createDemoEntries(devices), [devices]);
+  const [realRecords, setRealRecords] = useState<CubeDisinfectionRecord[]>([]);
+  useEffect(() => {
+    let active = true;
+    void window.electronAPI.invokePlan<CubeDisinfectionRecord[]>('journal', 'listDisinfectionRuns')
+      .then(records => {
+        if (active) setRealRecords(records);
+      })
+      .catch(error => console.error('[JournalView] Failed to load disinfection runs:', error));
+    return () => {
+      active = false;
+    };
+  }, []);
+  const entries = useMemo(() => realRecords.length
+    ? realRecords.map(record => ({
+      date: new Date(record.timestamp),
+      ...(record.durationMinutes !== undefined ? {durationMinutes: record.durationMinutes} : {}),
+      ...(record.evidenceCount !== undefined ? {evidenceCount: record.evidenceCount} : {}),
+      id: record.id,
+      location: record.location,
+      resources: record.resources,
+      status: record.status,
+    }))
+    : createDemoEntries(devices), [devices, realRecords]);
   const visibleEntries = mode === 'calendar'
     ? entries.filter((entry) => dateKey(entry.date) === dateKey(selectedDate))
     : entries;
@@ -220,10 +250,12 @@ export function JournalView({ devices }: JournalViewProps) {
         </div>
       </header>
 
-      <div className="demo-notice" role="note">
-        <ShieldCheck aria-hidden="true" />
-        <span><strong>Demonstration journal</strong> — sample treatment records show the intended room, time, and resource workflow.</span>
-      </div>
+      {!realRecords.length ? (
+        <div className="demo-notice" role="note">
+          <ShieldCheck aria-hidden="true" />
+          <span><strong>Demonstration journal</strong> — sample treatment records show the intended room, time, and resource workflow.</span>
+        </div>
+      ) : null}
 
       <div className={`journal-workspace journal-workspace--${mode}`}>
         {mode === 'calendar' ? (

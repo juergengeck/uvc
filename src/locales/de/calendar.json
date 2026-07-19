@@ -1,4 +1,8 @@
 {
-  "title": "Kalender",
-  "noEntries": "Keine Einträge für dieses Datum"
-} 
+  "title": "Desinfektionskalender",
+  "description": "Raumbehandlungen nach Datum und Ressource",
+  "demoDescription": "Bis Gerätedaten im Journal verfügbar sind, werden Demonstrationseinträge angezeigt.",
+  "recordCount_one": "{{count}} Eintrag",
+  "recordCount_other": "{{count}} Einträge",
+  "noEntries": "Für dieses Datum sind keine Behandlungen dokumentiert"
+}

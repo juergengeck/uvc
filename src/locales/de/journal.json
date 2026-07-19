@@ -1,7 +1,36 @@
 {
-  "noEntries": "Noch keine Einträge",
+  "noEntries": "Noch keine Desinfektionen dokumentiert",
   "addEntry": "Eintrag hinzufügen",
-  "loading": "Einträge werden geladen...",
+  "loading": "Journal wird geladen",
+  "loadingSubtitle": "Raum- und Gerätedaten werden vorbereitet…",
+  "refreshing": "Einträge werden aktualisiert",
   "notAuthenticated": "Bitte melden Sie sich an, um Ihr Journal zu sehen",
-  "journalDescription": "Ihr Journal zeigt Ihre Gespräche und Aktivitäten in der App an. Beginnen Sie, indem Sie mit Kontakten oder KI-Assistenten chatten."
-} 
+  "journalDescription": "Ihr Journal zeigt Ihre Gespräche und Aktivitäten in der App an. Beginnen Sie, indem Sie mit Kontakten oder KI-Assistenten chatten.",
+  "headline": "Wo und wann Räume behandelt wurden",
+  "description": "Ein gemeinsamer Nachweis jeder Raumbehandlung sowie der dabei verwendeten Lampen und Sensoren.",
+  "devices": "Einstellungen · Geräte",
+  "demoTitle": "Demonstrationsjournal",
+  "demoDescription": "Beispiele zeigen den vorgesehenen Ablauf mit Raum, Zeit und eingesetzten Ressourcen.",
+  "start": "Behandlung starten",
+  "stop": "Behandlung stoppen",
+  "cancel": "Abbrechen",
+  "noRooms": "Keine Räume eingerichtet",
+  "startConfirmTitle": "UVC-Behandlung starten?",
+  "startConfirmDescription": "Dadurch werden die eingerichteten Behandlungsressourcen in {{room}} aktiviert. Bestätigen Sie, dass der Raum leer und gesichert ist.",
+  "stopConfirmTitle": "UVC-Behandlung stoppen?",
+  "stopConfirmDescription": "Die {{room}} zugeordneten Lampen und Steuerungen werden ausgeschaltet und überprüft.",
+  "startFailed": "Behandlung konnte nicht gestartet werden",
+  "stopFailed": "Behandlung konnte nicht sicher gestoppt werden",
+  "activeTitle": "Behandlung läuft",
+  "activeDescription": "{{room}} · gestartet um {{time}}",
+  "verifiedEvidence_one": "{{count}} bestätigte Beobachtung",
+  "verifiedEvidence_other": "{{count}} bestätigte Beobachtungen",
+  "status": {
+    "completed": "Abgeschlossen",
+    "planned": "Geplant",
+    "running": "Läuft",
+    "failed": "Fehlgeschlagen",
+    "device": "Geräteaktivität",
+    "note": "Journaleintrag"
+  }
+}

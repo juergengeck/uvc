@@ -1,4 +1,8 @@
 {
-  "title": "Calendrier",
-  "noEntries": "Pas d'entrées pour cette date"
-} 
+  "title": "Calendrier de désinfection",
+  "description": "Traitements des salles par date et ressource",
+  "demoDescription": "Des enregistrements de démonstration sont affichés jusqu'à ce que les données des appareils soient disponibles.",
+  "recordCount_one": "{{count}} enregistrement",
+  "recordCount_other": "{{count}} enregistrements",
+  "noEntries": "Aucun traitement enregistré pour cette date"
+}

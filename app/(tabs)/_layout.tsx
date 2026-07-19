@@ -56,6 +56,7 @@ export default function TabsLayout() {
           headerRight: () => (
             <IconButton
               icon="cog"
+              accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
               size={24}
               onPress={() => router.push('/(screens)/settings')}
               iconColor={theme.colors.primary}
@@ -77,7 +78,7 @@ export default function TabsLayout() {
             title: t('navigation:home.title', { defaultValue: 'Home' }),
             tabBarLabel: 'Home',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="home" size={size} color={theme.colors.primary} />
+              <MaterialCommunityIcons name="home" size={size} color={color} />
             ),
             headerTitleContainerStyle: {
               left: 0, // Align title container to the left
@@ -87,6 +88,7 @@ export default function TabsLayout() {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <IconButton
                   icon="qrcode"
+                  accessibilityLabel={t('navigation:network.title', { defaultValue: 'Connections' })}
                   size={24}
                   onPress={() => router.push('/(screens)/network/connection')}
                   iconColor={theme.colors.primary}
@@ -94,6 +96,7 @@ export default function TabsLayout() {
                 />
                 <IconButton
                   icon="cog"
+                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
                   size={24}
                   onPress={() => router.push('/(screens)/settings')}
                   iconColor={theme.colors.primary}
@@ -108,19 +111,21 @@ export default function TabsLayout() {
           options={{
             tabBarLabel: 'Messages',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="message" size={size} color={theme.colors.primary} />
+              <MaterialCommunityIcons name="message" size={size} color={color} />
             ),
             title: t('navigation:messages.title', { defaultValue: 'Messages' }),
             headerRight: () => (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <IconButton
                   icon="account-plus"
+                  accessibilityLabel={t('navigation:contacts.invite', { defaultValue: 'Invite contact' })}
                   size={24}
                   onPress={() => router.push('/(screens)/contacts/invite')}
                   iconColor={theme.colors.primary}
                 />
                 <IconButton
                   icon="cog"
+                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
                   size={24}
                   onPress={() => router.push('/(screens)/settings')}
                   iconColor={theme.colors.primary}
@@ -136,12 +141,13 @@ export default function TabsLayout() {
             title: t('navigation:journal.title', { defaultValue: 'Disinfection journal' }),
             tabBarLabel: 'Journal',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="calendar-month" size={size} color={theme.colors.primary} />
+              <MaterialCommunityIcons name="calendar-month" size={size} color={color} />
             ),
             headerRight: () => (
               <View style={{ flexDirection: 'row', marginRight: 8 }}>
                 <IconButton
                   icon="calendar"
+                  accessibilityLabel={t('navigation:calendar.title', { defaultValue: 'Calendar' })}
                   size={24}
                   iconColor={theme.colors.primary}
                   onPress={() => router.push('/(screens)/calendar')}
@@ -149,6 +155,7 @@ export default function TabsLayout() {
                 />
                 <IconButton
                   icon="cog"
+                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
                   size={24}
                   iconColor={theme.colors.primary}
                   onPress={() => router.push('/(screens)/settings')}
@@ -165,18 +172,20 @@ export default function TabsLayout() {
             title: t('navigation:devices.title', { defaultValue: 'Devices' }),
             tabBarLabel: 'Devices',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="devices" size={size} color={theme.colors.primary} />
+              <MaterialCommunityIcons name="devices" size={size} color={color} />
             ),
             headerRight: () => (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <IconButton
                   icon="cctv"
+                  accessibilityLabel={t('navigation:devices.cameraFeeds', { defaultValue: 'Camera feeds' })}
                   size={24}
                   onPress={() => router.push('/(screens)/devices/camera-feeds')}
                   iconColor={theme.colors.primary}
                 />
                 <IconButton
                   icon="cog"
+                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
                   size={24}
                   onPress={() => router.push('/(screens)/settings')}
                   iconColor={theme.colors.primary}

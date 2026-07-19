@@ -65,6 +65,7 @@ export function registerUvcPlans(): OperationRegistry {
     listDeviceEvents: async (input?: {deviceId?: string}) => (
       cubeOneRuntime.journalEntries(input?.deviceId)
     ),
+    listDisinfectionRuns: async () => cubeOneRuntime.disinfectionRecords(),
   }, {category: 'journal'});
   registry.register('chumDiagnostics', {
     get: async (input?: {traceLimit?: number}) => getChumSyncDiagnostics({
