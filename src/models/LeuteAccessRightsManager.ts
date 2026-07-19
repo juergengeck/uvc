@@ -1,10 +1,10 @@
-import type {SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
-import type {Group, Instance, Person} from '@refinio/one.core/lib/recipes.js';
+import type {SHA256Hash, SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
+import type {HashGroup, Instance, Person} from '@refinio/one.core/lib/recipes.js';
 import {serializeWithType} from '@refinio/one.core/lib/util/promise.js';
 import {getAllEntries} from '@refinio/one.core/lib/reverse-map-query.js';
 import {SET_ACCESS_MODE} from '@refinio/one.core/lib/storage-base-common.js';
 import {getObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
-import {createAccess} from '@refinio/one.core/lib/access.js';
+import {createAccess, type SetAccessParam} from '@refinio/one.core/lib/access.js';
 
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
 import type {RawChannelEntry} from '@refinio/one.models/lib/models/ChannelManager.js';
@@ -23,17 +23,17 @@ const QUESTIONNAIRE_CHANNELS = ['questionnaireResponse', 'incompleteQuestionnair
 type ChannelAccessRights = {
     owner: SHA256IdHash<Person> | null; // The owner of the channels
     persons: SHA256IdHash<Person>[]; // The persons who should gain access
-    groups: SHA256IdHash<Group>[];
+    groups: SHA256Hash<HashGroup<Person>>[];
     channels: string[]; // The channels that should gain access
 };
 
 type ChannelAccessRightsSingleChannel = Omit<ChannelAccessRights, 'channels'> & {channel: string};
 
 type GroupConfig = {
-    iom?: SHA256IdHash<Group>;
-    leuteReplicant?: SHA256IdHash<Group>;
-    glueReplicant?: SHA256IdHash<Group>;
-    everyone?: SHA256IdHash<Group>;
+    iom?: SHA256Hash<HashGroup<Person>>;
+    leuteReplicant?: SHA256Hash<HashGroup<Person>>;
+    glueReplicant?: SHA256Hash<HashGroup<Person>>;
+    everyone?: SHA256Hash<HashGroup<Person>>;
 };
 
 type LeuteAccessRightsManagerOptions = {
@@ -110,7 +110,7 @@ export default class LeuteAccessRightsManager {
                         {
                             id: channelInfoIdHash,
                             person: [],
-                            group: this.groups('iom'),
+                            hashGroup: this.groups('iom'),
                             mode: SET_ACCESS_MODE.ADD
                         }
                     ]);
@@ -138,14 +138,14 @@ export default class LeuteAccessRightsManager {
                                 {
                                     id: channelInfoIdHash,
                                     person: [otherPersonId as SHA256IdHash<Person>],
-                                    group: [],
+                                    hashGroup: [],
                                     mode: SET_ACCESS_MODE.ADD
                                 }
                             ]);
 
                             // Grant access to all channel entries for the other person
                             if (data && data.length > 0) {
-                                const entryAccessGrants = [];
+                                const entryAccessGrants: SetAccessParam[] = [];
                                 for (const [idx, entry] of data.entries()) {
                                     if (!entry.channelEntryHash) {
                                         console.log(`[LeuteAccessRightsManager] [${userName}] ⚠️ Entry ${idx} missing channelEntryHash`);
@@ -159,7 +159,7 @@ export default class LeuteAccessRightsManager {
                                         entryAccessGrants.push({
                                             object: entry.channelEntryHash,  // Use 'object' for regular hashes!
                                             person: [otherPersonId as SHA256IdHash<Person>],
-                                            group: [],
+                                            hashGroup: [],
                                             mode: SET_ACCESS_MODE.ADD
                                         });
                                     }
@@ -169,14 +169,14 @@ export default class LeuteAccessRightsManager {
                                         entryAccessGrants.push({
                                             object: entry.dataHash,  // Use 'object' for regular hashes!
                                             person: [otherPersonId as SHA256IdHash<Person>],
-                                            group: [],
+                                            hashGroup: [],
                                             mode: SET_ACCESS_MODE.ADD
                                         });
                                     }
                                 }
                                 
                                 if (entryAccessGrants.length > 0) {
-                                    await createAccess(entryAccessGrants as any);
+                                    await createAccess(entryAccessGrants);
                                     console.log(`[LeuteAccessRightsManager] [${userName}] ✅ Granted access to ${entryAccessGrants.length} objects for ${otherName} (${otherIdShort}...)`);
                                 }
                             }
@@ -217,8 +217,8 @@ export default class LeuteAccessRightsManager {
 
     // ######## Group helper functions ########
 
-    groups(...groupNames: Array<keyof GroupConfig>): SHA256IdHash<Group>[] {
-        const groups: SHA256IdHash<Group>[] = [];
+    groups(...groupNames: Array<keyof GroupConfig>): SHA256Hash<HashGroup<Person>>[] {
+        const groups: SHA256Hash<HashGroup<Person>>[] = [];
         for (const groupName of groupNames) {
             const groupConfigEntry = this.groupConfig[groupName];
             if (groupConfigEntry !== undefined) {
@@ -263,7 +263,7 @@ export default class LeuteAccessRightsManager {
             const setAccessParam = {
                 id: mainProfile.idHash,
                 person: [],
-                group: this.groups('everyone'),
+                hashGroup: this.groups('everyone'),
                 mode: SET_ACCESS_MODE.ADD
             };
             await createAccess([setAccessParam]);
@@ -384,7 +384,7 @@ export default class LeuteAccessRightsManager {
                         {
                             id: channelIdHash,
                             person: accessInfo.persons,
-                            group: accessInfo.groups,
+                            hashGroup: accessInfo.groups,
                             mode: SET_ACCESS_MODE.ADD
                         }
                     ]);

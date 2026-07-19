@@ -42,6 +42,12 @@ export async function initializePlatform(options: {enableBluetooth?: boolean} = 
     console.error('[Platform] ❌ Crypto not ready:', error);
     throw error;
   }
+
+  if (Platform.OS === 'web') {
+    console.log('[Platform] Browser runtime uses persisted resources; native transports skipped');
+    console.log(`[Platform] ✅ Platform initialization complete (total: ${Date.now() - platformStartTime}ms)`);
+    return;
+  }
   
   // 2. UDP transport
   console.log('[Platform] Initializing UDP...');

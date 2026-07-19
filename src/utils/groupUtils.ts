@@ -95,6 +95,14 @@ export async function getGroupMembersByName(groupName: string): Promise<SHA256Id
     }
 }
 
+/** Return the current immutable HashGroup referenced by a named Group root. */
+export async function getGroupHashGroupByName(
+    groupName: string
+): Promise<SHA256Hash<HashGroup<Person>>> {
+    const group = await getObjectByIdHash<Group>(await getGroupIdByName(groupName));
+    return group.obj.hashGroup;
+}
+
 /**
  * Add person to group.
  *
@@ -244,6 +252,7 @@ export default {
     createGroupIfNotExist,
     getGroupMembers,
     getGroupMembersByName,
+    getGroupHashGroupByName,
     addPersonToGroup,
     addPersonToGroupByName,
     removePersonFromGroup,

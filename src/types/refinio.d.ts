@@ -6,6 +6,7 @@ declare module '@refinio/one.models/lib/misc/OEvent.js' {
   export class OEvent<T extends (...args: any[]) => void> {
     listen(callback: T): { remove?: () => void };
     emit(...args: Parameters<T>): void;
+    emitAll(...args: Parameters<T>): Promise<ReturnType<T>[]>;
   }
 }
 
@@ -124,4 +125,4 @@ declare module '@refinio/one.models/lib/models/Authenticator/Authenticator.js' {
 declare module '@refinio/one.models/lib/models/SettingsModel.js' {
   const SettingsModel: any;
   export default SettingsModel;
-} 
+}

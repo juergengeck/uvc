@@ -17,25 +17,6 @@ type ThemeContextType = {
 
 // Determine system preference early to avoid white flash before stored preference loads
 const systemPrefersDark = Appearance.getColorScheme() === 'dark';
-const defaultTheme = createCustomTheme(systemPrefersDark);
-const defaultStyles = createThemedStyles(defaultTheme);
-
-const ThemeContext = createContext<ThemeContextType>({
-  isDarkMode: false,
-  toggleTheme: async () => {},
-  isLoading: false,
-  error: null,
-  theme: defaultTheme,
-  styles: defaultStyles,
-});
-
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within an AppThemeProvider');
-  }
-  return context;
-};
 
 interface AppThemeProviderProps {
   children: React.ReactNode;
@@ -152,6 +133,26 @@ function createCustomTheme(isDark: boolean) {
     roundness: 12,
   };
 }
+
+const defaultTheme = createCustomTheme(systemPrefersDark);
+const defaultStyles = createThemedStyles(defaultTheme);
+
+const ThemeContext = createContext<ThemeContextType>({
+  isDarkMode: false,
+  toggleTheme: async () => {},
+  isLoading: false,
+  error: null,
+  theme: defaultTheme,
+  styles: defaultStyles,
+});
+
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within an AppThemeProvider');
+  }
+  return context;
+};
 
 /**
  * App Theme Provider Component
@@ -287,6 +288,10 @@ export default AppThemeProvider;
 // Direct access to theme setting via storage (available before propertyTree)
 export async function getStoredDarkMode(): Promise<boolean | null> {
   try {
+    if (Platform.OS === 'web') {
+      const result = globalThis.localStorage?.getItem('app_darkMode') ?? null;
+      return result === 'true' ? true : result === 'false' ? false : null;
+    }
     const result = await SecureStore.getItemAsync('app_darkMode');
     return result === 'true' ? true : result === 'false' ? false : null;
   } catch (error) {
@@ -297,6 +302,10 @@ export async function getStoredDarkMode(): Promise<boolean | null> {
 
 export async function setStoredDarkMode(isDarkMode: boolean): Promise<void> {
   try {
+    if (Platform.OS === 'web') {
+      globalThis.localStorage?.setItem('app_darkMode', String(isDarkMode));
+      return;
+    }
     await SecureStore.setItemAsync('app_darkMode', String(isDarkMode));
   } catch (error) {
     console.error('[AppTheme] Error setting stored dark mode:', error);

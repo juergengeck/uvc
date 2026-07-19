@@ -3,8 +3,12 @@ import renderer from 'react-test-renderer';
 import { MonoText } from '../StyledText';
 
 describe('StyledText', () => {
-  it('renders MonoText with SpaceMono font family', () => {
-    const tree = renderer.create(<MonoText>Test text</MonoText>).toJSON();
+  it('renders MonoText with SpaceMono font family', async () => {
+    let component;
+    await renderer.act(async () => {
+      component = renderer.create(<MonoText>Test text</MonoText>);
+    });
+    const tree = component.toJSON();
     expect(tree).toMatchSnapshot();
     expect(tree.props.style).toEqual(
       expect.arrayContaining([
@@ -15,9 +19,13 @@ describe('StyledText', () => {
     );
   });
 
-  it('preserves additional styles passed as props', () => {
+  it('preserves additional styles passed as props', async () => {
     const customStyle = { color: 'red', fontSize: 16 };
-    const tree = renderer.create(<MonoText style={customStyle}>Test text</MonoText>).toJSON();
+    let component;
+    await renderer.act(async () => {
+      component = renderer.create(<MonoText style={customStyle}>Test text</MonoText>);
+    });
+    const tree = component.toJSON();
     expect(tree.props.style).toEqual(
       expect.arrayContaining([
         customStyle,

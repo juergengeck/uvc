@@ -1,6 +1,7 @@
 import {SettingsStore} from '@refinio/one.core/lib/system/settings-store.js';
 import type {InstanceSettingsStorage} from '@refinio/settings.core';
 import * as SecureStore from 'expo-secure-store';
+import {Platform} from 'react-native';
 
 const MIGRATION_VERSION = '1';
 const DEVICE_FIELDS = [
@@ -60,6 +61,13 @@ function copyKnownDeviceFields(source: Record<string, unknown>): Record<string, 
   return migrated;
 }
 
+function getCachedDarkMode(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(globalThis.localStorage?.getItem('app_darkMode') ?? null);
+  }
+  return SecureStore.getItemAsync('app_darkMode');
+}
+
 /**
  * Move legacy PropertyTree values and the two pre-login boot caches into the
  * typed, instance-scoped settings objects. The marker is written only after
@@ -102,7 +110,7 @@ export async function migrateLegacySettings({
     propertyTree.getValue('darkMode'),
     propertyTree.getValue('language'),
     SettingsStore.getItem('app_language'),
-    SecureStore.getItemAsync('app_darkMode'),
+    getCachedDarkMode(),
   ]);
 
   if (hasLegacyValue(deviceSettingsJson)) {

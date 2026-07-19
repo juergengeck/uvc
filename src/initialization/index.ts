@@ -180,7 +180,7 @@ import { revokeDanglingAccessGrantsForPeople } from '../models/network/revokeDan
 import GroupModel from '@refinio/one.models/lib/models/Leute/GroupModel';
 import { calculateIdHashOfObj } from '@refinio/one.core/lib/util/object.js';
 import type { Group } from '@refinio/one.core/lib/recipes.js';
-import { createGroupIfNotExist, getGroupIdByName } from '../utils/groupUtils';
+import { createGroupIfNotExist, getGroupHashGroupByName } from '../utils/groupUtils';
 import '../utils/loadDiagnostics';
 
 // Import crypto functions for secret key verification
@@ -215,6 +215,7 @@ const LEGACY_CREDENTIAL_KEYS = {
 const LEGACY_STORAGE_DIRECTORY = 'lama';
 const LEGACY_INSTANCE_NAME = 'lama';
 let activeCredentialInstanceName: string = APP_CONFIG.name;
+let activeCredentialSecret: string | undefined;
 
 // Add a proper RECIPE_MAPS definition at the top of the file with other declarations
 // Define recipe maps for reverse mapping
@@ -239,6 +240,7 @@ import { UdpModel } from '@src/models/network/UdpModel';
 
 import { SettingsStore } from '@refinio/one.core/lib/system/settings-store';
 import * as FileSystem from 'expo-file-system';
+import {Platform} from 'react-native';
 import { fromByteArray } from 'base64-js';
 import { setupDebugLogging } from '../config/debug';
 
@@ -265,6 +267,7 @@ export async function loginOrRegisterWithKeys(
 ): Promise<void> {
   const startTime = Date.now();
   activeCredentialInstanceName = instanceName;
+  activeCredentialSecret = secret;
 
   // Check if we have cached keys from this session
   if (keyCache.hasCachedKeys(email, instanceName)) {
@@ -328,6 +331,11 @@ export async function clearModel(): Promise<void> {
 // but this has been fixed upstream in one.models, so we can use MultiUser directly
 
 async function migrateLegacyStorageDirectory(): Promise<void> {
+  // Browser instances live in IndexedDB and never used the native Expo
+  // document directory, so there is no filesystem migration to perform.
+  if (typeof indexedDB !== 'undefined' && typeof document !== 'undefined') {
+    return;
+  }
   const documentDirectory = FileSystem.documentDirectory;
   if (!documentDirectory) {
     throw new Error('[Initialization] Expo document directory is unavailable');
@@ -462,6 +470,7 @@ async function attachAuthHandlers(auth: MultiUser): Promise<void> {
       const wasLoggedIn = appRuntimeState.isLoggedIn; // Store previous state
       appRuntimeState.isLoggedIn = false; // Update state immediately
       appRuntimeState.isLoginInProgress = false; // Reset login progress flag
+      activeCredentialSecret = undefined;
       
       // CRITICAL: Wrap everything in try-catch to ensure logout handler NEVER fails
       // If this handler throws, it could prevent MultiUser from completing logout
@@ -586,11 +595,15 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     secretForStorageKey: secret || null
   };
   
-  await measureTime('initStorage', async () => {
-    const result = await initStorage(storageOptions);
-    performanceSummary.record('initStorage', Date.now() - Date.now());
-    return result;
-  });
+  const browserStorageIsOpen = typeof document !== 'undefined'
+    && Boolean((globalThis as typeof globalThis & {__ONE_CORE_STORAGE_DB__?: unknown}).__ONE_CORE_STORAGE_DB__);
+  if (!browserStorageIsOpen) {
+    await measureTime('initStorage', async () => {
+      const result = await initStorage(storageOptions);
+      performanceSummary.record('initStorage', Date.now() - Date.now());
+      return result;
+    });
+  }
 
   // CRITICAL: Initialize ObjectEventDispatcher BEFORE any components that depend on it
   if (!appRuntimeState.objectEventsInitialized) {
@@ -650,10 +663,10 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     const [iom, leuteReplicant, glueReplicant, everyone] = await measureTime(
       'Get group IDs',
       () => Promise.all([
-        getGroupIdByName('iom'),
-        getGroupIdByName('leute-replicant'),
-        getGroupIdByName('glue-replicant'),
-        getGroupIdByName('everyone')
+        getGroupHashGroupByName('iom'),
+        getGroupHashGroupByName('leute-replicant'),
+        getGroupHashGroupByName('glue-replicant'),
+        getGroupHashGroupByName('everyone')
       ])
     );
     accessGroups = {iom, leuteReplicant, glueReplicant, everyone};
@@ -777,10 +790,13 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
       console.log('[initModel] Skipping app journal and owned-device monitor in UVC integration mode');
     }
       
-      // Initialize DeviceDiscoveryModel core dependencies immediately
-      // This ensures it's ready to handle discovery packets when they arrive
-      console.log('[initModel] 📱 Setting up DeviceDiscoveryModel prerequisites...');
-      try {
+      if (Platform.OS === 'web') {
+        console.log('[initModel] Skipping native device discovery transport in the browser');
+      } else {
+        // Initialize DeviceDiscoveryModel core dependencies immediately
+        // This ensures it's ready to handle discovery packets when they arrive
+        console.log('[initModel] 📱 Setting up DeviceDiscoveryModel prerequisites...');
+        try {
         const { QuicModel } = await import('../models/network/QuicModel');
 
         // Pairing trust is already owned by LeuteModel. The integration runtime
@@ -887,9 +903,10 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
         } else {
           console.error('[initModel] ❌ No device identity available for DeviceDiscoveryModel');
         }
-      } catch (initError) {
-        console.error('[initModel] ❌ Error initializing DeviceDiscoveryModel:', initError);
-        // Don't fail the entire initialization if device discovery fails
+        } catch (initError) {
+          console.error('[initModel] ❌ Error initializing DeviceDiscoveryModel:', initError);
+          // Don't fail the entire initialization if device discovery fails
+        }
       }
   } else {
     console.warn('[initModel] ⚠️ PersonId not available for DeviceDiscoveryModel journal setup');
@@ -906,7 +923,7 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
   // correlated device commands. Do not start unrelated channel/AI projections
   // in that explicit mode: their startup scans contend for the same storage
   // queue and can starve CHUM keepalive and command publication.
-  if (!integrationMode) {
+  if (!integrationMode && Platform.OS !== 'web') {
     // Initialize AI models in parallel for the normal interactive application.
     void (async () => {
     console.log('[initModel] 🤖 Creating LLMManager (parallel)...');
@@ -961,7 +978,11 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
     }
     })();
   } else {
-    console.log('[initModel] Skipping LLM/MCP/AI startup in UVC integration mode');
+    console.log(
+      integrationMode
+        ? '[initModel] Skipping LLM/MCP/AI startup in UVC integration mode'
+        : '[initModel] Skipping native LLM/MCP/AI startup in the browser',
+    );
   }
 
 
@@ -1059,8 +1080,14 @@ export async function initModelAfterLogin(): Promise<AppModel> {
     throw new Error('Cannot initialize model: user not logged in');
   }
 
-  // Initialize the model
-  const model = await initModel(authenticator);
+  const secret = activeCredentialSecret ?? (await readStoredCredentials())?.secret;
+  if (!secret) {
+    throw new Error('Cannot initialize browser storage without the authenticated secret');
+  }
+
+  // Initialize the model with the same secret that unlocked the ONE identity.
+  const model = await initModel(authenticator, secret);
+  activeCredentialSecret = undefined;
   
   // Notify that model is ready
   onModelReady.emit();

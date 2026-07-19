@@ -1,11 +1,35 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
+const fs = require('fs');
 const path = require('path');
 
 const projectRoot = __dirname;
 const oneWorkspaceRoot = path.resolve(projectRoot, '../one');
 const expoCompatRoot = path.resolve(projectRoot, 'compat/one-core-expo');
 const config = getDefaultConfig(projectRoot);
+
+const linkedPackageRoot = packageName =>
+  path.resolve(projectRoot, 'node_modules', ...packageName.split('/'));
+const oneLinkedRoot = linkedPackageRoot('@refinio/one.core');
+const oneBrowserSystemRoot = path.join(oneLinkedRoot, 'lib/system');
+const webCompatModules = {
+  '@refinio/one.core-expo/dist/load-expo': path.join(oneBrowserSystemRoot, 'load-browser.js'),
+  '@refinio/one.core-expo/dist/load-expo.js': path.join(oneBrowserSystemRoot, 'load-browser.js'),
+  '@refinio/one.core/lib/system/expo/buffer': path.join(expoCompatRoot, 'buffer.js'),
+  '@refinio/one.core/lib/system/expo/buffer.js': path.join(expoCompatRoot, 'buffer.js'),
+  '@refinio/one.core/lib/system/expo/index': path.join(expoCompatRoot, 'buffer.js'),
+  '@refinio/one.core/lib/system/expo/index.js': path.join(expoCompatRoot, 'buffer.js'),
+  '@refinio/one.core/lib/system/expo/storage-base': path.join(oneBrowserSystemRoot, 'browser/storage-base.js'),
+  '@refinio/one.core/lib/system/expo/storage-base.js': path.join(oneBrowserSystemRoot, 'browser/storage-base.js'),
+  '@refinio/one.core/lib/system/expo/storage-base-delete-file': path.join(oneBrowserSystemRoot, 'browser/storage-base-delete-file.js'),
+  '@refinio/one.core/lib/system/expo/storage-base-delete-file.js': path.join(oneBrowserSystemRoot, 'browser/storage-base-delete-file.js'),
+  '@refinio/one.core/lib/system/expo/storage-streams-impl': path.join(oneBrowserSystemRoot, 'browser/storage-streams.js'),
+  '@refinio/one.core/lib/system/expo/storage-streams-impl.js': path.join(oneBrowserSystemRoot, 'browser/storage-streams.js'),
+  '@refinio/one.core/lib/system/expo/websocket': path.join(oneBrowserSystemRoot, 'browser/websocket.js'),
+  '@refinio/one.core/lib/system/expo/websocket.js': path.join(oneBrowserSystemRoot, 'browser/websocket.js'),
+  'react-native-fs': path.resolve(projectRoot, 'compat/react-native-fs.web.js'),
+  'react-native-udp-direct': path.resolve(projectRoot, 'compat/react-native-udp-direct.web.js'),
+};
 
 const expoCompatModules = {
   '@refinio/one.core-expo/dist/load-expo': path.join(expoCompatRoot, 'load-expo.js'),
@@ -20,10 +44,10 @@ const expoCompatModules = {
   '@refinio/one.core/lib/system/expo/storage-base-delete-file.js': path.join(expoCompatRoot, 'storage-base-delete-file.js'),
   '@refinio/one.core/lib/system/expo/storage-streams-impl': path.join(expoCompatRoot, 'storage-streams-impl.js'),
   '@refinio/one.core/lib/system/expo/storage-streams-impl.js': path.join(expoCompatRoot, 'storage-streams-impl.js'),
-  '@refinio/one.core/lib/system/expo/websocket': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo/dist/system/websocket.js'),
-  '@refinio/one.core/lib/system/expo/websocket.js': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo/dist/system/websocket.js'),
-  '@refinio/one.core/lib/system/expo/crypto-helpers': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo/dist/system/crypto-helpers.js'),
-  '@refinio/one.core/lib/system/expo/crypto-helpers.js': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo/dist/system/crypto-helpers.js'),
+  '@refinio/one.core/lib/system/expo/websocket': path.join(linkedPackageRoot('@refinio/one.core-expo'), 'dist/system/websocket.js'),
+  '@refinio/one.core/lib/system/expo/websocket.js': path.join(linkedPackageRoot('@refinio/one.core-expo'), 'dist/system/websocket.js'),
+  '@refinio/one.core/lib/system/expo/crypto-helpers': path.join(linkedPackageRoot('@refinio/one.core-expo'), 'dist/system/crypto-helpers.js'),
+  '@refinio/one.core/lib/system/expo/crypto-helpers.js': path.join(linkedPackageRoot('@refinio/one.core-expo'), 'dist/system/crypto-helpers.js'),
 };
 
 const appNativeModules = {
@@ -56,6 +80,49 @@ const refinioPackages = {
   '@refinio/uvc.core': path.resolve(oneWorkspaceRoot, 'packages/uvc.core'),
 };
 
+const linkedRefinioPackages = Object.fromEntries(
+  Object.keys(refinioPackages).map(packageName => [packageName, linkedPackageRoot(packageName)]),
+);
+
+function resolveLinkedSourceFile(modulePath, platform) {
+  const extensions = [
+    ...(platform ? [`.${platform}.ts`, `.${platform}.tsx`, `.${platform}.mjs`, `.${platform}.js`, `.${platform}.jsx`, `.${platform}.json`] : []),
+    '.ts', '.tsx', '.mjs', '.js', '.jsx', '.json', '.cjs',
+  ];
+
+  if (fs.existsSync(modulePath) && fs.statSync(modulePath).isFile()) {
+    return modulePath;
+  }
+  for (const extension of extensions) {
+    const candidate = `${modulePath}${extension}`;
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return candidate;
+    }
+  }
+
+  if (fs.existsSync(modulePath) && fs.statSync(modulePath).isDirectory()) {
+    const packageJsonPath = path.join(modulePath, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      const entry = packageJson.module || packageJson.main;
+      if (typeof entry === 'string' && entry !== '.' && entry !== './') {
+        const resolvedEntry = resolveLinkedSourceFile(path.resolve(modulePath, entry), platform);
+        if (resolvedEntry) {
+          return resolvedEntry;
+        }
+      }
+    }
+    return resolveLinkedSourceFile(path.join(modulePath, 'index'), platform);
+  }
+
+  return null;
+}
+
+function asLinkedSourceFile(modulePath, platform) {
+  const filePath = resolveLinkedSourceFile(modulePath, platform);
+  return filePath ? {type: 'sourceFile', filePath} : null;
+}
+
 function resolveRefinioPackageSubpath(moduleName) {
   const packageName = Object.keys(refinioPackages)
     .sort((a, b) => b.length - a.length)
@@ -65,7 +132,7 @@ function resolveRefinioPackageSubpath(moduleName) {
     return null;
   }
 
-  const packageRoot = refinioPackages[packageName];
+  const packageRoot = linkedRefinioPackages[packageName];
   const subpath = moduleName.slice(packageName.length + 1);
   if (packageName === '@refinio/connection.core' && subpath) {
     return subpath === 'recipes'
@@ -100,8 +167,13 @@ module.exports = {
     },
     // Map react-native to react-native-web for web platform builds
     resolveRequest: (context, moduleName, platform) => {
+      if (platform === 'web' && webCompatModules[moduleName]) {
+        return asLinkedSourceFile(webCompatModules[moduleName], platform)
+          || context.resolveRequest(context, webCompatModules[moduleName], platform);
+      }
       if (expoCompatModules[moduleName]) {
-        return context.resolveRequest(context, expoCompatModules[moduleName], platform);
+        return asLinkedSourceFile(expoCompatModules[moduleName], platform)
+          || context.resolveRequest(context, expoCompatModules[moduleName], platform);
       }
       if (platform === 'web' && moduleName === 'react-native') {
         return context.resolveRequest(context, 'react-native-web', platform);
@@ -111,7 +183,31 @@ module.exports = {
       }
       const refinioPath = resolveRefinioPackageSubpath(moduleName);
       if (refinioPath) {
-        return context.resolveRequest(context, refinioPath, platform);
+        return asLinkedSourceFile(refinioPath, platform)
+          || context.resolveRequest(context, refinioPath, platform);
+      }
+      if (moduleName.startsWith('.')) {
+        for (const [packageName, realPackageRoot] of Object.entries(refinioPackages)) {
+          const linkedRoot = linkedRefinioPackages[packageName];
+          const originRoot = context.originModulePath.startsWith(linkedRoot)
+            ? linkedRoot
+            : context.originModulePath.startsWith(realPackageRoot)
+              ? realPackageRoot
+              : null;
+          if (originRoot) {
+            const linkedOrigin = path.join(
+              linkedRoot,
+              path.relative(originRoot, context.originModulePath),
+            );
+            const linkedResolution = asLinkedSourceFile(
+              path.resolve(path.dirname(linkedOrigin), moduleName),
+              platform,
+            );
+            if (linkedResolution) {
+              return linkedResolution;
+            }
+          }
+        }
       }
       return context.resolveRequest(context, moduleName, platform);
     },

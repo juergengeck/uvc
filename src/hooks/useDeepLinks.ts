@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useInstance } from '@src/providers/app/useInstance';
+import { useAppModel } from '@src/providers/app/AppModelProvider';
 import { parseInvitationUrl } from '@src/utils/invitation-url-parser';
 import {
   parseUvcIntegrationControlUrl,
@@ -14,7 +14,7 @@ import {
  */
 export function useDeepLinks() {
   const router = useRouter();
-  const { instance } = useInstance();
+  const { model: instance } = useAppModel();
   const activeUrls = useRef(new Set<string>());
   const completedUrls = useRef(new Set<string>());
 
