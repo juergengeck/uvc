@@ -22,9 +22,11 @@ import {calculateHashOfObj, calculateIdHashOfObj} from '@refinio/one.core/lib/ut
 import type {SHA256Hash, SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
 import type ConnectionsModel from '@refinio/one.models/lib/models/ConnectionsModel.js';
 import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
+import {OEvent} from '@refinio/one.models/lib/misc/OEvent.js';
 import type {OneCoreTrieStorageDeps} from '@refinio/trie.core';
 import {
   UvcControlPlan,
+  UvcFacilityPlan,
   UvcProvisioningController,
   UvcStateTrie,
   projectUvcStateTrieEntryHashes,
@@ -39,8 +41,13 @@ import {
   makeUvcPhoneBookTrieRootId,
   makeUvcProvisioningTrieRootId,
   type UvcAdminRoleGrantResult,
+  type UvcControlCommand,
   type UvcControlObservation,
   type UvcDiscoveryObservation,
+  type UvcDisinfectionRun,
+  type UvcRoom,
+  type UvcRoomKind,
+  type UvcRoomResource,
   type UvcStateEntry,
   type UvcStateTrieRoot,
 } from '@refinio/uvc.core';
@@ -70,6 +77,17 @@ export interface UvcSetLightInput {
   intensity?: number;
 }
 
+export interface UvcDisinfectionRunRecord {
+  run: UvcDisinfectionRun;
+  resources: UvcRoomResource[];
+}
+
+export interface UvcLightControlEvidence {
+  commandHash: SHA256Hash<UvcControlCommand>;
+  observationHash: SHA256Hash<UvcControlObservation>;
+  observation: UvcControlObservation;
+}
+
 interface DiscoveredDeviceRecord {
   deviceId: string;
   deviceType: string;
@@ -95,12 +113,14 @@ const storage: OneCoreTrieStorageDeps = {
 
 /** Trie-backed device logic shared by Expo and its browser build. */
 export class DeviceControlModel {
+  public readonly onFacilityUpdated = new OEvent<(updatedAt: number) => void>();
   private groovClient?: GroovAuthorityClient;
   private headlessProvisioningClient?: QuicVCHeadlessProvisioningClient;
   private phoneBook!: UvcStateTrie;
   private journal!: UvcStateTrie;
   private provisioning!: UvcStateTrie;
   private plan!: UvcControlPlan;
+  private facility!: UvcFacilityPlan;
   private provisioningController!: UvcProvisioningController;
   private readonly controlTries = new Map<string, UvcStateTrie>();
   private readonly consumed = new Set<string>();
@@ -157,6 +177,20 @@ export class DeviceControlModel {
       ownerInstanceId: this.instanceId,
     }), true);
     await Promise.all([this.phoneBook.init(), this.journal.init(), this.provisioning.init()]);
+    this.facility = new UvcFacilityPlan({
+      ownerPersonId: this.personId,
+      ownerInstanceId: this.instanceId,
+      journal: this.journal,
+      storage: {
+        storeResource: async resource => (
+          await storeUnversionedObject(resource as never)
+        ).hash as SHA256Hash<UvcRoomResource>,
+        storeVersioned: async object => await storeVersionedObject(object as never) as never,
+        load: async hash => await getObject(hash as never) as UvcStateEntry | UvcRoomResource,
+        loadVersioned: async idHash => await getObjectByIdHash(idHash as never) as unknown as UvcRoom | UvcDisinfectionRun,
+        calculateIdHash: async object => await calculateIdHashOfObj(object as never) as SHA256IdHash,
+      },
+    });
     for (const someone of await this.leuteModel.others()) {
       for (const identity of someone.identities()) {
         this.pairedPeople.add(identity);
@@ -257,6 +291,7 @@ export class DeviceControlModel {
     await Promise.all([...this.pairedPeople].map(async personId => {
       await this.plan.sharePhoneBookWith(personId);
       await this.plan.shareControlWith(personId);
+      await this.journal.shareWith(personId);
     }));
 
     this.disconnectors.push(
@@ -276,6 +311,7 @@ export class DeviceControlModel {
         this.pairedPeople.add(remotePerson);
         await this.plan.sharePhoneBookWith(remotePerson);
         await this.plan.shareControlWith(remotePerson);
+        await this.journal.shareWith(remotePerson);
       }),
       onChumImportBatch.addListener(event => {
         if (
@@ -325,6 +361,13 @@ export class DeviceControlModel {
   }
 
   async setLight(target: UvcControlTarget, desired: UvcSetLightInput): Promise<UvcLightState> {
+    return this.toLightState((await this.setLightWithEvidence(target, desired)).observation);
+  }
+
+  async setLightWithEvidence(
+    target: UvcControlTarget,
+    desired: UvcSetLightInput,
+  ): Promise<UvcLightControlEvidence> {
     if (typeof desired.enabled !== 'boolean') {
       throw new Error('desired.enabled must be a boolean');
     }
@@ -336,12 +379,196 @@ export class DeviceControlModel {
     if (target.kind === 'esp32' && desired.intensity !== undefined) {
       throw new Error('ESP32 LED control does not support intensity');
     }
-    return this.toLightState(await this.execute(target, 'set', desired));
+    const observation = await this.execute(target, 'set', desired);
+    return {
+      commandHash: observation.command,
+      observationHash: await calculateHashOfObj(observation) as SHA256Hash<UvcControlObservation>,
+      observation,
+    };
   }
 
   async getJournal(deviceId?: string): Promise<UvcStateEntry[]> {
     const hashes = await this.journal.list(deviceId ? ['journal', 'device', deviceId] : ['journal']);
     return await Promise.all(hashes.map(hash => getObject(hash as never) as Promise<UvcStateEntry>));
+  }
+
+  async saveRoomConfiguration(input: {
+    roomId: string;
+    name: string;
+    roomKind: UvcRoomKind;
+    deviceIds: string[];
+    createdAt: number;
+    updatedAt: number;
+  }): Promise<UvcRoom> {
+    const room = await this.facility.saveRoom({
+      roomId: input.roomId,
+      name: input.name,
+      roomKind: input.roomKind,
+      resources: input.deviceIds.map(deviceId => this.describeRoomResource(deviceId)),
+      createdAt: input.createdAt,
+      updatedAt: input.updatedAt,
+    });
+    await this.onFacilityUpdated.emitAll(room.updatedAt);
+    return room;
+  }
+
+  async getRooms(): Promise<UvcRoom[]> {
+    return await this.facility.listRooms();
+  }
+
+  async scheduleDisinfection(input: {
+    roomId: string;
+    scheduledAt: number;
+    notes?: string;
+  }): Promise<UvcDisinfectionRun> {
+    const run = await this.facility.scheduleDisinfection(input);
+    await this.onFacilityUpdated.emitAll(run.updatedAt);
+    return run;
+  }
+
+  async startDisinfection(input: {
+    roomId: string;
+    startedAt?: number;
+    notes?: string;
+    startObservations: Iterable<SHA256Hash<UvcControlObservation>>;
+  }): Promise<UvcDisinfectionRun> {
+    const run = await this.facility.startDisinfection(input);
+    await this.onFacilityUpdated.emitAll(run.updatedAt);
+    return run;
+  }
+
+  async completeDisinfection(input: {
+    runId: string;
+    endedAt?: number;
+    uvcDoseMjCm2?: number;
+    notes?: string;
+    stopObservations: Iterable<SHA256Hash<UvcControlObservation>>;
+  }): Promise<UvcDisinfectionRun> {
+    const run = await this.facility.completeDisinfection(input);
+    await this.onFacilityUpdated.emitAll(run.updatedAt);
+    return run;
+  }
+
+  async failDisinfection(input: {
+    runId: string;
+    endedAt?: number;
+    notes: string;
+    stopObservations?: Iterable<SHA256Hash<UvcControlObservation>>;
+  }): Promise<UvcDisinfectionRun> {
+    const run = await this.facility.failDisinfection(input);
+    await this.onFacilityUpdated.emitAll(run.updatedAt);
+    return run;
+  }
+
+  async getDisinfectionRuns(input: {
+    from?: number;
+    to?: number;
+    roomId?: string;
+  } = {}): Promise<UvcDisinfectionRun[]> {
+    return await this.facility.listDisinfectionRuns(input);
+  }
+
+  async getDisinfectionRunRecords(input: {
+    from?: number;
+    to?: number;
+    roomId?: string;
+  } = {}): Promise<UvcDisinfectionRunRecord[]> {
+    return await Promise.all((await this.getDisinfectionRuns(input)).map(async run => ({
+      run,
+      resources: await Promise.all([...run.resources].map(async hash => {
+        const resource = await getObject(hash as never) as UvcRoomResource;
+        if (resource.$type$ !== 'UvcRoomResource') {
+          throw new Error(`Run ${run.runId} references ${resource.$type$}, not UvcRoomResource`);
+        }
+        return resource;
+      })),
+    })));
+  }
+
+  async startRoomTreatment(input: {roomId: string; notes?: string}): Promise<UvcDisinfectionRun> {
+    const active = (await this.getDisinfectionRuns()).find(run => run.status === 'running');
+    if (active) {
+      throw new Error(`Treatment ${active.runId} is already running in ${active.roomName}`);
+    }
+    const room = await this.facility.getRoom(input.roomId);
+    const resources = await this.loadRoomResources(room);
+    const controllable = resources.filter(isControllableTreatmentResource);
+    if (!controllable.length) {
+      throw new Error(`${room.name} has no controllable lamp or controller`);
+    }
+
+    const enabled: UvcRoomResource[] = [];
+    const startEvidence: UvcLightControlEvidence[] = [];
+    try {
+      for (const resource of controllable) {
+        const evidence = await this.setLightWithEvidence(resourceTarget(resource), {enabled: true});
+        requireObservedLightState(evidence.observation, true, resource.label);
+        startEvidence.push(evidence);
+        enabled.push(resource);
+      }
+      return await this.startDisinfection({
+        roomId: input.roomId,
+        notes: input.notes,
+        startObservations: startEvidence.map(evidence => evidence.observationHash),
+      });
+    } catch (error) {
+      const rollbackFailures: string[] = [];
+      for (const resource of enabled.reverse()) {
+        try {
+          const evidence = await this.setLightWithEvidence(resourceTarget(resource), {enabled: false});
+          requireObservedLightState(evidence.observation, false, resource.label);
+        } catch (rollbackError) {
+          rollbackFailures.push(`${resource.label}: ${errorMessage(rollbackError)}`);
+        }
+      }
+      if (rollbackFailures.length) {
+        throw new Error(`${errorMessage(error)}; shutdown also failed: ${rollbackFailures.join('; ')}`);
+      }
+      throw error;
+    }
+  }
+
+  async stopRoomTreatment(input: {
+    runId: string;
+    notes?: string;
+    uvcDoseMjCm2?: number;
+  }): Promise<UvcDisinfectionRun> {
+    const run = await this.facility.getRun(input.runId);
+    if (run.status !== 'running') {
+      throw new Error(`Treatment ${input.runId} is not running`);
+    }
+    const resources = await this.loadRunResources(run);
+    const controllable = resources.filter(isControllableTreatmentResource);
+    if (!controllable.length) {
+      throw new Error(`${run.roomName} has no controllable lamp or controller`);
+    }
+
+    const stopEvidence: UvcLightControlEvidence[] = [];
+    const failures: string[] = [];
+    for (const resource of controllable) {
+      try {
+        const evidence = await this.setLightWithEvidence(resourceTarget(resource), {enabled: false});
+        stopEvidence.push(evidence);
+        requireObservedLightState(evidence.observation, false, resource.label);
+      } catch (error) {
+        failures.push(`${resource.label}: ${errorMessage(error)}`);
+      }
+    }
+    const observationHashes = stopEvidence.map(evidence => evidence.observationHash);
+    if (failures.length) {
+      const failed = await this.failDisinfection({
+        runId: input.runId,
+        notes: `Stop verification failed — ${failures.join('; ')}`,
+        stopObservations: observationHashes,
+      });
+      throw new Error(`Treatment ${failed.runId} failed: ${failures.join('; ')}`);
+    }
+    return await this.completeDisinfection({
+      runId: input.runId,
+      notes: input.notes,
+      uvcDoseMjCm2: input.uvcDoseMjCm2,
+      stopObservations: observationHashes,
+    });
   }
 
   async provisionHeadlessDevice(input: {
@@ -574,6 +801,54 @@ export class DeviceControlModel {
     return {deviceId, kind};
   }
 
+  private describeRoomResource(deviceId: string): {
+    deviceId: string;
+    kind: 'groov' | 'esp32' | 'lamp' | 'sensor' | 'other';
+    role: 'controller' | 'lamp' | 'sensor';
+    label: string;
+  } {
+    const device = this.discovery.getDevice(deviceId);
+    const type = device?.deviceType?.toLowerCase() ?? '';
+    const kind = type.includes('groov') || type.includes('rio')
+      ? 'groov'
+      : type.includes('esp32') || type.includes('esp')
+        ? 'esp32'
+        : type.includes('lamp') || type.includes('uvc')
+          ? 'lamp'
+          : type.includes('sensor')
+            ? 'sensor'
+            : 'other';
+    const capabilities = device?.capabilities ?? [];
+    const controlsLight = capabilities.some(capability => /led|light|lamp/i.test(capability));
+    const role = kind === 'groov'
+      ? 'controller'
+      : kind === 'lamp' || controlsLight
+        ? 'lamp'
+        : 'sensor';
+    return {
+      deviceId,
+      kind,
+      role,
+      label: device?.name?.trim() || deviceId,
+    };
+  }
+
+  private async loadRoomResources(room: UvcRoom): Promise<UvcRoomResource[]> {
+    return await Promise.all([...room.resources].map(async hash => await this.loadRoomResource(hash)));
+  }
+
+  private async loadRunResources(run: UvcDisinfectionRun): Promise<UvcRoomResource[]> {
+    return await Promise.all([...run.resources].map(async hash => await this.loadRoomResource(hash)));
+  }
+
+  private async loadRoomResource(hash: SHA256Hash<UvcRoomResource>): Promise<UvcRoomResource> {
+    const resource = await getObject(hash as never) as UvcRoomResource;
+    if (resource.$type$ !== 'UvcRoomResource') {
+      throw new Error(`${String(hash)} is ${resource.$type$}, not UvcRoomResource`);
+    }
+    return resource;
+  }
+
   private async canExecuteLocally(target: UvcControlTarget): Promise<boolean> {
     if (target.kind === 'groov') {
       return this.discovery.getQuicVCConnectionManager()?.getConnection(target.deviceId)?.state === 'established';
@@ -650,4 +925,33 @@ function normalizeKind(value: string): UvcDiscoveryObservation['deviceKind'] {
     || kind === 'groov' || kind === 'esp32'
     ? kind
     : 'one-peer';
+}
+
+function isControllableTreatmentResource(resource: UvcRoomResource): boolean {
+  return (resource.kind === 'groov' || resource.kind === 'esp32')
+    && (resource.role === 'controller' || resource.role === 'lamp');
+}
+
+function resourceTarget(resource: UvcRoomResource): UvcControlTarget {
+  if (resource.kind !== 'groov' && resource.kind !== 'esp32') {
+    throw new Error(`${resource.label} is not a controllable UVC resource`);
+  }
+  return {deviceId: resource.deviceId, kind: resource.kind};
+}
+
+function requireObservedLightState(
+  observation: UvcControlObservation,
+  expected: boolean,
+  label: string,
+): void {
+  if (observation.status !== 'observed' || observation.enabled !== expected) {
+    throw new Error(
+      observation.error
+        ?? `${label} did not confirm light ${expected ? 'enabled' : 'disabled'}`,
+    );
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

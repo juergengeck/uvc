@@ -8,6 +8,7 @@ import { Namespaces } from '@src/i18n/namespaces';
 import type { Room, Department, Organisation } from '@OneObjectInterfaces';
 import type { SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
 import { getObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
+import type {UvcRoomKind} from '@refinio/uvc.core';
 
 interface DepartmentOption {
   hash: SHA256Hash;
@@ -29,7 +30,8 @@ export default function CreateRoomScreen() {
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedDepartment, setSelectedDepartment] = useState<SHA256Hash | ''>(params.departmentHash || '');
+  const [roomKind, setRoomKind] = useState<UvcRoomKind>('treatment-room');
+  const [selectedDepartment, setSelectedDepartment] = useState(params.departmentHash ?? '');
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingDepts, setLoadingDepts] = useState(true);
@@ -125,7 +127,8 @@ export default function CreateRoomScreen() {
       const roomHash = await models.appModel.organisationModel.createRoom(
         selectedDepartment as SHA256Hash,
         name.trim(),
-        description.trim() || undefined
+        description.trim() || undefined,
+        roomKind,
       );
       
       console.log('[CreateRoom] Room created:', name.trim(), 'with hash:', roomHash);
@@ -246,6 +249,18 @@ export default function CreateRoomScreen() {
                 activeOutlineColor={theme.colors.primary}
                 disabled={false}
               />
+
+              <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Room type</Text>
+              <RadioButton.Group
+                onValueChange={value => setRoomKind(value as UvcRoomKind)}
+                value={roomKind}
+              >
+                <RadioButton.Item label="Treatment room" value="treatment-room" style={styles.radioItem} />
+                <RadioButton.Item label="Bathroom" value="bathroom" style={styles.radioItem} />
+                <RadioButton.Item label="Operating room" value="operating-room" style={styles.radioItem} />
+                <RadioButton.Item label="Laboratory" value="laboratory" style={styles.radioItem} />
+                <RadioButton.Item label="Other" value="other" style={styles.radioItem} />
+              </RadioButton.Group>
               
               <TextInput
                 label="Description"

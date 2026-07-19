@@ -237,7 +237,10 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
 
             if (!this.integrationMode) {
                 const orgStartTime = Date.now();
-                this.organisationModel = new OrganisationModel(this._channelManager);
+                this.organisationModel = new OrganisationModel(
+                    this._channelManager,
+                    this.deviceControlModel,
+                );
                 await this.organisationModel.init();
                 console.log(`[PERF] OrganisationModel.init: ${Date.now() - orgStartTime}ms`);
 

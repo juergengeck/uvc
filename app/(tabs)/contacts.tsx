@@ -45,6 +45,7 @@ export default function DevicesScreen() {
           />
           <IconButton
             icon="plus"
+            accessibilityLabel="Add device resource"
             size={24}
             onPress={() => router.push('/(screens)/devices/create-organisation')}
             iconColor={theme.colors.primary}

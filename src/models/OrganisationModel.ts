@@ -4,6 +4,8 @@ import { storeUnversionedObject } from '@refinio/one.core/lib/storage-unversione
 import type { Organisation, Department, Room } from '@OneObjectInterfaces';
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
 import { getInstanceOwnerIdHash } from '@refinio/one.core/lib/instance.js';
+import type {UvcRoomKind} from '@refinio/uvc.core';
+import type {DeviceControlModel} from './device/DeviceControlModel';
 
 const ORGANISATIONS_CHANNEL_NAME = 'organisations-registry';
 
@@ -20,7 +22,10 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
   private organisationsChannelId?: string;
   private channelOwner?: SHA256IdHash;
 
-  constructor(channelManager: ChannelManager) {
+  constructor(
+    channelManager: ChannelManager,
+    private readonly deviceControlModel?: DeviceControlModel,
+  ) {
     super();
     
     // Set up states properly following AppModel pattern
@@ -288,7 +293,8 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
   async createRoom(
     departmentHash: SHA256Hash,
     name: string,
-    description?: string
+    description?: string,
+    roomKind: UvcRoomKind = 'other',
   ): Promise<SHA256Hash> {
     if (this.currentState !== 'Initialised') {
       throw new Error('OrganisationModel not initialized');
@@ -303,8 +309,10 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
       created: Date.now(),
       modified: Date.now(),
       devices: [],
-      settings: {}
+      settings: {roomKind}
     };
+
+    await this.syncCanonicalRoom(room, roomKind);
 
     const roomResult = await storeUnversionedObject(room);
     
@@ -404,6 +412,8 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
     if (!devices.includes(deviceId)) {
       room.devices = [...devices, deviceId];
       room.modified = Date.now();
+
+      await this.syncCanonicalRoom(room, roomKindOf(room));
       
       // Store updated room
       const updatedResult = await storeUnversionedObject(room);
@@ -436,6 +446,8 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
     if (room.devices && room.devices.includes(deviceId)) {
       room.devices = room.devices.filter(id => id !== deviceId);
       room.modified = Date.now();
+
+      await this.syncCanonicalRoom(room, roomKindOf(room));
       
       // Store updated room
       const updatedResult = await storeUnversionedObject(room);
@@ -514,4 +526,33 @@ export default class OrganisationModel extends StateMachine<OrganisationModelSta
     const rooms = await this.getAllRooms();
     return rooms.filter(r => r.room.devices?.includes(deviceId));
   }
+
+  private async syncCanonicalRoom(room: Room, roomKind: UvcRoomKind): Promise<void> {
+    if (!this.deviceControlModel) {
+      throw new Error('DeviceControlModel is required for canonical room persistence');
+    }
+    await this.deviceControlModel.saveRoomConfiguration({
+      roomId: canonicalRoomId(room),
+      name: room.name,
+      roomKind,
+      deviceIds: room.devices ?? [],
+      createdAt: room.created,
+      updatedAt: room.modified,
+    });
+  }
+}
+
+function canonicalRoomId(room: Room): string {
+  return `${room.department}:${room.name.trim()}`;
+}
+
+function roomKindOf(room: Room): UvcRoomKind {
+  const value = (room.settings as {roomKind?: unknown} | undefined)?.roomKind;
+  return value === 'treatment-room'
+    || value === 'bathroom'
+    || value === 'operating-room'
+    || value === 'laboratory'
+    || value === 'other'
+    ? value
+    : 'other';
 }

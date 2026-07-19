@@ -179,7 +179,7 @@ export default function SettingsScreen() {
             description={t('settings.resources.devices.description', {
               defaultValue: 'Lamps, sensors, rooms, and device assignments',
             })}
-            onPress={() => router.push('/(tabs)/contacts')}
+            onPress={() => router.push('/(screens)/devices')}
             left={props => <List.Icon {...props} icon="devices" />}
             right={props => <List.Icon {...props} icon="chevron-right" />}
           />
