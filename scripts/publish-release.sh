@@ -5,6 +5,7 @@ CHANNEL="latest"
 REMOTE_HOST="juergen@89.167.55.116"
 VERSION=""
 ARTIFACTS_FILE=""
+ALLOW_SAME_VERSION=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -13,10 +14,11 @@ while [[ $# -gt 0 ]]; do
     --host) REMOTE_HOST="${2:?missing host}"; shift 2 ;;
     --version) VERSION="${2:?missing version}"; shift 2 ;;
     --artifacts-file) ARTIFACTS_FILE="${2:?missing artifacts file}"; shift 2 ;;
+    --allow-same-version) ALLOW_SAME_VERSION=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     *)
       echo "Unknown option: $1" >&2
-      echo "Usage: $0 --version <version> [--artifacts-file <json>] [--channel latest|preview] [--host user@host] [--dry-run]" >&2
+      echo "Usage: $0 --version <version> [--artifacts-file <json>] [--channel latest|preview] [--host user@host] [--allow-same-version] [--dry-run]" >&2
       exit 2
       ;;
   esac
@@ -37,11 +39,13 @@ SOURCE_ROOT="$(cd "$UVC_ROOT/.." && pwd)"
 REFINIO_ONE_DIR="${REFINIO_ONE_DIR:-$SOURCE_ROOT/refinio/packages/refinio.one}"
 ARTIFACTS_FILE="${ARTIFACTS_FILE:-$UVC_ROOT/release/$VERSION/uvc-release-artifacts.json}"
 VERIFY_SCRIPT="$SCRIPT_DIR/verify-release-artifacts.mjs"
+ASSIGN_VERSION_SCRIPT="$SCRIPT_DIR/assign-release-version.mjs"
 REFINIO_PUBLISHER="$REFINIO_ONE_DIR/scripts/publish-uvc-downloads.sh"
 
 for required in \
   "$ARTIFACTS_FILE" \
   "$VERIFY_SCRIPT" \
+  "$ASSIGN_VERSION_SCRIPT" \
   "$REFINIO_PUBLISHER" \
   "$UVC_ROOT/packages/uvc.cube/package.json" \
   "$UVC_ROOT/packages/uvc.groov/package.json"; do
@@ -60,6 +64,15 @@ if [[ "$CUBE_VERSION" != "$VERSION" || "$RIO_VERSION" != "$VERSION" ]]; then
   echo "Release version $VERSION must match uvc.cube ($CUBE_VERSION) and uvc.groov ($RIO_VERSION)" >&2
   exit 1
 fi
+
+VERSION_ASSERT_ARGS=(
+  --assert-version "$VERSION"
+  --channel "$CHANNEL"
+)
+if [[ "$ALLOW_SAME_VERSION" == true ]]; then
+  VERSION_ASSERT_ARGS+=(--allow-same-version)
+fi
+node "$ASSIGN_VERSION_SCRIPT" "${VERSION_ASSERT_ARGS[@]}" >/dev/null
 
 echo "=== Validating UVC release $VERSION ($CHANNEL) ==="
 node "$VERIFY_SCRIPT" --version "$VERSION" --artifacts-file "$ARTIFACTS_FILE"

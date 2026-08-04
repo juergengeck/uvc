@@ -342,6 +342,18 @@ npm run build:ios
 npm run build:android
 ```
 
+### Publishing UVC packages to refinio.one
+
+Use the guarded release entry point for the Windows, Linux, groov RIO, and
+ESP32-C6 package set:
+
+```bash
+npm run release:refinio-one -- --version 0.1.1 --dry-run
+```
+
+The full versioning, provenance, artifact, and publication procedure is in
+[`docs/release-refinio-one.md`](docs/release-refinio-one.md).
+
 ### Testing
 
 ```bash

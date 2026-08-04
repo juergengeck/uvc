@@ -26,6 +26,7 @@
     "create:release-artifacts": "node ./scripts/create-release-artifacts.mjs",
     "verify:release-artifacts": "node ./scripts/verify-release-artifacts.mjs",
     "test:release": "node --test ./test/release-artifacts.test.mjs ./packages/uvc.groov/test/rio-package-contract.test.mjs",
+    "release:refinio-one": "bash ./scripts/release-refinio-one.sh",
     "publish:release": "bash ./scripts/publish-release.sh",
     "build:vendor": "cd ../one && pnpm build",
     "rebuild": "npm run build:vendor && npm install",

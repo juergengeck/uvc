@@ -12,6 +12,9 @@ const ESP32_BUILDER = path.join(UVC_ROOT, 'scripts', 'build-esp32-release.mjs');
 const DESCRIPTOR_BUILDER = path.join(UVC_ROOT, 'scripts', 'create-release-artifacts.mjs');
 const DESCRIPTOR_VERIFIER = path.join(UVC_ROOT, 'scripts', 'verify-release-artifacts.mjs');
 const RELEASE_PUBLISHER = path.join(UVC_ROOT, 'scripts', 'publish-release.sh');
+const RELEASE_ORCHESTRATOR = path.join(UVC_ROOT, 'scripts', 'release-refinio-one.sh');
+const RELEASE_INPUT_ASSERTION = path.join(UVC_ROOT, 'scripts', 'assert-release-inputs-clean.sh');
+const RELEASE_VERSION_ASSIGNER = path.join(UVC_ROOT, 'scripts', 'assign-release-version.mjs');
 const ESP32_RELEASE_DEFAULTS = path.join(UVC_ROOT, 'scripts', 'esp32-release-sdkconfig.defaults');
 
 async function writeEsp32Fixture(root, ssid = 'your-ssid', password = 'your-password') {
@@ -114,12 +117,98 @@ test('UVC descriptor requires the exact non-macOS desktop, RIO, and ESP32 releas
   assert.ok(verified.artifacts.every(artifact => /^[a-f0-9]{64}$/.test(artifact.sha256)));
 });
 
+test('release version assignment synchronizes package versions above the live UVC release', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'uvc-release-version-'));
+  const cubePackage = path.join(root, 'uvc.cube.package.json');
+  const groovPackage = path.join(root, 'uvc.groov.package.json');
+  const packageLock = path.join(root, 'package-lock.json');
+  const manifest = path.join(root, 'current-release.json');
+  await writeFile(cubePackage, `${JSON.stringify({name: '@uvc/uvc.cube', version: '1.2.3'})}\n`);
+  await writeFile(groovPackage, `${JSON.stringify({name: '@uvc/groov-authority', version: '1.2.2'})}\n`);
+  await writeFile(packageLock, `${JSON.stringify({
+    name: '@uvc/uvc.cube',
+    version: '1.2.3',
+    lockfileVersion: 3,
+    packages: {'': {name: '@uvc/uvc.cube', version: '1.2.3'}},
+  })}\n`);
+  await writeFile(manifest, `${JSON.stringify({releaseVersion: '1.2.3'})}\n`);
+
+  const args = [
+    RELEASE_VERSION_ASSIGNER,
+    '--json',
+    '--manifest-file', manifest,
+    '--package-json', cubePackage,
+    '--package-json', groovPackage,
+  ];
+  const assignment = JSON.parse((await execFileAsync(process.execPath, args)).stdout);
+  assert.equal(assignment.liveVersion, '1.2.3');
+  assert.equal(assignment.assignedVersion, '1.2.4');
+
+  await execFileAsync(process.execPath, [...args.slice(0, 1), '--write', ...args.slice(2)]);
+  assert.equal(JSON.parse(await readFile(cubePackage, 'utf8')).version, '1.2.4');
+  assert.equal(JSON.parse(await readFile(groovPackage, 'utf8')).version, '1.2.4');
+  const updatedPackageLock = JSON.parse(await readFile(packageLock, 'utf8'));
+  assert.equal(updatedPackageLock.version, '1.2.4');
+  assert.equal(updatedPackageLock.packages[''].version, '1.2.4');
+
+  const assertionArgs = [
+    RELEASE_VERSION_ASSIGNER,
+    '--assert-version', '1.2.4',
+    '--channel', 'latest',
+    '--manifest-file', manifest,
+    '--package-json', cubePackage,
+    '--package-json', groovPackage,
+  ];
+  await execFileAsync(process.execPath, assertionArgs);
+
+  await writeFile(manifest, `${JSON.stringify({releaseVersion: '1.2.4'})}\n`);
+  await assert.rejects(
+    execFileAsync(process.execPath, assertionArgs),
+    /Refusing to publish latest with unchanged version 1\.2\.4/,
+  );
+  await execFileAsync(process.execPath, [...assertionArgs, '--allow-same-version']);
+
+  updatedPackageLock.version = '1.2.3';
+  updatedPackageLock.packages[''].version = '1.2.3';
+  await writeFile(packageLock, `${JSON.stringify(updatedPackageLock)}\n`);
+  await assert.rejects(
+    execFileAsync(process.execPath, [...assertionArgs, '--allow-same-version']),
+    /package-lock\.json entry for @uvc\/uvc\.cube \(1\.2\.3\)/,
+  );
+});
+
+test('release orchestration preserves the signed publisher boundary and release provenance guards', async () => {
+  for (const script of [RELEASE_ORCHESTRATOR, RELEASE_INPUT_ASSERTION, RELEASE_PUBLISHER]) {
+    await execFileAsync('bash', ['-n', script]);
+  }
+
+  const orchestrator = await readFile(RELEASE_ORCHESTRATOR, 'utf8');
+  assert.match(orchestrator, /assert-release-inputs-clean\.sh/);
+  assert.match(orchestrator, /assign-release-version\.mjs/);
+  assert.match(orchestrator, /create-release-artifacts\.mjs/);
+  assert.match(orchestrator, /publish-release\.sh/);
+  assert.match(orchestrator, /--dry-run/);
+  assert.match(orchestrator, /--skip-provenance-check is allowed only together with --dry-run/);
+  assert.match(orchestrator, /--use-existing-descriptor/);
+  assert.doesNotMatch(orchestrator, /--manifest-url/);
+
+  const inputAssertion = await readFile(RELEASE_INPUT_ASSERTION, 'utf8');
+  assert.match(inputAssertion, /status --porcelain --untracked-files=normal/);
+  assert.match(inputAssertion, /ls-remote --heads origin/);
+  assert.match(inputAssertion, /SOURCE_ROOT\/one/);
+  assert.match(inputAssertion, /SOURCE_ROOT\/vger/);
+  assert.match(inputAssertion, /SOURCE_ROOT\/refinio/);
+});
+
 test('UVC release publication is owned by the UVC workspace and delegates signing to Refinio', async () => {
   const publisher = await readFile(RELEASE_PUBLISHER, 'utf8');
   assert.match(publisher, /verify-release-artifacts\.mjs/);
   assert.match(publisher, /npm run test:release/);
   assert.match(publisher, /packages\/uvc\.cube\/package\.json/);
   assert.match(publisher, /packages\/uvc\.groov\/package\.json/);
+  assert.match(publisher, /assign-release-version\.mjs/);
+  assert.match(publisher, /--allow-same-version/);
+  assert.doesNotMatch(publisher, /--manifest-url/);
   assert.match(publisher, /refinio\/packages\/refinio\.one/);
   assert.match(publisher, /publish-uvc-downloads\.sh/);
   assert.match(publisher, /--artifacts-file "\$ARTIFACTS_FILE"/);
