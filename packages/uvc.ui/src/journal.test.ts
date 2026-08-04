@@ -28,6 +28,28 @@ describe('UVC journal projection', () => {
     expect(projectJournalRecords([])).toEqual([]);
   });
 
+  it('projects completed LED commands alongside disinfection runs', () => {
+    const [entry] = projectJournalRecords([{
+      kind: 'device-control',
+      id: 'led-on',
+      timestamp: Date.parse('2026-08-04T08:00:00Z'),
+      evidenceCount: 1,
+      location: 'esp32-1',
+      resources: ['Attached LED'],
+      status: 'completed',
+      operation: 'set',
+      desiredEnabled: true,
+      observedEnabled: true,
+    }]);
+
+    expect(entry).toMatchObject({
+      kind: 'device-control',
+      desiredEnabled: true,
+      observedEnabled: true,
+    });
+    expect(entry.date.toISOString()).toBe('2026-08-04T08:00:00.000Z');
+  });
+
   it('drops records whose persisted timestamp cannot be represented', () => {
     expect(projectJournalRecords([{
       id: 'invalid',

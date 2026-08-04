@@ -77,6 +77,7 @@ export interface DiscoveryDeviceSnapshot {
 }
 
 export interface CubeUvcCycleRecord {
+  kind?: 'cycle';
   id: string;
   timestamp: number;
   durationMinutes?: number;
@@ -85,6 +86,22 @@ export interface CubeUvcCycleRecord {
   resources: string[];
   status: 'planned' | 'running' | 'completed' | 'failed';
 }
+
+export interface CubeUvcDeviceControlRecord {
+  kind: 'device-control';
+  id: string;
+  timestamp: number;
+  evidenceCount: number;
+  location: string;
+  resources: string[];
+  status: 'completed' | 'failed';
+  operation: 'set';
+  desiredEnabled: boolean;
+  observedEnabled?: boolean;
+  error?: string;
+}
+
+export type CubeUvcJournalRecord = CubeUvcCycleRecord | CubeUvcDeviceControlRecord;
 
 export interface CubeIdentitySnapshot {
   personId: string;

@@ -100,8 +100,14 @@ import {app} from 'electron';
 import path from 'node:path';
 import {createPublicKey, randomUUID, verify as verifyNodeSignature} from 'node:crypto';
 
-import type {CubeUvcCycleRecord, DiscoveryDeviceSnapshot, SettingsSnapshot} from '@shared/contracts';
+import type {
+  CubeUvcCycleRecord,
+  CubeUvcJournalRecord,
+  DiscoveryDeviceSnapshot,
+  SettingsSnapshot,
+} from '@shared/contracts';
 import {DEFAULT_UVC_COMM_SERVER_URL} from '@shared/settings/registry';
+import {setDiscoveryDeviceConnection} from './peer-directory.js';
 
 const chumDiagnostics = createMessageBus('uvc-cube-chum-diagnostics');
 for (const source of ['chum-sync', 'chum-importer']) {
@@ -218,6 +224,7 @@ export class CubeOneRuntime {
   private readonly consumed = new Set<string>();
   private readonly importedDisinfectionRuns = new Map<string, UvcDisinfectionRun>();
   private disconnectImportListener?: () => void;
+  private disconnectQuicCloseListener?: () => void;
   /**
    * Preserve producer ordering without coupling independent peers. A command
    * imported from Expo can synchronously wait for an ESP-owned observation;
@@ -582,6 +589,22 @@ export class CubeOneRuntime {
       expiresAt: observedAt + 60_000,
     });
     console.log(`[UvcCube] Phone book recorded ${device.id} observed at ${observedAt}`);
+
+    if (
+      device.ownerId
+      && this.isPaired(device.ownerId)
+      && normalizeHeadlessKind(device.type) === 'esp32'
+    ) {
+      // Discovery gives us the certified endpoint before the user can click.
+      // Establish the authenticated QUICVC/CHUM lane now so device control is
+      // not forced to pay handshake and protocol setup latency on first use.
+      void this.ensureControlPeerConnection(device.ownerId as SHA256IdHash<Person>)
+        .then(() => setDiscoveryDeviceConnection(device.id, true))
+        .catch(error => {
+          setDiscoveryDeviceConnection(device.id, false);
+          console.error(`[UvcCube] Failed to prewarm control lane for ${device.id}:`, error);
+        });
+    }
   }
 
   async phoneBookEntries(): Promise<UvcDiscoveryObservation[]> {
@@ -669,6 +692,7 @@ export class CubeOneRuntime {
       if (!previous || run.updatedAt > previous.updatedAt) latest.set(key, run);
     }
     return await Promise.all([...latest.values()].map(async run => ({
+      kind: 'cycle' as const,
       id: run.runId,
       timestamp: run.startedAt ?? run.scheduledAt ?? run.createdAt,
       ...(run.startedAt !== undefined && run.endedAt !== undefined
@@ -685,6 +709,54 @@ export class CubeOneRuntime {
       })),
       status: run.status,
     }))).then(records => records.sort((left, right) => right.timestamp - left.timestamp));
+  }
+
+  async journalRecords(): Promise<CubeUvcJournalRecord[]> {
+    const deviceRecords: CubeUvcJournalRecord[] = [];
+    for (const event of await this.journalEntries()) {
+      if (
+        event.$type$ !== 'UvcJournalEvent'
+        || (event.eventType !== 'device-observed' && event.eventType !== 'device-failed')
+        || !event.command
+        || !event.observation
+      ) {
+        continue;
+      }
+      const [command, observation] = await Promise.all([
+        getObject(event.command as never) as Promise<UvcStateEntry>,
+        getObject(event.observation as never) as Promise<UvcStateEntry>,
+      ]);
+      if (
+        command.$type$ !== 'UvcControlCommand'
+        || command.operation !== 'set'
+        || typeof command.desiredEnabled !== 'boolean'
+        || observation.$type$ !== 'UvcControlObservation'
+        || observation.command !== event.command
+      ) {
+        continue;
+      }
+      const device = this.discoveredDevices.get(event.deviceId)
+        ?? [...this.discoveredDevices.values()].find(candidate => (
+          candidate.id === event.deviceId || candidate.instanceId === event.deviceId
+        ));
+      deviceRecords.push({
+        kind: 'device-control',
+        id: event.eventId,
+        timestamp: event.recordedAt,
+        evidenceCount: observation.status === 'observed' ? 1 : 0,
+        location: device?.name ?? event.deviceId,
+        resources: ['Attached LED'],
+        status: observation.status === 'observed' ? 'completed' : 'failed',
+        operation: 'set',
+        desiredEnabled: command.desiredEnabled,
+        ...(typeof observation.enabled === 'boolean'
+          ? {observedEnabled: observation.enabled}
+          : {}),
+        ...(observation.error ? {error: observation.error} : {}),
+      });
+    }
+    return [...await this.disinfectionRecords(), ...deviceRecords]
+      .sort((left, right) => right.timestamp - left.timestamp);
   }
 
   /**
@@ -866,6 +938,8 @@ export class CubeOneRuntime {
   async shutdown(): Promise<void> {
     this.disconnectImportListener?.();
     this.disconnectImportListener = undefined;
+    this.disconnectQuicCloseListener?.();
+    this.disconnectQuicCloseListener = undefined;
     this.controlPlan?.shutdown();
     this.controlPlan = undefined;
     this.consumeTails.clear();
@@ -925,7 +999,6 @@ export class CubeOneRuntime {
       const diagnostics = getChumSyncDiagnostics({traceLimit: 80});
       console.error('[UvcCube][chum-sync][control-response]', JSON.stringify({
         activeExporters: diagnostics.activeExporters,
-        pendingVersionWakeups: diagnostics.pendingVersionWakeups,
         traceEvents: diagnostics.traceEvents,
       }));
     }
@@ -980,6 +1053,16 @@ export class CubeOneRuntime {
     });
     this.quicTransport = transport;
     this.quicManager = manager;
+    this.disconnectQuicCloseListener = manager.onConnectionClosed.listen(deviceId => {
+      const device = [...this.discoveredDevices.values()].find(candidate => (
+        candidate.id === deviceId || candidate.instanceId === deviceId
+      ));
+      if (!device) return;
+      const stillConnected = [device.instanceId, device.id].some(candidateId => (
+        candidateId !== undefined && manager.isConnected(candidateId)
+      ));
+      if (!stillConnected) setDiscoveryDeviceConnection(device.id, false);
+    });
     this.authorityClient = new GroovAuthorityClient(manager, {defaultTimeoutMs: 10_000});
     this.authorityClient.start();
     this.provisioningClient = new QuicVCHeadlessProvisioningClient(
@@ -1155,7 +1238,16 @@ export class CubeOneRuntime {
       throw new Error('[UvcCube] control transport is not initialized');
     }
     if (this.connectionsModel.hasActiveOrTrackedChumPeer(this.ownerPersonId, personId)) {
-      return;
+      const device = [...this.discoveredDevices.values()].find(candidate => candidate.ownerId === personId);
+      const transportIsConnected = device !== undefined && [device.instanceId, device.id].some(candidateId => (
+        candidateId !== undefined && this.quicManager!.isConnected(candidateId)
+      ));
+      if (transportIsConnected) {
+        const deviceId = [...this.discoveredDevices.values()]
+          .find(candidate => candidate.ownerId === personId)?.id;
+        if (deviceId) setDiscoveryDeviceConnection(deviceId, true);
+        return;
+      }
     }
     const pending = this.controlPeerConnections.get(personId);
     if (pending) {
@@ -1179,9 +1271,6 @@ export class CubeOneRuntime {
     }
 
     const route = await this.connectProvisioningPeer(device);
-    if (this.connectionsModel!.hasActiveOrTrackedChumPeer(this.ownerPersonId!, personId)) {
-      return;
-    }
 
     const connection = createConnectionFromQuicVC(
       route.deviceId,
@@ -1276,6 +1365,7 @@ export class CubeOneRuntime {
       ));
       if (ready) {
         console.log(`[UvcCube] Direct QUICVC CHUM control lane ready for ${device.id}`);
+        setDiscoveryDeviceConnection(device.id, true);
         return;
       }
       await new Promise(resolve => setTimeout(resolve, 50));

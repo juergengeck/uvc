@@ -16,6 +16,7 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test:integration": "node scripts/run-runner-full-protocol.mjs",
+    "test:integration:led": "node tests/integration/esp32-led-cycle.mjs",
     "test:integration:probe": "node tests/integration/uvc-protocol-runner.mjs",
     "run:runner-full-protocol": "node scripts/run-runner-full-protocol.mjs"
   },

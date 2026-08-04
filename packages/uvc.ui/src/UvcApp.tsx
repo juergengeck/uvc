@@ -99,7 +99,7 @@ function JournalRoute() {
   return (
     <JournalView
       deviceCount={discoveryRuntime?.devices.length ?? 0}
-      loadRecords={() => platform.listDisinfectionRuns()}
+      loadRecords={() => platform.listJournalRecords()}
     />
   );
 }

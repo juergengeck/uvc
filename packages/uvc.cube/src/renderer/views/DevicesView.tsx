@@ -108,6 +108,7 @@ function Esp32LedToggle({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestVersion = useRef(0);
+  const initialReadKey = useRef<string | undefined>(undefined);
 
   const readState = useCallback(async () => {
     const request = ++requestVersion.current;
@@ -135,11 +136,11 @@ function Esp32LedToggle({
   }, [available, deviceId, onReadLight]);
 
   useEffect(() => {
+    const key = `${deviceId}:${available}`;
+    if (initialReadKey.current === key) return;
+    initialReadKey.current = key;
     void readState();
-    return () => {
-      requestVersion.current += 1;
-    };
-  }, [readState]);
+  }, [available, deviceId, readState]);
 
   const toggle = async () => {
     if (enabled === null || busy || !available) {

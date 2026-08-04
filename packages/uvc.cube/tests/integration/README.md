@@ -52,6 +52,21 @@ correlated readback for `ON` and `OFF`, restores the initial state, and verifies
 all three write commands in the current run's journal. Groov writes remain a
 same-state readback check because they may address an externally wired output.
 
+For a focused Cube-to-ESP32 LED cycle, run:
+
+```bash
+UVC_E2E_SECRET=testpass123 npm run test:integration:led
+```
+
+The focused test selects the single live commissioned ESP32 (or accepts
+`--device-id <id>`), invokes the public `deviceControl` plan, requires correlated
+producer controller acknowledgment for ON and OFF, holds ON for three seconds for visual
+inspection, checks the typed journal evidence, and leaves the LED OFF even if
+the main assertion fails. Use `--on-hold-ms <milliseconds>` to change the hold.
+Controller acknowledgment proves that firmware successfully applied the configured
+discrete-GPIO or addressable-RGB output; it does not by itself optically verify that
+an attached LED emitted light.
+
 The previous mDNS, recipe, and firmware-source probe remains available as:
 
 ```bash

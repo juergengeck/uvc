@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock3,
   List,
+  Lightbulb,
   MapPin,
   Radio,
   RefreshCw,
@@ -14,7 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { journalDateKey, projectJournalRecords, type UvcJournalEntry } from '../journal.js';
-import type { UvcCycleRecord } from '../types.js';
+import type { UvcJournalRecord } from '../types.js';
 
 function CalendarGrid({
   entries,
@@ -80,17 +81,23 @@ function CalendarGrid({
 }
 
 function JournalEntryCard({ entry }: { entry: UvcJournalEntry }) {
-  const stateLabel = {
+  const stateLabel = entry.kind === 'device-control'
+    ? entry.status === 'failed'
+      ? 'LED command failed'
+      : `Attached LED turned ${entry.observedEnabled ? 'on' : 'off'}`
+    : ({
     completed: 'UVC cycle executed',
     planned: 'UVC cycle planned',
     running: 'UVC cycle in progress',
     failed: 'UVC cycle failed',
-  }[entry.status];
+  }[entry.status]);
 
   return (
     <article className="journal-entry-card">
       <div className={`journal-entry-card__status journal-entry-card__status--${entry.status}`} aria-hidden="true">
-        {entry.status === 'completed' ? <CheckCircle2 /> : <Clock3 />}
+        {entry.kind === 'device-control'
+          ? <Lightbulb />
+          : entry.status === 'completed' ? <CheckCircle2 /> : <Clock3 />}
       </div>
       <div className="journal-entry-card__body">
         <div className="journal-entry-card__heading">
@@ -100,7 +107,12 @@ function JournalEntryCard({ entry }: { entry: UvcJournalEntry }) {
           </time>
         </div>
         <div className="journal-entry-card__meta">
-          {entry.durationMinutes !== undefined ? <span><Clock3 /> {entry.durationMinutes} min</span> : null}
+          {entry.kind !== 'device-control' && entry.durationMinutes !== undefined
+            ? <span><Clock3 /> {entry.durationMinutes} min</span>
+            : null}
+          {entry.kind === 'device-control'
+            ? <span><Lightbulb /> Requested {entry.desiredEnabled ? 'on' : 'off'} · observed {entry.observedEnabled === undefined ? 'unavailable' : entry.observedEnabled ? 'on' : 'off'}</span>
+            : null}
           {entry.evidenceCount ? <span><ShieldCheck /> {entry.evidenceCount} verified device readbacks</span> : null}
           {entry.resources.length ? <span><Radio /> {entry.resources.join(' · ')}</span> : null}
         </div>
@@ -114,12 +126,12 @@ export function JournalView({
   loadRecords,
 }: {
   deviceCount: number;
-  loadRecords(): Promise<UvcCycleRecord[]>;
+  loadRecords(): Promise<UvcJournalRecord[]>;
 }) {
   const [mode, setMode] = useState<'calendar' | 'journal'>('calendar');
   const [month, setMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const [records, setRecords] = useState<UvcCycleRecord[]>([]);
+  const [records, setRecords] = useState<UvcJournalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -189,7 +201,7 @@ export function JournalView({
               <span className="eyebrow">{mode === 'calendar' ? 'Selected day' : 'All activity'}</span>
               <h2>{mode === 'calendar'
                 ? selectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'long', weekday: 'long' })
-                : 'UVC cycle records'}</h2>
+                : 'UVC activity records'}</h2>
             </div>
             <span>{visibleEntries.length} {visibleEntries.length === 1 ? 'record' : 'records'}</span>
           </div>
@@ -201,10 +213,10 @@ export function JournalView({
           ) : (
             <div className="journal-empty">
               <MapPin aria-hidden="true" />
-              <strong>{loading ? 'Loading UVC cycle records…' : 'No UVC cycles documented'}</strong>
+              <strong>{loading ? 'Loading UVC activity…' : 'No UVC activity documented'}</strong>
               <span>{mode === 'calendar'
-                ? 'No run is recorded for this date.'
-                : 'Completed room treatments will appear here when their run records are stored.'}</span>
+                ? 'No run or device command is recorded for this date.'
+                : 'Completed room treatments and device commands will appear here.'}</span>
             </div>
           )}
         </section>

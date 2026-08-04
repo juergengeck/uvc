@@ -6,6 +6,8 @@ export type {
   UvcDevicesViewComponent,
   UvcDevicesViewProps,
   UvcCycleRecord,
+  UvcDeviceControlRecord,
+  UvcJournalRecord,
   UvcDiscoveryRuntime,
   UvcDiscoveryStatus,
   UvcLightDeviceKind,

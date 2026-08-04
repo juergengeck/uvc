@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { SettingsSection } from '@refinio/settings.core';
 
 export interface UvcCycleRecord {
+  kind?: 'cycle';
   id: string;
   timestamp: number;
   durationMinutes?: number;
@@ -10,6 +11,22 @@ export interface UvcCycleRecord {
   resources: string[];
   status: 'planned' | 'running' | 'completed' | 'failed';
 }
+
+export interface UvcDeviceControlRecord {
+  kind: 'device-control';
+  id: string;
+  timestamp: number;
+  evidenceCount: number;
+  location: string;
+  resources: string[];
+  status: 'completed' | 'failed';
+  operation: 'set';
+  desiredEnabled: boolean;
+  observedEnabled?: boolean;
+  error?: string;
+}
+
+export type UvcJournalRecord = UvcCycleRecord | UvcDeviceControlRecord;
 
 export interface UvcDiscoveryStatus {
   status?: string;
@@ -75,7 +92,7 @@ export interface UvcDiscoveryRuntime {
 
 export interface UvcPlatform {
   getSettingsSections(): Promise<SettingsSection[]>;
-  listDisinfectionRuns(): Promise<UvcCycleRecord[]>;
+  listJournalRecords(): Promise<UvcJournalRecord[]>;
   getDiscoveryRuntime(): Promise<UvcDiscoveryRuntime>;
   refreshDiscoveryRuntime(): Promise<UvcDiscoveryRuntime>;
   subscribeDiscovery(listener: () => void): () => void;

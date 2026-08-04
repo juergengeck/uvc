@@ -252,7 +252,11 @@ class CubePeerDirectory {
 
   private consumeStandardService(service: BonjourService): void {
     const normalized = normalizeService(service);
-    const device = normalized && this.canonicalizeDevice?.(normalized) || normalized;
+    const canonical = normalized && this.canonicalizeDevice?.(normalized) || normalized;
+    const previous = canonical && this.devices.get(canonical.id);
+    const device = canonical && previous?.connected
+      ? {...canonical, connected: true}
+      : canonical;
     if (!device) return;
 
     if (isHostedLocally(device) || device.id === this.identity?.instanceId) {
@@ -317,6 +321,17 @@ class CubePeerDirectory {
       listener();
     }
   }
+
+  setDeviceConnection(deviceId: string, connected: boolean): void {
+    let changed = false;
+    for (const [key, device] of this.devices) {
+      if (device.id !== deviceId && device.instanceId !== deviceId) continue;
+      if (device.connected === connected) continue;
+      this.devices.set(key, {...device, connected});
+      changed = true;
+    }
+    if (changed) this.emitChanged();
+  }
 }
 
 const peerDirectory = new CubePeerDirectory();
@@ -336,6 +351,10 @@ export function stopPeerDirectory(): void {
 
 export function onPeerDirectoryChanged(listener: () => void): () => void {
   return peerDirectory.onChanged(listener);
+}
+
+export function setDiscoveryDeviceConnection(deviceId: string, connected: boolean): void {
+  peerDirectory.setDeviceConnection(deviceId, connected);
 }
 
 export async function getDiscoveryRuntimeSnapshot(): Promise<DiscoveryRuntimeSnapshot> {

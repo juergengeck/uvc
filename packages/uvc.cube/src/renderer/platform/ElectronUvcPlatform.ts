@@ -1,6 +1,6 @@
 import type { SettingsSection } from '@refinio/settings.core';
 import type {
-  UvcCycleRecord,
+  UvcJournalRecord,
   UvcDiscoveryRuntime,
   UvcLightDeviceKind,
   UvcLightState,
@@ -41,8 +41,8 @@ export class ElectronUvcPlatform implements UvcPlatform {
     }));
   }
 
-  listDisinfectionRuns(): Promise<UvcCycleRecord[]> {
-    return this.api.invokePlan<UvcCycleRecord[]>('journal', 'listDisinfectionRuns');
+  listJournalRecords(): Promise<UvcJournalRecord[]> {
+    return this.api.invokePlan<UvcJournalRecord[]>('journal', 'listRecords');
   }
 
   getDiscoveryRuntime(): Promise<UvcDiscoveryRuntime> {
