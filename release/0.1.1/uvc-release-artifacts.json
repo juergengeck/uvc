@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "product": "uvc",
+  "version": "0.1.1",
+  "artifacts": [
+    {
+      "platform": "windows",
+      "arch": "x64",
+      "label": "UVC Cube for Windows",
+      "file": "../../packages/uvc.cube/release/UVC-Cube-0.1.1-setup.exe",
+      "sourceFilename": "UVC-Cube-0.1.1-setup.exe",
+      "stableUrl": "https://refinio.one/installers/uvc/UVC-Cube-0.1.1-setup.exe"
+    },
+    {
+      "platform": "linux",
+      "arch": "x64",
+      "label": "UVC Cube for Linux",
+      "file": "../../packages/uvc.cube/release/UVC-Cube-0.1.1-x86_64.AppImage",
+      "sourceFilename": "UVC-Cube-0.1.1-x86_64.AppImage",
+      "stableUrl": "https://refinio.one/installers/uvc/UVC-Cube-0.1.1-x86_64.AppImage"
+    },
+    {
+      "platform": "groov-rio",
+      "arch": "armv7",
+      "label": "UVC for Opto 22 groov RIO",
+      "file": "uvc-rio-0.1.1.tar.gz",
+      "sourceFilename": "uvc-rio-0.1.1.tar.gz",
+      "stableUrl": "https://refinio.one/installers/uvc/uvc-rio-0.1.1.tar.gz"
+    },
+    {
+      "platform": "esp32",
+      "arch": "esp32c6",
+      "label": "UVC firmware for ESP32-C6",
+      "file": "uvc-esp32c6-0.1.1.tar.gz",
+      "sourceFilename": "uvc-esp32c6-0.1.1.tar.gz",
+      "stableUrl": "https://refinio.one/installers/uvc/uvc-esp32c6-0.1.1.tar.gz"
+    }
+  ]
+}

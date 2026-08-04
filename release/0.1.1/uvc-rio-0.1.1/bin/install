@@ -1,0 +1,171 @@
+#!/bin/sh
+
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+release_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+. "$script_dir/rio-common"
+
+if [ "$(id -u)" -ne 0 ]; then
+  uvc_fail "run this installer through sudo from an official groov Shell account"
+fi
+
+for command in node systemctl curl tar sha256sum
+do
+  command -v "$command" >/dev/null 2>&1 || uvc_fail "missing required command: $command"
+done
+
+metadata="$release_dir/build-info.json"
+release_manifest="$release_dir/release.json"
+[ -f "$metadata" ] || uvc_fail "build-info.json is missing"
+[ -f "$release_manifest" ] || uvc_fail "release.json is missing"
+
+version="$(uvc_json_field "$metadata" version)"
+minimum_firmware="$(uvc_json_field "$metadata" compatibility.minimumFirmware)"
+supported_models="$(uvc_json_field "$metadata" compatibility.models)"
+supported_node_majors="$(uvc_json_field "$metadata" compatibility.nodeMajors)"
+[ -n "$version" ] || uvc_fail "release version is missing"
+
+architecture="$(uname -m)"
+case "$architecture" in
+  armv7l|armv7*) ;;
+  *) uvc_fail "unsupported architecture $architecture; groov RIO requires ARMv7" ;;
+esac
+
+model="$(uvc_detect_model)"
+if [ -z "$model" ]; then
+  uvc_fail "cannot detect the RIO model; rerun with UVC_RIO_MODEL=GRV-R7-MM1001-10"
+fi
+case " $supported_models " in
+  *" $model "*) ;;
+  *) uvc_fail "model $model is not declared compatible with this release" ;;
+esac
+
+firmware="$(uvc_detect_firmware)"
+if [ -z "$firmware" ]; then
+  uvc_fail "cannot detect groov firmware; rerun with UVC_RIO_FIRMWARE=<version>"
+fi
+if ! uvc_version_at_least "$firmware" "$minimum_firmware"; then
+  uvc_fail "groov firmware $firmware is older than required $minimum_firmware"
+fi
+
+node_bin="$(command -v node)"
+node_major="$(node -p 'process.versions.node.split(".")[0]')"
+case " $supported_node_majors " in
+  *" $node_major "*) ;;
+  *) uvc_fail "Node.js major $node_major is unsupported; expected one of: $supported_node_majors" ;;
+esac
+
+expected_bundle_sha="$(node -e '
+  const release = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+  const file = release.files.find(entry => entry.path === "app/uvc-headless.mjs");
+  if (file?.sha256) process.stdout.write(file.sha256);
+' "$release_manifest")"
+[ -n "$expected_bundle_sha" ] || uvc_fail "bundle digest is missing from release.json"
+printf '%s  %s\n' "$expected_bundle_sha" "$release_dir/app/uvc-headless.mjs" | sha256sum -c - >/dev/null \
+  || uvc_fail "bundle digest verification failed"
+node --check "$release_dir/app/uvc-headless.mjs" >/dev/null
+
+root="$(uvc_root)"
+service_user="${UVC_SERVICE_USER:-${SUDO_USER:-dev}}"
+service_group="${UVC_SERVICE_GROUP:-$service_user}"
+id "$service_user" >/dev/null 2>&1 || uvc_fail "service user does not exist: $service_user"
+
+install -d -m 0755 -o root -g root "$root" "$root/releases"
+install -d -m 0700 -o "$service_user" -g "$service_group" "$root/shared" "$root/shared/uvc-data"
+
+destination="$root/releases/$version"
+if [ -e "$destination" ]; then
+  existing_sha="$(sha256sum "$destination/app/uvc-headless.mjs" 2>/dev/null | awk '{print $1}' || true)"
+  if [ "$existing_sha" != "$expected_bundle_sha" ]; then
+    uvc_fail "release $version already exists with different contents"
+  fi
+else
+  staging="$root/releases/.staging-$version-$$"
+  install -d -m 0755 -o root -g root "$staging"
+  cp -a "$release_dir/." "$staging/"
+  chown -R root:root "$staging"
+  chmod 0755 "$staging/bin/"*
+  mv "$staging" "$destination"
+fi
+
+config="$root/shared/uvc.env"
+if [ ! -f "$config" ]; then
+  install -m 0600 -o "$service_user" -g "$service_group" \
+    "$destination/config/uvc.env.example" "$config"
+fi
+
+old_target=""
+if [ -L "$root/current" ]; then
+  old_target="$(readlink "$root/current")"
+fi
+
+temporary_link="$root/.current-$version-$$"
+ln -s "releases/$version" "$temporary_link"
+mv -Tf "$temporary_link" "$root/current"
+if [ -n "$old_target" ] && [ "$old_target" != "releases/$version" ]; then
+  temporary_previous="$root/.previous-$version-$$"
+  ln -s "$old_target" "$temporary_previous"
+  mv -Tf "$temporary_previous" "$root/previous"
+fi
+
+unit_staging="/tmp/uvc-headless.service.$$"
+sed \
+  -e "s|@UVC_ROOT@|$root|g" \
+  -e "s|@UVC_USER@|$service_user|g" \
+  -e "s|@UVC_GROUP@|$service_group|g" \
+  -e "s|@UVC_NODE@|$node_bin|g" \
+  "$destination/systemd/uvc-headless.service" > "$unit_staging"
+install -m 0644 "$unit_staging" /etc/systemd/system/uvc-headless.service
+rm -f "$unit_staging"
+
+systemctl daemon-reload
+systemctl enable uvc-headless.service >/dev/null
+systemctl restart uvc-headless.service
+
+stable_pid=""
+stable_count=0
+for attempt in $(seq 1 60)
+do
+  current_pid="$(systemctl show uvc-headless.service --property MainPID --value 2>/dev/null || true)"
+  health="$(curl -fsS --max-time 2 http://127.0.0.1:3000/health 2>/dev/null || true)"
+  if [ -n "$current_pid" ] && [ "$current_pid" != 0 ] && \
+    HEALTH_JSON="$health" node -e '
+      try {
+        const value = JSON.parse(process.env.HEALTH_JSON || "");
+        process.exit(value.status === "ok" && value.ready === true ? 0 : 1);
+      } catch { process.exit(1); }
+    '
+  then
+    if [ "$current_pid" = "$stable_pid" ]; then
+      stable_count=$((stable_count + 1))
+    else
+      stable_pid="$current_pid"
+      stable_count=1
+    fi
+    if [ "$stable_count" -ge 3 ]; then
+      printf 'Installed UVC RIO %s for %s on groov firmware %s (PID %s).\n' \
+        "$version" "$model" "$firmware" "$stable_pid"
+      printf 'Configuration: %s\n' "$config"
+      printf 'Keep SSH available on a trusted management network for break-glass UVC recovery.\n'
+      exit 0
+    fi
+  else
+    stable_pid=""
+    stable_count=0
+  fi
+  sleep 2
+done
+
+printf 'uvc-rio: release %s failed readiness\n' "$version" >&2
+if [ -n "$old_target" ]; then
+  rollback_link="$root/.rollback-$version-$$"
+  ln -s "$old_target" "$rollback_link"
+  mv -Tf "$rollback_link" "$root/current"
+  systemctl restart uvc-headless.service || true
+  printf 'uvc-rio: restored %s\n' "$old_target" >&2
+else
+  systemctl stop uvc-headless.service || true
+  printf 'uvc-rio: first installation stopped; inspect journalctl -u uvc-headless.service\n' >&2
+fi
+exit 1

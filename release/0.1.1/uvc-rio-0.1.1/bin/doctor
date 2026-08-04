@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "$script_dir/rio-common"
+
+root="$(uvc_root)"
+model="$(uvc_detect_model)"
+firmware="$(uvc_detect_firmware)"
+
+printf 'model=%s\n' "${model:-unknown}"
+printf 'firmware=%s\n' "${firmware:-unknown}"
+printf 'architecture=%s\n' "$(uname -m)"
+printf 'node=%s\n' "$(node --version 2>/dev/null || printf unavailable)"
+printf 'root=%s\n' "$root"
+printf 'active=%s\n' "$(readlink "$root/current" 2>/dev/null || printf missing)"
+printf 'previous=%s\n' "$(readlink "$root/previous" 2>/dev/null || printf missing)"
+printf 'service=%s\n' "$(systemctl is-active uvc-headless.service 2>/dev/null || true)"
+
+health="$(curl -fsS --max-time 3 http://127.0.0.1:3000/health 2>/dev/null || true)"
+if [ -n "$health" ]; then
+  HEALTH_JSON="$health" node -e '
+    const health = JSON.parse(process.env.HEALTH_JSON);
+    console.log(`ready=${health.ready === true}`);
+    console.log(`auth.initialized=${health.auth?.initialized === true}`);
+    console.log(`auth.loggedIn=${health.auth?.loggedIn === true}`);
+    console.log(`auth.ownerSessionReady=${health.auth?.ownerSessionReady === true}`);
+    console.log(`memory.rss=${health.memory?.rss ?? "unknown"}`);
+  '
+else
+  printf 'ready=false\n'
+  printf 'health.error=unreachable\n'
+  exit 1
+fi

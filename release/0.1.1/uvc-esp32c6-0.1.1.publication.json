@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "packageName": "uvc-esp32",
+  "version": "0.1.1",
+  "channel": "latest",
+  "platform": "esp32",
+  "arch": "esp32c6",
+  "label": "UVC firmware for ESP32-C6",
+  "description": "ESP32-C6 firmware bundle flashed with Espressif esptool and provisioned over BLE.",
+  "sourceFilename": "uvc-esp32c6-0.1.1.tar.gz",
+  "filePath": "/Users/gecko/src/uvc/release/0.1.1/uvc-esp32c6-0.1.1.tar.gz",
+  "stableUrl": "https://refinio.one/installers/uvc/uvc-esp32c6-0.1.1.tar.gz",
+  "sizeBytes": 939452,
+  "sha256": "e95e7fb48afab72bf10ff8e2d2d47e066f0dbeef29dc6e9ffde973a0f65611bc"
+}
