@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "product": "uvc-rio",
+  "version": "0.1.0",
+  "builtAt": "2026-07-21T08:08:33.392Z",
+  "sourceCommit": "c433e0103674dbea13a71ab545c6f916afca2b29",
+  "supportOwner": "Refinio",
+  "installationSurface": "Opto 22 GROOV-LIC-SHELL",
+  "compatibility": {
+    "models": [
+      "GRV-R7-MM1001-10"
+    ],
+    "architecture": "armv7l",
+    "minimumFirmware": "4.1.2",
+    "firmwareLine": "4.1",
+    "nodeMajors": [
+      20,
+      22
+    ],
+    "serviceManager": "systemd"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "product": "uvc-rio",
+  "version": "0.1.0",
+  "compatibility": {
+    "models": [
+      "GRV-R7-MM1001-10"
+    ],
+    "architecture": "armv7l",
+    "minimumFirmware": "4.1.2",
+    "firmwareLine": "4.1",
+    "nodeMajors": [
+      20,
+      22
+    ],
+    "serviceManager": "systemd"
+  },
+  "stateSchemaVersion": 1,
+  "files": [
+    {
+      "path": "app/uvc-headless.mjs",
+      "sizeBytes": 46540152,
+      "sha256": "81431c2dec4f0a0eb0dc8ad4ead31732fdbfcdb37811f6e09836207333ece9dc"
+    },
+    {
+      "path": "bin/backup",
+      "sizeBytes": 1322,
+      "sha256": "1526b9902273db4df9bccdc1c60c8ee1b1a94b126713aaea164e7ef612a9bd95"
+    },
+    {
+      "path": "bin/doctor",
+      "sizeBytes": 1298,
+      "sha256": "21ec9c771a141e67f2fbeaf41be41ebf1b22fc6583516ed4cc850d2203d26805"
+    },
+    {
+      "path": "bin/install",
+      "sizeBytes": 6099,
+      "sha256": "fa1e0ef50af75617da881edc23a941aaf2a56952d18e7ea1ebfcd9debc40504e"
+    },
+    {
+      "path": "bin/recovery-crypto.mjs",
+      "sizeBytes": 3983,
+      "sha256": "919a315fed716eef292d70a030185354d9256fffbb9cb01bc85e8fd4d75c962c"
+    },
+    {
+      "path": "bin/restore",
+      "sizeBytes": 2705,
+      "sha256": "cc1796928d98c2e00850a783912669d40a9f85a8828a8e1f97b1b81b791d9be5"
+    },
+    {
+      "path": "bin/rio-common",
+      "sizeBytes": 2031,
+      "sha256": "6f33c412c3df4c54db5c6e5aa6f52b7cf5d38c7307725c7b285c216b81e5b002"
+    },
+    {
+      "path": "bin/rollback",
+      "sizeBytes": 839,
+      "sha256": "a7175692e3ac32164aed5c5f3cbb070e8ff8626b8f0754a02c0ba56e1a39333b"
+    },
+    {
+      "path": "bin/run",
+      "sizeBytes": 1611,
+      "sha256": "16897f752d59b4ce6a03f5ff29c34076348ee3f4d652181b864c535ae3cea283"
+    },
+    {
+      "path": "build-info.json",
+      "sizeBytes": 496,
+      "sha256": "4ba230658020ec697fe785ce7f1e4c45ed19ac8c734cca80319cbe4ae46507fd"
+    },
+    {
+      "path": "config/uvc.env.example",
+      "sizeBytes": 948,
+      "sha256": "fcc3a39ce3aef6e382ee8e35dfe9452b8e54c7077843c527f04a1d42a302da70"
+    },
+    {
+      "path": "sbom.spdx.json",
+      "sizeBytes": 159842,
+      "sha256": "728e8162cc6b9e482e8cdb105945f7c391c4390fc4b684d00060c5ca72cb4d74"
+    },
+    {
+      "path": "systemd/uvc-headless.service",
+      "sizeBytes": 662,
+      "sha256": "23d3b671f2eb56259543ed1e07e6b94f825ce65638f6b6be32494a9c3510325f"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "sizeBytes": 394550,
+      "sha256": "2b19977a117c4dd90d06f27e87e03d6ac167f8df63706e107c41e4dce5137f8a"
+    }
+  ]
+}

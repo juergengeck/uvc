@@ -1,0 +1,69 @@
+#!/bin/sh
+
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "$script_dir/rio-common"
+
+backup_file="${1:-}"
+confirmation="${2:-}"
+[ -f "$backup_file" ] || uvc_fail "usage: restore <backup.uvc-rio-backup> --yes"
+[ "$confirmation" = "--yes" ] || uvc_fail "restore replaces shared state; rerun with --yes"
+
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo UVC_ROOT="$(uvc_root)" UVC_BACKUP_PASSWORD="${UVC_BACKUP_PASSWORD:-}" "$0" "$backup_file" --yes
+fi
+
+if [ -z "${UVC_BACKUP_PASSWORD:-}" ]; then
+  printf 'Backup password: ' >/dev/tty
+  stty -echo </dev/tty
+  IFS= read -r UVC_BACKUP_PASSWORD </dev/tty
+  stty echo </dev/tty
+  printf '\n' >/dev/tty
+  export UVC_BACKUP_PASSWORD
+fi
+
+root="$(uvc_root)"
+temporary="$(mktemp -d /tmp/uvc-rio-restore.XXXXXX)"
+cleanup() { rm -rf "$temporary"; }
+trap cleanup EXIT INT TERM
+
+"$script_dir/recovery-crypto.mjs" decrypt "$backup_file" "$temporary/state.tar.gz"
+tar -tzf "$temporary/state.tar.gz" | node -e '
+  const fs = require("node:fs");
+  const entries = fs.readFileSync(0, "utf8").trim().split("\n").filter(Boolean);
+  if (!entries.length || entries.some(value => value !== "shared/" && !value.startsWith("shared/") || value.includes(".."))) {
+    process.stderr.write("unsafe recovery archive paths\n");
+    process.exit(1);
+  }
+'
+mkdir "$temporary/extracted"
+tar -xzf "$temporary/state.tar.gz" -C "$temporary/extracted"
+[ -d "$temporary/extracted/shared/uvc-data" ] || uvc_fail "backup does not contain ONE storage"
+[ -f "$temporary/extracted/shared/uvc.env" ] || uvc_fail "backup does not contain UVC configuration"
+
+service_user="${UVC_SERVICE_USER:-${SUDO_USER:-dev}}"
+service_group="${UVC_SERVICE_GROUP:-$service_user}"
+stamp="$(date -u +%Y%m%d-%H%M%S)"
+old_shared="$root/shared.before-restore-$stamp"
+
+systemctl stop uvc-headless.service || true
+mv "$root/shared" "$old_shared"
+mv "$temporary/extracted/shared" "$root/shared"
+chown -R "$service_user:$service_group" "$root/shared"
+chmod 0700 "$root/shared"
+chmod 0600 "$root/shared/uvc.env"
+
+if systemctl restart uvc-headless.service && \
+  sh -c 'for i in $(seq 1 45); do curl -fsS http://127.0.0.1:3000/health 2>/dev/null | node -e '\''let d=""; process.stdin.on("data",c=>d+=c).on("end",()=>{try{process.exit(JSON.parse(d).ready===true?0:1)}catch{process.exit(1)}})'\'' && exit 0; sleep 2; done; exit 1'
+then
+  printf 'Restored UVC RIO shared state. Previous state retained at %s\n' "$old_shared"
+  exit 0
+fi
+
+systemctl stop uvc-headless.service || true
+failed_shared="$root/shared.failed-restore-$stamp"
+mv "$root/shared" "$failed_shared"
+mv "$old_shared" "$root/shared"
+systemctl start uvc-headless.service || true
+uvc_fail "restored state failed readiness; original state was put back"

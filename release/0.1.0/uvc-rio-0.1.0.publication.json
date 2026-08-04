@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "packageName": "uvc-rio",
+  "version": "0.1.0",
+  "channel": "stable",
+  "platform": "groov-rio",
+  "arch": "armv7",
+  "label": "UVC for Opto 22 groov RIO",
+  "description": "Refinio UVC authority installed through the official Opto 22 Shell surface.",
+  "sourceFilename": "uvc-rio-0.1.0.tar.gz",
+  "filePath": "/Users/gecko/src/uvc/release/0.1.0/uvc-rio-0.1.0.tar.gz",
+  "stableUrl": "https://refinio.one/installers/uvc/uvc-rio-0.1.0.tar.gz",
+  "sizeBytes": 8552633,
+  "sha256": "4739fe52fbf5f2441b0bfee5a4a381b081088cfafb5ae2e838d5e8f7e82012cb",
+  "compatibility": {
+    "models": [
+      "GRV-R7-MM1001-10"
+    ],
+    "architecture": "armv7l",
+    "minimumFirmware": "4.1.2",
+    "firmwareLine": "4.1",
+    "nodeMajors": [
+      20,
+      22
+    ],
+    "serviceManager": "systemd"
+  }
+}

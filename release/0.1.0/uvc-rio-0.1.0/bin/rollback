@@ -1,0 +1,28 @@
+#!/bin/sh
+
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "$script_dir/rio-common"
+
+root="$(uvc_root)"
+[ -L "$root/current" ] || uvc_fail "active release link is missing"
+[ -L "$root/previous" ] || uvc_fail "previous release link is missing"
+
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo UVC_ROOT="$root" "$0" "$@"
+fi
+
+active="$(readlink "$root/current")"
+previous="$(readlink "$root/previous")"
+[ -d "$root/$previous" ] || uvc_fail "previous release directory is missing: $previous"
+
+new_current="$root/.rollback-current-$$"
+new_previous="$root/.rollback-previous-$$"
+ln -s "$previous" "$new_current"
+ln -s "$active" "$new_previous"
+mv -Tf "$new_current" "$root/current"
+mv -Tf "$new_previous" "$root/previous"
+systemctl restart uvc-headless.service
+
+printf 'Rolled back UVC RIO from %s to %s.\n' "$active" "$previous"

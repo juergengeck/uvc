@@ -1,0 +1,56 @@
+#!/bin/sh
+
+set -eu
+
+root="${UVC_ROOT:-/home/dev/uvc}"
+node_bin="${UVC_NODE:-/usr/bin/node}"
+
+# Resolve the active release directory before invoking Node. Node resolves an
+# ESM main module to its physical path; passing the current symlink instead can
+# make the bundle's CLI-entrypoint guard see two different paths and exit 0
+# without starting the service.
+active_release=$(CDPATH= cd "$root/current" 2>/dev/null && pwd -P) || {
+  printf 'uvc-rio: active release is unavailable: %s\n' "$root/current" >&2
+  exit 1
+}
+bundle="$active_release/app/uvc-headless.mjs"
+
+if [ ! -x "$node_bin" ]; then
+  printf 'uvc-rio: configured Node executable is unavailable: %s\n' "$node_bin" >&2
+  exit 1
+fi
+if [ ! -f "$bundle" ]; then
+  printf 'uvc-rio: active bundle is unavailable: %s\n' "$bundle" >&2
+  exit 1
+fi
+
+set -- "$bundle" \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --storage "$root/shared/uvc-data" \
+  --uvc-provisioning-state "$root/shared/uvc-provisioning-state.json" \
+  --device-type groov \
+  --no-whatsapp \
+  --no-embeddings \
+  --no-seller-services \
+  --no-mcp
+
+if [ -n "${COMM_SERVER_URL:-}" ]; then
+  set -- "$@" --comm-server "$COMM_SERVER_URL"
+else
+  set -- "$@" --no-glue-services
+fi
+if [ -n "${PUBLIC_COMM_SERVER_URL:-}" ]; then
+  set -- "$@" --public-comm-server "$PUBLIC_COMM_SERVER_URL"
+fi
+if [ -n "${QUICVC_PORT:-}" ]; then
+  set -- "$@" --quicvc-port "$QUICVC_PORT"
+fi
+if [ -n "${PUBLIC_QUICVC_HOST:-}" ]; then
+  set -- "$@" --public-quicvc-host "$PUBLIC_QUICVC_HOST"
+fi
+if [ -n "${PUBLIC_QUICVC_PORT:-}" ]; then
+  set -- "$@" --public-quicvc-port "$PUBLIC_QUICVC_PORT"
+fi
+
+exec "$node_bin" "$@"

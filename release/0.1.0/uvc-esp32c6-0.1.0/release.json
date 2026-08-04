@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "product": "uvc-esp32",
+  "version": "0.1.0",
+  "target": "esp32c6",
+  "bootstrap": {
+    "transport": "BLE",
+    "wifiCredentials": "provision-at-install"
+  },
+  "flashSettings": {
+    "flash_mode": "dio",
+    "flash_size": "4MB",
+    "flash_freq": "80m"
+  },
+  "files": [
+    {
+      "offset": "0x0",
+      "path": "firmware/bootloader/bootloader.bin",
+      "sizeBytes": 22304,
+      "sha256": "1bcb3db0595d56a9a5761497017834baa8e76876c4da01253bac4ed338bcc630"
+    },
+    {
+      "offset": "0x10000",
+      "path": "firmware/esp32_quicvc_app.bin",
+      "sizeBytes": 1464048,
+      "sha256": "9dbd977c84dedb1fff2ddce76c53ab3427d2385d8a0d75e5c3b8ab3406368b38"
+    },
+    {
+      "offset": "0x8000",
+      "path": "firmware/partition_table/partition-table.bin",
+      "sizeBytes": 3072,
+      "sha256": "c9a826e85500d14d1854ce78e47452d4614a1be371bbd056278d2cb3398fbbfd"
+    }
+  ]
+}
