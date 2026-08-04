@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="@refinio/coding.core">
+<title>utils</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4efe6;
+    --surface: rgba(255, 252, 246, 0.9);
+    --surface-strong: #fffaf2;
+    --ink: #1f1a14;
+    --muted: #665f57;
+    --line: rgba(56, 41, 25, 0.16);
+    --accent: #9d3c10;
+    --accent-soft: rgba(157, 60, 16, 0.12);
+    --shadow: 0 20px 60px rgba(52, 36, 23, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    background:
+      radial-gradient(circle at top left, rgba(157, 60, 16, 0.16), transparent 28rem),
+      linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+
+  main {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 4rem;
+  }
+
+  .code-module-memory-hero {
+    padding: 2rem;
+    border: 1px solid var(--line);
+    border-radius: 1.5rem;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .code-module-memory-kicker {
+    margin: 0 0 0.75rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .code-module-memory-title {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.3rem);
+    line-height: 1.05;
+  }
+
+  .code-module-memory-summary {
+    margin: 1rem 0 0;
+    font-size: 1.06rem;
+    color: var(--muted);
+    max-width: 52rem;
+  }
+
+  .code-module-memory-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    margin-top: 1.5rem;
+  }
+
+  .code-module-memory-card,
+  .code-module-memory-section {
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background: var(--surface-strong);
+    box-shadow: var(--shadow);
+  }
+
+  .code-module-memory-card {
+    padding: 1rem 1.1rem;
+  }
+
+  .code-module-memory-card-label {
+    display: block;
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .code-module-memory-card-value {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.95rem;
+    word-break: break-word;
+  }
+
+  .code-module-memory-layout {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1.35fr 1fr;
+    margin-top: 1.5rem;
+  }
+
+  .code-module-memory-section {
+    padding: 1.25rem;
+  }
+
+  .code-module-memory-section h2 {
+    margin: 0 0 0.85rem;
+    font-size: 1.1rem;
+  }
+
+  .code-module-memory-collection,
+  .code-module-memory-tags {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+
+  .code-module-memory-item + .code-module-memory-item {
+    margin-top: 0.9rem;
+  }
+
+  .code-module-memory-item header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+  }
+
+  .code-module-memory-item p,
+  .code-module-memory-detail {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+  }
+
+  .code-module-memory-badge {
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.74rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .code-module-memory-meta-line {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .code-module-memory-steps {
+    margin: 0.6rem 0 0;
+    padding-left: 1.1rem;
+    color: var(--muted);
+  }
+
+  .code-module-memory-empty {
+    margin: 0;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .code-module-memory-roundtrip {
+    display: none !important;
+  }
+
+  .code-module-memory-footer {
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  @media (max-width: 840px) {
+    .code-module-memory-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="code-module-memory-hero">
+    <p class="code-module-memory-kicker">Code Module Memory</p>
+    <h1 class="code-module-memory-title">utils</h1>
+    <p class="code-module-memory-summary">Current: Materialized git codebook state for utils at bccb16ce5356.</p>
+    <div class="code-module-memory-grid">
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Directory</span>
+        <span class="code-module-memory-card-value">packages/uvc.cube/src/main/utils</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Source</span>
+        <span class="code-module-memory-card-value">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Projected</span>
+        <span class="code-module-memory-card-value">2026-08-04T07:06:23.000Z</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Updated</span>
+        <span class="code-module-memory-card-value">2026-08-04T07:06:23.000Z</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Status And Memory</h2>
+      <ol class="code-module-memory-collection">
+    <li class="code-module-memory-item">
+      <header>
+        <strong>utils codebook status</strong>
+        <span class="code-module-memory-badge">status</span>
+      </header>
+      <p>Materialized git codebook state for utils at bccb16ce5356.</p>
+      <p class="code-module-memory-detail">How to apply: Start with these refs and status facts before widening scope or rebuilding local understanding.</p>
+    </li>
+  </ol>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Content-First Memories</h2>
+      <p class="code-module-memory-empty">No content-first memories recorded.</p>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Module Shape</h2>
+      <p>Key paths: packages/uvc.cube/src/main/utils/app-paths.ts.</p>
+      <div class="code-module-memory-meta-line">
+        <span>Roles: none</span>
+        <span>Observed: 2026-08-04T07:06:23.000Z</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Objectives</h2>
+      <p class="code-module-memory-empty">No objectives recorded.</p>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Plans</h2>
+      <p class="code-module-memory-empty">No plans recorded.</p>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Document References</h2>
+      <p class="code-module-memory-empty">none</p>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Source And Paths</h2>
+      <h3>Source Refs</h3>
+      <ul class="code-module-memory-tags"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Apackages%252Fuvc.cube%252Fsrc%252Fmain%252Futils%252Fapp-paths.ts</li></ul>
+      <h3>Related Paths</h3>
+      <ul class="code-module-memory-tags"><li>packages/uvc.cube/src/main/utils/app-paths.ts</li></ul>
+    </article>
+  </section>
+
+  <p class="code-module-memory-footer">
+    This page is a human-readable view with an embedded exact ONE round-trip payload.
+  </p>
+</main>
+<section class="code-module-memory-roundtrip" hidden aria-hidden="true">
+<!-- CODE_MODULE_MEMORY_ROUNDTRIP_START -->
+<div itemscope itemtype="//refinio.one/CodeModuleMemoryProjectionDocument"><span itemprop="$type$">CodeModuleMemoryProjectionDocument</span><span itemprop="id">code-module-memory-projection|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|packages%2Fuvc.cube%2Fsrc%2Fmain%2Futils</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">packages/uvc.cube/src/main/utils</span><span itemprop="title">utils</span><span itemprop="summary">Current: Materialized git codebook state for utils at bccb16ce5356.</span><span itemprop="moduleMemoryHash" data-hash="7c879ff04361878f110dcdd92e47db3cf106a4109d67e36ffce8202322492b41"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|packages%2Fuvc.cube%2Fsrc%2Fmain%2Futils</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">packages/uvc.cube/src/main/utils</span><span itemprop="title">utils</span><span itemprop="summary">Current: Materialized git codebook state for utils at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: packages/uvc.cube/src/main/utils/app-paths.ts.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Apackages%252Fuvc.cube%252Fsrc%252Fmain%252Futils%252Fapp-paths.ts</li></ol><ol itemprop="relatedPaths"><li>packages/uvc.cube/src/main/utils/app-paths.ts</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="currentStatusEntryHash" data-hash="8edf857ec92c5d33b40f00660774ac0795bbd661bc40fec9752d78ea81c71f74"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry|db9cb53446677b44024f0e2a733acd66531915941c7b14ff841a2747dc7af98d|status|1785827183000|utils%20codebook%20status</span><span itemprop="moduleIdHash" data-hash="7c879ff04361878f110dcdd92e47db3cf106a4109d67e36ffce8202322492b41" data-id-hash="db9cb53446677b44024f0e2a733acd66531915941c7b14ff841a2747dc7af98d"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|packages%2Fuvc.cube%2Fsrc%2Fmain%2Futils</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">packages/uvc.cube/src/main/utils</span><span itemprop="title">utils</span><span itemprop="summary">Current: Materialized git codebook state for utils at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: packages/uvc.cube/src/main/utils/app-paths.ts.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Apackages%252Fuvc.cube%252Fsrc%252Fmain%252Futils%252Fapp-paths.ts</li></ol><ol itemprop="relatedPaths"><li>packages/uvc.cube/src/main/utils/app-paths.ts</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">status</span><span itemprop="title">utils codebook status</span><span itemprop="summary">Materialized git codebook state for utils at bccb16ce5356.</span><span itemprop="why">Keeps the latest repo-backed module snapshot available as durable coding memory.</span><span itemprop="howToApply">Start with these refs and status facts before widening scope or rebuilding local understanding.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Apackages%252Fuvc.cube%252Fsrc%252Fmain%252Futils%252Fapp-paths.ts</li></ol><ol itemprop="relatedPaths"><li>packages/uvc.cube/src/main/utils/app-paths.ts</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="memoryEntryHashes"><li><span itemprop="memoryEntryHashes" data-hash="8edf857ec92c5d33b40f00660774ac0795bbd661bc40fec9752d78ea81c71f74"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry|db9cb53446677b44024f0e2a733acd66531915941c7b14ff841a2747dc7af98d|status|1785827183000|utils%20codebook%20status</span><span itemprop="moduleIdHash" data-hash="7c879ff04361878f110dcdd92e47db3cf106a4109d67e36ffce8202322492b41" data-id-hash="db9cb53446677b44024f0e2a733acd66531915941c7b14ff841a2747dc7af98d"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|packages%2Fuvc.cube%2Fsrc%2Fmain%2Futils</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">packages/uvc.cube/src/main/utils</span><span itemprop="title">utils</span><span itemprop="summary">Current: Materialized git codebook state for utils at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: packages/uvc.cube/src/main/utils/app-paths.ts.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Apackages%252Fuvc.cube%252Fsrc%252Fmain%252Futils%252Fapp-paths.ts</li></ol><ol itemprop="relatedPaths"><li>packages/uvc.cube/src/main/utils/app-paths.ts</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">status</span><span itemprop="title">utils codebook status</span><span itemprop="summary">Materialized git codebook state for utils at bccb16ce5356.</span><span itemprop="why">Keeps the latest repo-backed module snapshot available as durable coding memory.</span><span itemprop="howToApply">Start with these refs and status facts before widening scope or rebuilding local understanding.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Apackages%252Fuvc.cube%252Fsrc%252Fmain%252Futils%252Fapp-paths.ts</li></ol><ol itemprop="relatedPaths"><li>packages/uvc.cube/src/main/utils/app-paths.ts</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li></ol><span itemprop="projectedAt">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div>
+<!-- CODE_MODULE_MEMORY_ROUNDTRIP_END -->
+</section>
+</body>
+</html>

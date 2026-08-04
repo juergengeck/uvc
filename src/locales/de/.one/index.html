@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>one memory / src/locales/de</title>
+  <style>
+    :root { color-scheme: light; --ink: #121212; --muted: #707070; --line: #e5e2dc; --paper: #fbfaf7; --panel: #ffffff; --accent: #1f1f1f; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: Arial, Helvetica, sans-serif; line-height: 1.5; }
+    a { color: inherit; }
+    .one-page { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
+    .one-topbar { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; padding: 1.25rem clamp(1.25rem, 4vw, 4rem); border-bottom: 1px solid var(--line); text-transform: lowercase; letter-spacing: 0; }
+    .one-brand { font-weight: 700; font-size: 0.95rem; }
+    .one-nav { display: flex; gap: 1rem; color: var(--muted); font-size: 0.82rem; }
+    .one-hero { padding: clamp(3.5rem, 9vw, 8rem) clamp(1.25rem, 4vw, 4rem) clamp(2rem, 6vw, 4rem); background: #181818; color: #fff; }
+    .one-hero-inner { max-width: 980px; margin: 0 auto; }
+    .one-kicker { margin: 0 0 1rem; color: #c8c8c8; font-size: 0.85rem; text-transform: lowercase; }
+    h1 { margin: 0; font-size: clamp(2.4rem, 7vw, 5.6rem); font-weight: 400; line-height: 0.98; letter-spacing: 0; }
+    .one-subtitle { max-width: 720px; margin: 1.4rem 0 0; color: #dedede; font-size: clamp(1.05rem, 2vw, 1.35rem); }
+    main { width: min(1120px, calc(100% - 2.5rem)); margin: clamp(2rem, 5vw, 4rem) auto; }
+    .one-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .one-stat { background: var(--panel); padding: 1rem; min-width: 0; }
+    .one-stat b { display: block; font-size: 1.55rem; font-weight: 400; }
+    .one-stat span { color: var(--muted); font-size: 0.78rem; text-transform: lowercase; }
+    .one-section { margin-top: clamp(2rem, 5vw, 4rem); }
+    .one-section h2 { margin: 0 0 1rem; font-size: 1.05rem; font-weight: 700; text-transform: lowercase; }
+    .one-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .one-row { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(12rem, 2fr) minmax(9rem, 0.8fr); gap: 1rem; align-items: start; background: var(--panel); padding: 1rem; }
+    .one-row-title { font-weight: 700; }
+    .one-row-summary { color: var(--muted); }
+    main > div[itemscope] { display: block; margin-top: clamp(2rem, 5vw, 4rem); }
+    main > div[itemscope] > span[itemprop="$type$"], main > div[itemscope] > span[itemprop="schema"] { display: none; }
+    main > div[itemscope] > span[itemprop="directoryPath"], main > div[itemscope] > span[itemprop="sourceId"], main > div[itemscope] > span[itemprop="updatedAt"] { display: block; color: var(--muted); font-size: 0.9rem; margin: 0.2rem 0; }
+    main > div[itemscope] > span[itemprop="directoryPath"]::before { content: "folder "; color: var(--ink); font-weight: 700; }
+    main > div[itemscope] > span[itemprop="sourceId"]::before { content: "source "; color: var(--ink); font-weight: 700; }
+    main > div[itemscope] > span[itemprop="updatedAt"]::before { content: "updated "; color: var(--ink); font-weight: 700; }
+    ol[itemprop="children"], ol[itemprop="memories"] { list-style: none; padding: 0; margin: 2rem 0 0; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    ol[itemprop="children"]::before, ol[itemprop="memories"]::before { display: block; background: var(--paper); padding: 0 0 1rem; margin: -2.2rem -1px 0; border: 0; font-size: 1.05rem; font-weight: 700; text-transform: lowercase; }
+    ol[itemprop="children"]::before { content: "child indexes"; }
+    ol[itemprop="memories"]::before { content: "local memories"; }
+    ol[itemprop] > li { background: var(--panel); padding: 1rem; }
+    ol[itemprop] > li > div { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(12rem, 2fr) minmax(9rem, 0.8fr); gap: 1rem; align-items: start; }
+    ol[itemprop] span[itemprop="$type$"] { display: none; }
+    span[itemprop="title"], span[itemprop="name"] { font-weight: 700; }
+    span[itemprop="summary"] { color: var(--muted); }
+    ol[itemprop="children"] span[itemprop="path"]::after { content: "/one/index.html"; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.84em; overflow-wrap: anywhere; }
+    .one-footer { padding: 2rem clamp(1.25rem, 4vw, 4rem); color: var(--muted); border-top: 1px solid var(--line); font-size: 0.8rem; }
+    @media (max-width: 760px) { .one-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .one-row { grid-template-columns: 1fr; } .one-nav { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="one-page">
+    <header>
+      <div class="one-topbar">
+        <div class="one-brand">REFINIO</div>
+        <nav class="one-nav" aria-label="memory sections"><span>memory</span><span>children</span><span>objects</span></nav>
+      </div>
+      <section class="one-hero">
+        <div class="one-hero-inner">
+          <p class="one-kicker">federated memories</p>
+          <h1>src/locales/de</h1>
+          <p class="one-subtitle">src/locales/de carries 1 local memories and 2 child folder indexes.</p>
+        </div>
+      </section>
+    </header>
+    <main>
+      <section class="one-summary" aria-label="memory summary">
+        <div class="one-stat"><b>1</b><span>local memories</span></div>
+        <div class="one-stat"><b>2</b><span>child indexes</span></div>
+        <div class="one-stat"><b>3</b><span>total memories</span></div>
+        <div class="one-stat"><b><time datetime="2026-08-04T07:06:23.000Z">2026-08-04</time></b><span>updated</span></div>
+      </section>
+      <div itemscope itemtype="//refinio.one/SourceDirectoryMemoryIndex"><span itemprop="$type$">SourceDirectoryMemoryIndex</span><span itemprop="schema">source.core/directory-memory-index/v1</span><span itemprop="directoryPath">src/locales/de</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="updatedAt">1785827183000</span><ol itemprop="memories"><li><div><span itemprop="$type$">SourceDirectoryMemory</span><span itemprop="id">git-code-corpus:git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc:src%2Flocales%2Fde</span><span itemprop="kind">code-context</span><span itemprop="title">de</span><span itemprop="summary">13 tracked files · 2 child directories · primary languages: JSON · key files: calendar.json, chat.json, common.json, contacts.json, devices.json, health.json</span><span itemprop="sourceRef">source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fcalendar.json</span><ol itemprop="outputRefs"><li>code-directory-profile|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|src%2Flocales%2Fde</li><li>8e02229b1caf46130db04480d39e7ad132ffa5ad612e3f9ddcefaed99d60dc37</li><li>code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|src%2Flocales%2Fde</li><li>f34f29a0d8f74681bef44d4700d380daa2fd09ec94a9ad9b9dae502cf55c7f3a</li><li>code-memory-entry|f34f29a0d8f74681bef44d4700d380daa2fd09ec94a9ad9b9dae502cf55c7f3a|status|1785827183000|de%20codebook%20status</li><li>153efc404b7032b673dc52fce5725e871d848f00dbaa3b9f760d1902f6b3d490</li><li>book:git-codebase:git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc</li><li>book-projection:git-codebase:book:git-codebase:git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc</li></ol><ol itemprop="relatedPaths"><li>src/locales/de/calendar.json</li><li>src/locales/de/chat.json</li><li>src/locales/de/common.json</li><li>src/locales/de/contacts.json</li><li>src/locales/de/devices.json</li><li>src/locales/de/health.json</li></ol><span itemprop="payloadJson">{"schema":"coding.core/git-code-corpus/v1","repoRoot":"/Users/gecko/src/uvc","sourceId":"git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc","directoryPath":"src/locales/de","trackedFileCount":13,"directChildCount":2,"primaryLanguages":["JSON"],"sourceRefs":["source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fcalendar.json","source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fchat.json","source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fcommon.json","source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fcontacts.json","source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fdevices.json","source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Asrc%252Flocales%252Fde%252Fhealth.json"],"directChildPaths":["src/locales/de/auth","src/locales/de/ui"],"profileId":"code-directory-profile|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|src%2Flocales%2Fde","profileIdHash":"8e02229b1caf46130db04480d39e7ad132ffa5ad612e3f9ddcefaed99d60dc37","bookId":"book:git-codebase:git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc","projectionId":"book-projection:git-codebase:book:git-codebase:git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc","moduleMemoryId":"code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|src%2Flocales%2Fde","moduleMemoryIdHash":"f34f29a0d8f74681bef44d4700d380daa2fd09ec94a9ad9b9dae502cf55c7f3a","statusEntryId":"code-memory-entry|f34f29a0d8f74681bef44d4700d380daa2fd09ec94a9ad9b9dae502cf55c7f3a|status|1785827183000|de%20codebook%20status","statusEntryIdHash":"153efc404b7032b673dc52fce5725e871d848f00dbaa3b9f760d1902f6b3d490","moduleProjectionId":"code-module-memory-projection|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|src%2Flocales%2Fde","moduleProjectionPath":"src/locales/de/one/code-module-memory.html","sourceRunId":"git-inventory:git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc:bccb16ce53566924563cd95f70218c5c0c7c6417","headCommit":"bccb16ce53566924563cd95f70218c5c0c7c6417"}</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></li></ol><ol itemprop="children"><li><div><span itemprop="$type$">SourceDirectoryMemoryChild</span><span itemprop="path">src/locales/de/auth</span><span itemprop="name">auth</span><span itemprop="memoryCount">1</span><span itemprop="updatedAt">1785827183000</span></div></li><li><div><span itemprop="$type$">SourceDirectoryMemoryChild</span><span itemprop="path">src/locales/de/ui</span><span itemprop="name">ui</span><span itemprop="memoryCount">1</span><span itemprop="updatedAt">1785827183000</span></div></li></ol></div>
+    </main>
+    <footer class="one-footer">ONE microdata sidecar generated 2026-08-04T07:06:23.000Z. The visible memory content is the embedded canonical microdata.</footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="@refinio/coding.core">
+<title>images</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4efe6;
+    --surface: rgba(255, 252, 246, 0.9);
+    --surface-strong: #fffaf2;
+    --ink: #1f1a14;
+    --muted: #665f57;
+    --line: rgba(56, 41, 25, 0.16);
+    --accent: #9d3c10;
+    --accent-soft: rgba(157, 60, 16, 0.12);
+    --shadow: 0 20px 60px rgba(52, 36, 23, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    background:
+      radial-gradient(circle at top left, rgba(157, 60, 16, 0.16), transparent 28rem),
+      linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+
+  main {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 4rem;
+  }
+
+  .code-module-memory-hero {
+    padding: 2rem;
+    border: 1px solid var(--line);
+    border-radius: 1.5rem;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .code-module-memory-kicker {
+    margin: 0 0 0.75rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .code-module-memory-title {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.3rem);
+    line-height: 1.05;
+  }
+
+  .code-module-memory-summary {
+    margin: 1rem 0 0;
+    font-size: 1.06rem;
+    color: var(--muted);
+    max-width: 52rem;
+  }
+
+  .code-module-memory-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    margin-top: 1.5rem;
+  }
+
+  .code-module-memory-card,
+  .code-module-memory-section {
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background: var(--surface-strong);
+    box-shadow: var(--shadow);
+  }
+
+  .code-module-memory-card {
+    padding: 1rem 1.1rem;
+  }
+
+  .code-module-memory-card-label {
+    display: block;
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .code-module-memory-card-value {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.95rem;
+    word-break: break-word;
+  }
+
+  .code-module-memory-layout {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1.35fr 1fr;
+    margin-top: 1.5rem;
+  }
+
+  .code-module-memory-section {
+    padding: 1.25rem;
+  }
+
+  .code-module-memory-section h2 {
+    margin: 0 0 0.85rem;
+    font-size: 1.1rem;
+  }
+
+  .code-module-memory-collection,
+  .code-module-memory-tags {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+
+  .code-module-memory-item + .code-module-memory-item {
+    margin-top: 0.9rem;
+  }
+
+  .code-module-memory-item header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+  }
+
+  .code-module-memory-item p,
+  .code-module-memory-detail {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+  }
+
+  .code-module-memory-badge {
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.74rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .code-module-memory-meta-line {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .code-module-memory-steps {
+    margin: 0.6rem 0 0;
+    padding-left: 1.1rem;
+    color: var(--muted);
+  }
+
+  .code-module-memory-empty {
+    margin: 0;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .code-module-memory-roundtrip {
+    display: none !important;
+  }
+
+  .code-module-memory-footer {
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  @media (max-width: 840px) {
+    .code-module-memory-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="code-module-memory-hero">
+    <p class="code-module-memory-kicker">Code Module Memory</p>
+    <h1 class="code-module-memory-title">images</h1>
+    <p class="code-module-memory-summary">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF 8&quot; standalone=&quot;no&quot;? Current: Materialized git codebook state for images at bccb16ce5356.</p>
+    <div class="code-module-memory-grid">
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Directory</span>
+        <span class="code-module-memory-card-value">docs/images</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Source</span>
+        <span class="code-module-memory-card-value">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Projected</span>
+        <span class="code-module-memory-card-value">2026-08-04T07:06:23.000Z</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Updated</span>
+        <span class="code-module-memory-card-value">2026-08-04T07:06:23.000Z</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Status And Memory</h2>
+      <ol class="code-module-memory-collection">
+    <li class="code-module-memory-item">
+      <header>
+        <strong>udp architecture.svg</strong>
+        <span class="code-module-memory-badge">learning</span>
+      </header>
+      <p>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF 8&quot; standalone=&quot;no&quot;? &lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; xmlns:xlink=&quot;http://www.w3.org/1999/xlink&quot; width=&quot;800&quot; height=&quot;600&quot; viewBox=&quot;0 0 800 600&quot; &lt;style .box { fill: f0f5ff; stroke: 3474eb; stroke width: 2; rx: 10; ry: 10; } .component { fill: d4e6ff; stroke: 0047b3; stroke width: 1.5; rx: 6; ry: 6; } .js box { fill: fffdf0; stroke: deb887; stroke width: 2; rx: 10; ry: 10; } .js component { fill: fff8e1; stroke: d4a76a; stroke width: 1.5; rx: 6; ry: 6; } .arrow { stroke: 666; stroke width: 1.5; marker end: url( arrowhead); } .label { font family: Arial, sans serif; font size: 14px; fill: 333; text anchor: middle; dominant baseline: middle; } .title { font family: Arial, sans serif; font size: 16px; font weight: bold; fill: 333; text anchor: middle; dominant baseline: middle; } .smalltext { font family: Arial, sans serif; font size: 12px; fill: 444; text anchor: middle; dominant baseline: middle; } &lt;/style
+
+&lt;defs &lt;marker id=&quot;arrowhead&quot; markerWidth=&quot;10&quot; markerHeight=&quot;7&quot; refX=&quot;9&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot; &lt;polygon points=&quot;0 0, 10 3.5, 0 7&quot; fill=&quot; 666&quot; / &lt;/marker &lt;/defs
+
+&lt;! Title &lt;text x=&quot;400&quot; y=&quot;35&quot; class=&quot;title&quot; style=&quot;font size: 24px;&quot; UDP Networking Architecture&lt;/text</p>
+      <p class="code-module-memory-detail">How to apply: Use this explanation to orient changes before widening scope.</p>
+    </li>
+  
+    <li class="code-module-memory-item">
+      <header>
+        <strong>images codebook status</strong>
+        <span class="code-module-memory-badge">status</span>
+      </header>
+      <p>Materialized git codebook state for images at bccb16ce5356.</p>
+      <p class="code-module-memory-detail">How to apply: Start with these refs and status facts before widening scope or rebuilding local understanding.</p>
+    </li>
+  </ol>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Content-First Memories</h2>
+      <ol class="code-module-memory-collection">
+    <li class="code-module-memory-item">
+      <header>
+        <strong>udp architecture.svg</strong>
+        <span class="code-module-memory-badge">explanation</span>
+      </header>
+      <p>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF 8&quot; standalone=&quot;no&quot;? &lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; xmlns:xlink=&quot;http://www.w3.org/1999/xlink&quot; width=&quot;800&quot; height=&quot;600&quot; viewBox=&quot;0 0 800 600&quot; &lt;style .box { fill: f0f5ff; stroke: 3474eb; stroke width: 2; rx: 10; ry: 10; } .component { fill: d4e6ff; stroke: 0047b3; stroke width: 1.5; rx: 6; ry: 6; } .js box { fill: fffdf0; stroke: deb887; stroke width: 2; rx: 10; ry: 10; } .js component { fill: fff8e1; stroke: d4a76a; stroke width: 1.5; rx: 6; ry: 6; } .arrow { stroke: 666; stroke width: 1.5; marker end: url( arrowhead); } .label { font family: Arial, sans serif; font size: 14px; fill: 333; text anchor: middle; dominant baseline: middle; } .title { font family: Arial, sans serif; font size: 16px; font weight: bold; fill: 333; text anchor: middle; dominant baseline: middle; } .smalltext { font family: Arial, sans serif; font size: 12px; fill: 444; text anchor: middle; dominant baseline: middle; } &lt;/style
+
+&lt;defs &lt;marker id=&quot;arrowhead&quot; markerWidth=&quot;10&quot; markerHeight=&quot;7&quot; refX=&quot;9&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot; &lt;polygon points=&quot;0 0, 10 3.5, 0 7&quot; fill=&quot; 666&quot; / &lt;/marker &lt;/defs
+
+&lt;! Title &lt;text x=&quot;400&quot; y=&quot;35&quot; class=&quot;title&quot; style=&quot;font size: 24px;&quot; UDP Networking Architecture&lt;/text</p>
+      <div class="code-module-memory-meta-line">
+        <span>Status: active</span>
+        <span>Recorded: 2026-08-04T07:06:23.000Z</span>
+      </div>
+    </li>
+  </ol>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Module Shape</h2>
+      <p>Key paths: docs/images/udp-architecture.svg.</p>
+      <div class="code-module-memory-meta-line">
+        <span>Roles: none</span>
+        <span>Observed: 2026-08-04T07:06:23.000Z</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Objectives</h2>
+      <p class="code-module-memory-empty">No objectives recorded.</p>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Plans</h2>
+      <p class="code-module-memory-empty">No plans recorded.</p>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Document References</h2>
+      <ul class="code-module-memory-tags"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ul>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Source And Paths</h2>
+      <h3>Source Refs</h3>
+      <ul class="code-module-memory-tags"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ul>
+      <h3>Related Paths</h3>
+      <ul class="code-module-memory-tags"><li>docs/images/udp-architecture.svg</li></ul>
+    </article>
+  </section>
+
+  <p class="code-module-memory-footer">
+    This page is a human-readable view with an embedded exact ONE round-trip payload.
+  </p>
+</main>
+<section class="code-module-memory-roundtrip" hidden aria-hidden="true">
+<!-- CODE_MODULE_MEMORY_ROUNDTRIP_START -->
+<div itemscope itemtype="//refinio.one/CodeModuleMemoryProjectionDocument"><span itemprop="$type$">CodeModuleMemoryProjectionDocument</span><span itemprop="id">code-module-memory-projection|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="moduleMemoryHash" data-hash="9de38cad899ecb32a0dfd96652b5ebddf6bb47ee6631bcf5a6fd62227e68ab11"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: docs/images/udp-architecture.svg.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="memoryHashes"><li><span itemprop="memoryHashes" data-hash="d0c4b17c191dfa5cf3a2a077a48752a07b71a81205a4de84526c52b7307d4cad"><div itemscope itemtype="//refinio.one/CodeMemory"><span itemprop="$type$">CodeMemory</span><span itemprop="id">code-memory-doc:ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b:docs%2Fimages%2Fudp-architecture.svg</span><span itemprop="moduleIdHash" data-hash="9de38cad899ecb32a0dfd96652b5ebddf6bb47ee6631bcf5a6fd62227e68ab11" data-id-hash="ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: docs/images/udp-architecture.svg.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="mode">explanation</span><span itemprop="status">active</span><span itemprop="content">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? &lt;svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="600" viewBox="0 0 800 600" &lt;style .box { fill: f0f5ff; stroke: 3474eb; stroke width: 2; rx: 10; ry: 10; } .component { fill: d4e6ff; stroke: 0047b3; stroke width: 1.5; rx: 6; ry: 6; } .js box { fill: fffdf0; stroke: deb887; stroke width: 2; rx: 10; ry: 10; } .js component { fill: fff8e1; stroke: d4a76a; stroke width: 1.5; rx: 6; ry: 6; } .arrow { stroke: 666; stroke width: 1.5; marker end: url( arrowhead); } .label { font family: Arial, sans serif; font size: 14px; fill: 333; text anchor: middle; dominant baseline: middle; } .title { font family: Arial, sans serif; font size: 16px; font weight: bold; fill: 333; text anchor: middle; dominant baseline: middle; } .smalltext { font family: Arial, sans serif; font size: 12px; fill: 444; text anchor: middle; dominant baseline: middle; } &lt;/style
+
+&lt;defs &lt;marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" &lt;polygon points="0 0, 10 3.5, 0 7" fill=" 666" / &lt;/marker &lt;/defs
+
+&lt;! Title &lt;text x="400" y="35" class="title" style="font size: 24px;" UDP Networking Architecture&lt;/text</span><span itemprop="title">udp architecture.svg</span><span itemprop="subject">udp architecture.svg</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><span itemprop="recordedAt">1785827183000</span><span itemprop="effectiveFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li></ol><span itemprop="currentStatusEntryHash" data-hash="686d0c85bfd8d42e19ff6c6759ec5d29694273ebaa2385a9ebad9ff66783d13f"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry|ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b|status|1785827183000|images%20codebook%20status</span><span itemprop="moduleIdHash" data-hash="9de38cad899ecb32a0dfd96652b5ebddf6bb47ee6631bcf5a6fd62227e68ab11" data-id-hash="ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: docs/images/udp-architecture.svg.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">status</span><span itemprop="title">images codebook status</span><span itemprop="summary">Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="why">Keeps the latest repo-backed module snapshot available as durable coding memory.</span><span itemprop="howToApply">Start with these refs and status facts before widening scope or rebuilding local understanding.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="memoryEntryHashes"><li><span itemprop="memoryEntryHashes" data-hash="686d0c85bfd8d42e19ff6c6759ec5d29694273ebaa2385a9ebad9ff66783d13f"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry|ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b|status|1785827183000|images%20codebook%20status</span><span itemprop="moduleIdHash" data-hash="9de38cad899ecb32a0dfd96652b5ebddf6bb47ee6631bcf5a6fd62227e68ab11" data-id-hash="ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: docs/images/udp-architecture.svg.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">status</span><span itemprop="title">images codebook status</span><span itemprop="summary">Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="why">Keeps the latest repo-backed module snapshot available as durable coding memory.</span><span itemprop="howToApply">Start with these refs and status facts before widening scope or rebuilding local understanding.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li><li><span itemprop="memoryEntryHashes" data-hash="9c8027748bfe5f3c5edd3261e045b33f5dcda98aef4927d50ba66f8869d8a1a2"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry-derived:code-memory-doc%3Aae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b%3Adocs%252Fimages%252Fudp-architecture.svg</span><span itemprop="moduleIdHash" data-hash="9de38cad899ecb32a0dfd96652b5ebddf6bb47ee6631bcf5a6fd62227e68ab11" data-id-hash="ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: docs/images/udp-architecture.svg.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">learning</span><span itemprop="title">udp architecture.svg</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? &lt;svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="600" viewBox="0 0 800 600" &lt;style .box { fill: f0f5ff; stroke: 3474eb; stroke width: 2; rx: 10; ry: 10; } .component { fill: d4e6ff; stroke: 0047b3; stroke width: 1.5; rx: 6; ry: 6; } .js box { fill: fffdf0; stroke: deb887; stroke width: 2; rx: 10; ry: 10; } .js component { fill: fff8e1; stroke: d4a76a; stroke width: 1.5; rx: 6; ry: 6; } .arrow { stroke: 666; stroke width: 1.5; marker end: url( arrowhead); } .label { font family: Arial, sans serif; font size: 14px; fill: 333; text anchor: middle; dominant baseline: middle; } .title { font family: Arial, sans serif; font size: 16px; font weight: bold; fill: 333; text anchor: middle; dominant baseline: middle; } .smalltext { font family: Arial, sans serif; font size: 12px; fill: 444; text anchor: middle; dominant baseline: middle; } &lt;/style
+
+&lt;defs &lt;marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" &lt;polygon points="0 0, 10 3.5, 0 7" fill=" 666" / &lt;/marker &lt;/defs
+
+&lt;! Title &lt;text x="400" y="35" class="title" style="font size: 24px;" UDP Networking Architecture&lt;/text</span><span itemprop="why">Derived from an explanatory memory so current module orientation stays available.</span><span itemprop="howToApply">Use this explanation to orient changes before widening scope.</span><span itemprop="derivedFromMemoryIdHash" data-hash="d0c4b17c191dfa5cf3a2a077a48752a07b71a81205a4de84526c52b7307d4cad" data-id-hash="30cde2f076f00fb3145c2c8d9099ba378794cbc92021eac9f30648d085432b43"><div itemscope itemtype="//refinio.one/CodeMemory"><span itemprop="$type$">CodeMemory</span><span itemprop="id">code-memory-doc:ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b:docs%2Fimages%2Fudp-architecture.svg</span><span itemprop="moduleIdHash" data-hash="9de38cad899ecb32a0dfd96652b5ebddf6bb47ee6631bcf5a6fd62227e68ab11" data-id-hash="ae101a69581c6272907f7b32f1aa53c557e976707e48af9cc0d7f8dc374c575b"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|docs%2Fimages</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">docs/images</span><span itemprop="title">images</span><span itemprop="summary">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? Current: Materialized git codebook state for images at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><span itemprop="boundarySummary">Key paths: docs/images/udp-architecture.svg.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="mode">explanation</span><span itemprop="status">active</span><span itemprop="content">&lt;?xml version="1.0" encoding="UTF 8" standalone="no"? &lt;svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="600" viewBox="0 0 800 600" &lt;style .box { fill: f0f5ff; stroke: 3474eb; stroke width: 2; rx: 10; ry: 10; } .component { fill: d4e6ff; stroke: 0047b3; stroke width: 1.5; rx: 6; ry: 6; } .js box { fill: fffdf0; stroke: deb887; stroke width: 2; rx: 10; ry: 10; } .js component { fill: fff8e1; stroke: d4a76a; stroke width: 1.5; rx: 6; ry: 6; } .arrow { stroke: 666; stroke width: 1.5; marker end: url( arrowhead); } .label { font family: Arial, sans serif; font size: 14px; fill: 333; text anchor: middle; dominant baseline: middle; } .title { font family: Arial, sans serif; font size: 16px; font weight: bold; fill: 333; text anchor: middle; dominant baseline: middle; } .smalltext { font family: Arial, sans serif; font size: 12px; fill: 444; text anchor: middle; dominant baseline: middle; } &lt;/style
+
+&lt;defs &lt;marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" &lt;polygon points="0 0, 10 3.5, 0 7" fill=" 666" / &lt;/marker &lt;/defs
+
+&lt;! Title &lt;text x="400" y="35" class="title" style="font size: 24px;" UDP Networking Architecture&lt;/text</span><span itemprop="title">udp architecture.svg</span><span itemprop="subject">udp architecture.svg</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><span itemprop="recordedAt">1785827183000</span><span itemprop="effectiveFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3Adocs%252Fimages%252Fudp-architecture.svg</li></ol><ol itemprop="relatedPaths"><li>docs/images/udp-architecture.svg</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li></ol><span itemprop="projectedAt">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div>
+<!-- CODE_MODULE_MEMORY_ROUNDTRIP_END -->
+</section>
+</body>
+</html>

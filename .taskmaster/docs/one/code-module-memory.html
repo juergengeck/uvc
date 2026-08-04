@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="@refinio/coding.core">
+<title>docs</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4efe6;
+    --surface: rgba(255, 252, 246, 0.9);
+    --surface-strong: #fffaf2;
+    --ink: #1f1a14;
+    --muted: #665f57;
+    --line: rgba(56, 41, 25, 0.16);
+    --accent: #9d3c10;
+    --accent-soft: rgba(157, 60, 16, 0.12);
+    --shadow: 0 20px 60px rgba(52, 36, 23, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    background:
+      radial-gradient(circle at top left, rgba(157, 60, 16, 0.16), transparent 28rem),
+      linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+
+  main {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 4rem;
+  }
+
+  .code-module-memory-hero {
+    padding: 2rem;
+    border: 1px solid var(--line);
+    border-radius: 1.5rem;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .code-module-memory-kicker {
+    margin: 0 0 0.75rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .code-module-memory-title {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.3rem);
+    line-height: 1.05;
+  }
+
+  .code-module-memory-summary {
+    margin: 1rem 0 0;
+    font-size: 1.06rem;
+    color: var(--muted);
+    max-width: 52rem;
+  }
+
+  .code-module-memory-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    margin-top: 1.5rem;
+  }
+
+  .code-module-memory-card,
+  .code-module-memory-section {
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background: var(--surface-strong);
+    box-shadow: var(--shadow);
+  }
+
+  .code-module-memory-card {
+    padding: 1rem 1.1rem;
+  }
+
+  .code-module-memory-card-label {
+    display: block;
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .code-module-memory-card-value {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.95rem;
+    word-break: break-word;
+  }
+
+  .code-module-memory-layout {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1.35fr 1fr;
+    margin-top: 1.5rem;
+  }
+
+  .code-module-memory-section {
+    padding: 1.25rem;
+  }
+
+  .code-module-memory-section h2 {
+    margin: 0 0 0.85rem;
+    font-size: 1.1rem;
+  }
+
+  .code-module-memory-collection,
+  .code-module-memory-tags {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+
+  .code-module-memory-item + .code-module-memory-item {
+    margin-top: 0.9rem;
+  }
+
+  .code-module-memory-item header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+  }
+
+  .code-module-memory-item p,
+  .code-module-memory-detail {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+  }
+
+  .code-module-memory-badge {
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.74rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .code-module-memory-meta-line {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .code-module-memory-steps {
+    margin: 0.6rem 0 0;
+    padding-left: 1.1rem;
+    color: var(--muted);
+  }
+
+  .code-module-memory-empty {
+    margin: 0;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .code-module-memory-roundtrip {
+    display: none !important;
+  }
+
+  .code-module-memory-footer {
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  @media (max-width: 840px) {
+    .code-module-memory-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="code-module-memory-hero">
+    <p class="code-module-memory-kicker">Code Module Memory</p>
+    <h1 class="code-module-memory-title">docs</h1>
+    <p class="code-module-memory-summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</p>
+    <div class="code-module-memory-grid">
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Directory</span>
+        <span class="code-module-memory-card-value">.taskmaster/docs</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Source</span>
+        <span class="code-module-memory-card-value">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Projected</span>
+        <span class="code-module-memory-card-value">2026-08-04T07:06:23.000Z</span>
+      </article>
+      <article class="code-module-memory-card">
+        <span class="code-module-memory-card-label">Updated</span>
+        <span class="code-module-memory-card-value">2026-08-04T07:06:23.000Z</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Status And Memory</h2>
+      <ol class="code-module-memory-collection">
+    <li class="code-module-memory-item">
+      <header>
+        <strong>PRD: Connection Protocol V2 Expo Compatibility</strong>
+        <span class="code-module-memory-badge">learning</span>
+      </header>
+      <p>This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. The primary goal is to achieve a stable, reliable pairing and communication flow, replacing any legacy code that relies on browser specific or non standard features like SharedArrayBuffer with modern, compatible alternatives.
+
+Fail Fast: Errors should be explicit and immediate. Expo/Hermes First: All code must be compatible with the target environment without patches or workarounds. Protocol Parity: The final implementation must be compatible with the existing one.leute and one.core CHUM protocol. Structured Tasks: The entire process will be managed via Task Master to ensure clarity and trackability.
+
+The connection protocol will be broken down into the following distinct, verifiable phases. Each phase will correspond to a top level task.</p>
+      <p class="code-module-memory-detail">How to apply: Use this explanation to orient changes before widening scope.</p>
+    </li>
+  
+    <li class="code-module-memory-item">
+      <header>
+        <strong>LAMA.ONE Local Federated AI Chat Platform</strong>
+        <span class="code-module-memory-badge">learning</span>
+      </header>
+      <p>&lt;context Overview LAMA.ONE is a revolutionary local federated chat platform where AI models serve as first class citizens alongside human users. Built on the proven one.core/one.models architecture, it enables private, decentralized conversations with local AI agents while maintaining complete data sovereignty and offline first operation.
+
+The platform leverages local LLM inference, peer to peer networking, and cryptographic identity management to create a new paradigm where AI agents can participate naturally in conversations, form relationships, and contribute meaningfully to group discussions all without relying on centralized servers or cloud services.
+
+&lt;PRD Technical Architecture System Components Core Infrastructure (one.core/one.models) ObjectRecipes : Type system for all data structures (Person, Profile, Someone, Topic, Message) ChannelManager : Real time communication channels with CRDT synchronization LeuteModel : Identity and contact management for humans and AIs ConnectionsModel : Federated peer to peer connection management TopicModel : Chat rooms supporting mixed human/AI participation</p>
+      <p class="code-module-memory-detail">How to apply: Use this explanation to orient changes before widening scope.</p>
+    </li>
+  
+    <li class="code-module-memory-item">
+      <header>
+        <strong>docs codebook status</strong>
+        <span class="code-module-memory-badge">status</span>
+      </header>
+      <p>Materialized git codebook state for docs at bccb16ce5356.</p>
+      <p class="code-module-memory-detail">How to apply: Start with these refs and status facts before widening scope or rebuilding local understanding.</p>
+    </li>
+  </ol>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Content-First Memories</h2>
+      <ol class="code-module-memory-collection">
+    <li class="code-module-memory-item">
+      <header>
+        <strong>PRD: Connection Protocol V2 Expo Compatibility</strong>
+        <span class="code-module-memory-badge">explanation</span>
+      </header>
+      <p>This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. The primary goal is to achieve a stable, reliable pairing and communication flow, replacing any legacy code that relies on browser specific or non standard features like SharedArrayBuffer with modern, compatible alternatives.
+
+Fail Fast: Errors should be explicit and immediate. Expo/Hermes First: All code must be compatible with the target environment without patches or workarounds. Protocol Parity: The final implementation must be compatible with the existing one.leute and one.core CHUM protocol. Structured Tasks: The entire process will be managed via Task Master to ensure clarity and trackability.
+
+The connection protocol will be broken down into the following distinct, verifiable phases. Each phase will correspond to a top level task.</p>
+      <div class="code-module-memory-meta-line">
+        <span>Status: active</span>
+        <span>Recorded: 2026-08-04T07:06:23.000Z</span>
+      </div>
+    </li>
+  
+    <li class="code-module-memory-item">
+      <header>
+        <strong>LAMA.ONE Local Federated AI Chat Platform</strong>
+        <span class="code-module-memory-badge">explanation</span>
+      </header>
+      <p>&lt;context Overview LAMA.ONE is a revolutionary local federated chat platform where AI models serve as first class citizens alongside human users. Built on the proven one.core/one.models architecture, it enables private, decentralized conversations with local AI agents while maintaining complete data sovereignty and offline first operation.
+
+The platform leverages local LLM inference, peer to peer networking, and cryptographic identity management to create a new paradigm where AI agents can participate naturally in conversations, form relationships, and contribute meaningfully to group discussions all without relying on centralized servers or cloud services.
+
+&lt;PRD Technical Architecture System Components Core Infrastructure (one.core/one.models) ObjectRecipes : Type system for all data structures (Person, Profile, Someone, Topic, Message) ChannelManager : Real time communication channels with CRDT synchronization LeuteModel : Identity and contact management for humans and AIs ConnectionsModel : Federated peer to peer connection management TopicModel : Chat rooms supporting mixed human/AI participation</p>
+      <div class="code-module-memory-meta-line">
+        <span>Status: active</span>
+        <span>Recorded: 2026-08-04T07:06:23.000Z</span>
+      </div>
+    </li>
+  </ol>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Module Shape</h2>
+      <p>Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</p>
+      <div class="code-module-memory-meta-line">
+        <span>Roles: docs</span>
+        <span>Observed: 2026-08-04T07:06:23.000Z</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Objectives</h2>
+      <p class="code-module-memory-empty">No objectives recorded.</p>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Plans</h2>
+      <p class="code-module-memory-empty">No plans recorded.</p>
+    </article>
+  </section>
+
+  <section class="code-module-memory-layout">
+    <article class="code-module-memory-section">
+      <h2>Document References</h2>
+      <ul class="code-module-memory-tags"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ul>
+    </article>
+    <article class="code-module-memory-section">
+      <h2>Source And Paths</h2>
+      <h3>Source Refs</h3>
+      <ul class="code-module-memory-tags"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ul>
+      <h3>Related Paths</h3>
+      <ul class="code-module-memory-tags"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ul>
+    </article>
+  </section>
+
+  <p class="code-module-memory-footer">
+    This page is a human-readable view with an embedded exact ONE round-trip payload.
+  </p>
+</main>
+<section class="code-module-memory-roundtrip" hidden aria-hidden="true">
+<!-- CODE_MODULE_MEMORY_ROUNDTRIP_START -->
+<div itemscope itemtype="//refinio.one/CodeModuleMemoryProjectionDocument"><span itemprop="$type$">CodeModuleMemoryProjectionDocument</span><span itemprop="id">code-module-memory-projection|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="moduleMemoryHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="memoryHashes"><li><span itemprop="memoryHashes" data-hash="9a6bdcab5593bccddd8a2e46ffc8f64b2c5de7edfd496ed0ea2be069919e7f43"><div itemscope itemtype="//refinio.one/CodeMemory"><span itemprop="$type$">CodeMemory</span><span itemprop="id">code-memory-doc:2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811:.taskmaster%2Fdocs%2Fconnection-protocol-prd.txt</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="mode">explanation</span><span itemprop="status">active</span><span itemprop="content">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. The primary goal is to achieve a stable, reliable pairing and communication flow, replacing any legacy code that relies on browser specific or non standard features like SharedArrayBuffer with modern, compatible alternatives.
+
+Fail Fast: Errors should be explicit and immediate. Expo/Hermes First: All code must be compatible with the target environment without patches or workarounds. Protocol Parity: The final implementation must be compatible with the existing one.leute and one.core CHUM protocol. Structured Tasks: The entire process will be managed via Task Master to ensure clarity and trackability.
+
+The connection protocol will be broken down into the following distinct, verifiable phases. Each phase will correspond to a top level task.</span><span itemprop="title">PRD: Connection Protocol V2 Expo Compatibility</span><span itemprop="subject">PRD: Connection Protocol V2 Expo Compatibility</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li></ol><span itemprop="recordedAt">1785827183000</span><span itemprop="effectiveFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li><li><span itemprop="memoryHashes" data-hash="683b066e6eea9780ac6f113eb03b7450a96aa4b9ee67c9e64f4b2b6eae4313f3"><div itemscope itemtype="//refinio.one/CodeMemory"><span itemprop="$type$">CodeMemory</span><span itemprop="id">code-memory-doc:2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811:.taskmaster%2Fdocs%2Fprd.txt</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="mode">explanation</span><span itemprop="status">active</span><span itemprop="content">&lt;context Overview LAMA.ONE is a revolutionary local federated chat platform where AI models serve as first class citizens alongside human users. Built on the proven one.core/one.models architecture, it enables private, decentralized conversations with local AI agents while maintaining complete data sovereignty and offline first operation.
+
+The platform leverages local LLM inference, peer to peer networking, and cryptographic identity management to create a new paradigm where AI agents can participate naturally in conversations, form relationships, and contribute meaningfully to group discussions all without relying on centralized servers or cloud services.
+
+&lt;PRD Technical Architecture System Components Core Infrastructure (one.core/one.models) ObjectRecipes : Type system for all data structures (Person, Profile, Someone, Topic, Message) ChannelManager : Real time communication channels with CRDT synchronization LeuteModel : Identity and contact management for humans and AIs ConnectionsModel : Federated peer to peer connection management TopicModel : Chat rooms supporting mixed human/AI participation</span><span itemprop="title">LAMA.ONE Local Federated AI Chat Platform</span><span itemprop="subject">LAMA.ONE Local Federated AI Chat Platform</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/prd.txt</li></ol><span itemprop="recordedAt">1785827183000</span><span itemprop="effectiveFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li></ol><span itemprop="currentStatusEntryHash" data-hash="3a97c37d2684b78548297868f2ef571b5889db0c2d41b36f22eb42d9b1f5e338"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry|2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811|status|1785827183000|docs%20codebook%20status</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">status</span><span itemprop="title">docs codebook status</span><span itemprop="summary">Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="why">Keeps the latest repo-backed module snapshot available as durable coding memory.</span><span itemprop="howToApply">Start with these refs and status facts before widening scope or rebuilding local understanding.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="memoryEntryHashes"><li><span itemprop="memoryEntryHashes" data-hash="3a97c37d2684b78548297868f2ef571b5889db0c2d41b36f22eb42d9b1f5e338"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry|2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811|status|1785827183000|docs%20codebook%20status</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">status</span><span itemprop="title">docs codebook status</span><span itemprop="summary">Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="why">Keeps the latest repo-backed module snapshot available as durable coding memory.</span><span itemprop="howToApply">Start with these refs and status facts before widening scope or rebuilding local understanding.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li><li><span itemprop="memoryEntryHashes" data-hash="97d47d18c98a0cb2045b5d59ae63d6e809e489f3d9e19c87ac44904b7d82dc60"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry-derived:code-memory-doc%3A2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">learning</span><span itemprop="title">PRD: Connection Protocol V2 Expo Compatibility</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. The primary goal is to achieve a stable, reliable pairing and communication flow, replacing any legacy code that relies on browser specific or non standard features like SharedArrayBuffer with modern, compatible alternatives.
+
+Fail Fast: Errors should be explicit and immediate. Expo/Hermes First: All code must be compatible with the target environment without patches or workarounds. Protocol Parity: The final implementation must be compatible with the existing one.leute and one.core CHUM protocol. Structured Tasks: The entire process will be managed via Task Master to ensure clarity and trackability.
+
+The connection protocol will be broken down into the following distinct, verifiable phases. Each phase will correspond to a top level task.</span><span itemprop="why">Derived from an explanatory memory so current module orientation stays available.</span><span itemprop="howToApply">Use this explanation to orient changes before widening scope.</span><span itemprop="derivedFromMemoryIdHash" data-hash="9a6bdcab5593bccddd8a2e46ffc8f64b2c5de7edfd496ed0ea2be069919e7f43" data-id-hash="448761e6cf159573b1f737df5997d0ab2023228f14287c8ce2c0eb2a24e06977"><div itemscope itemtype="//refinio.one/CodeMemory"><span itemprop="$type$">CodeMemory</span><span itemprop="id">code-memory-doc:2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811:.taskmaster%2Fdocs%2Fconnection-protocol-prd.txt</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="mode">explanation</span><span itemprop="status">active</span><span itemprop="content">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. The primary goal is to achieve a stable, reliable pairing and communication flow, replacing any legacy code that relies on browser specific or non standard features like SharedArrayBuffer with modern, compatible alternatives.
+
+Fail Fast: Errors should be explicit and immediate. Expo/Hermes First: All code must be compatible with the target environment without patches or workarounds. Protocol Parity: The final implementation must be compatible with the existing one.leute and one.core CHUM protocol. Structured Tasks: The entire process will be managed via Task Master to ensure clarity and trackability.
+
+The connection protocol will be broken down into the following distinct, verifiable phases. Each phase will correspond to a top level task.</span><span itemprop="title">PRD: Connection Protocol V2 Expo Compatibility</span><span itemprop="subject">PRD: Connection Protocol V2 Expo Compatibility</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li></ol><span itemprop="recordedAt">1785827183000</span><span itemprop="effectiveFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li><li><span itemprop="memoryEntryHashes" data-hash="4f614472b900a8aecb8cfd85507f1b5b3cc7fb7b0a9918fab5c2b16b5913113c"><div itemscope itemtype="//refinio.one/CodeMemoryEntry"><span itemprop="$type$">CodeMemoryEntry</span><span itemprop="id">code-memory-entry-derived:code-memory-doc%3A2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811%3A.taskmaster%252Fdocs%252Fprd.txt</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="kind">learning</span><span itemprop="title">LAMA.ONE Local Federated AI Chat Platform</span><span itemprop="summary">&lt;context Overview LAMA.ONE is a revolutionary local federated chat platform where AI models serve as first class citizens alongside human users. Built on the proven one.core/one.models architecture, it enables private, decentralized conversations with local AI agents while maintaining complete data sovereignty and offline first operation.
+
+The platform leverages local LLM inference, peer to peer networking, and cryptographic identity management to create a new paradigm where AI agents can participate naturally in conversations, form relationships, and contribute meaningfully to group discussions all without relying on centralized servers or cloud services.
+
+&lt;PRD Technical Architecture System Components Core Infrastructure (one.core/one.models) ObjectRecipes : Type system for all data structures (Person, Profile, Someone, Topic, Message) ChannelManager : Real time communication channels with CRDT synchronization LeuteModel : Identity and contact management for humans and AIs ConnectionsModel : Federated peer to peer connection management TopicModel : Chat rooms supporting mixed human/AI participation</span><span itemprop="why">Derived from an explanatory memory so current module orientation stays available.</span><span itemprop="howToApply">Use this explanation to orient changes before widening scope.</span><span itemprop="derivedFromMemoryIdHash" data-hash="683b066e6eea9780ac6f113eb03b7450a96aa4b9ee67c9e64f4b2b6eae4313f3" data-id-hash="062ad82358087633eb2f539fd164b07a68c6c9feb61273a98f58b0c48c019682"><div itemscope itemtype="//refinio.one/CodeMemory"><span itemprop="$type$">CodeMemory</span><span itemprop="id">code-memory-doc:2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811:.taskmaster%2Fdocs%2Fprd.txt</span><span itemprop="moduleIdHash" data-hash="12145ce70c773fbe217d133242ec4edcd635a4253e7103c7abbb31163b53a707" data-id-hash="2de0427d7f5e2377be8ee43038412942b344e23fdb8475edcc9a051119212811"><div itemscope itemtype="//refinio.one/CodeModuleMemory"><span itemprop="$type$">CodeModuleMemory</span><span itemprop="id">code-module-memory|git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc|.taskmaster%2Fdocs</span><span itemprop="sourceId">git:repoRoot=%2FUsers%2Fgecko%2Fsrc%2Fuvc&amp;remoteUrl=https%3A%2F%2Fgithub.com%2Fjuergengeck%2Fuvc</span><span itemprop="directoryPath">.taskmaster/docs</span><span itemprop="title">docs</span><span itemprop="summary">This document outlines the requirements for reimplementing and validating the Lama connection protocol to ensure it is fully compatible with the Expo and React Native (Hermes) environment. Current: Materialized git codebook state for docs at bccb16ce5356.</span><span itemprop="observedAt">1785827183000</span><span itemprop="repoRoot">/Users/gecko/src/uvc</span><ol itemprop="roles"><li>docs</li></ol><span itemprop="boundarySummary">Roles: docs. Key paths: .taskmaster/docs/connection-protocol-prd.txt, .taskmaster/docs/prd.txt.</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/connection-protocol-prd.txt</li><li>.taskmaster/docs/prd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fconnection-protocol-prd.txt</li><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><span itemprop="mode">explanation</span><span itemprop="status">active</span><span itemprop="content">&lt;context Overview LAMA.ONE is a revolutionary local federated chat platform where AI models serve as first class citizens alongside human users. Built on the proven one.core/one.models architecture, it enables private, decentralized conversations with local AI agents while maintaining complete data sovereignty and offline first operation.
+
+The platform leverages local LLM inference, peer to peer networking, and cryptographic identity management to create a new paradigm where AI agents can participate naturally in conversations, form relationships, and contribute meaningfully to group discussions all without relying on centralized servers or cloud services.
+
+&lt;PRD Technical Architecture System Components Core Infrastructure (one.core/one.models) ObjectRecipes : Type system for all data structures (Person, Profile, Someone, Topic, Message) ChannelManager : Real time communication channels with CRDT synchronization LeuteModel : Identity and contact management for humans and AIs ConnectionsModel : Federated peer to peer connection management TopicModel : Chat rooms supporting mixed human/AI participation</span><span itemprop="title">LAMA.ONE Local Federated AI Chat Platform</span><span itemprop="subject">LAMA.ONE Local Federated AI Chat Platform</span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/prd.txt</li></ol><span itemprop="recordedAt">1785827183000</span><span itemprop="effectiveFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span><ol itemprop="sourceRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="documentRefs"><li>source://git%3ArepoRoot%3D%252FUsers%252Fgecko%252Fsrc%252Fuvc%26remoteUrl%3Dhttps%253A%252F%252Fgithub.com%252Fjuergengeck%252Fuvc/entry/git-entry%3Agit%253ArepoRoot%253D%25252FUsers%25252Fgecko%25252Fsrc%25252Fuvc%2526remoteUrl%253Dhttps%25253A%25252F%25252Fgithub.com%25252Fjuergengeck%25252Fuvc%3Abccb16ce53566924563cd95f70218c5c0c7c6417%3A.taskmaster%252Fdocs%252Fprd.txt</li></ol><ol itemprop="relatedPaths"><li>.taskmaster/docs/prd.txt</li></ol><span itemprop="observedAt">1785827183000</span><span itemprop="validFrom">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div></span></li></ol><span itemprop="projectedAt">1785827183000</span><span itemprop="createdAt">1785827183000</span><span itemprop="updatedAt">1785827183000</span></div>
+<!-- CODE_MODULE_MEMORY_ROUNDTRIP_END -->
+</section>
+</body>
+</html>
