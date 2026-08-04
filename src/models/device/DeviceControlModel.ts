@@ -421,9 +421,9 @@ export class DeviceControlModel {
     scheduledAt: number;
     notes?: string;
   }): Promise<UvcDisinfectionRun> {
-    const run = await this.facility.scheduleDisinfection(input);
-    await this.onFacilityUpdated.emitAll(run.updatedAt);
-    return run;
+    const stored = await this.facility.scheduleDisinfection(input);
+    await this.onFacilityUpdated.emitAll(stored.run.updatedAt);
+    return stored.run;
   }
 
   async startDisinfection(input: {
@@ -432,9 +432,9 @@ export class DeviceControlModel {
     notes?: string;
     startObservations: Iterable<SHA256Hash<UvcControlObservation>>;
   }): Promise<UvcDisinfectionRun> {
-    const run = await this.facility.startDisinfection(input);
-    await this.onFacilityUpdated.emitAll(run.updatedAt);
-    return run;
+    const stored = await this.facility.startDisinfection(input);
+    await this.onFacilityUpdated.emitAll(stored.run.updatedAt);
+    return stored.run;
   }
 
   async completeDisinfection(input: {
@@ -444,9 +444,9 @@ export class DeviceControlModel {
     notes?: string;
     stopObservations: Iterable<SHA256Hash<UvcControlObservation>>;
   }): Promise<UvcDisinfectionRun> {
-    const run = await this.facility.completeDisinfection(input);
-    await this.onFacilityUpdated.emitAll(run.updatedAt);
-    return run;
+    const stored = await this.facility.completeDisinfection(input);
+    await this.onFacilityUpdated.emitAll(stored.run.updatedAt);
+    return stored.run;
   }
 
   async failDisinfection(input: {
@@ -455,9 +455,9 @@ export class DeviceControlModel {
     notes: string;
     stopObservations?: Iterable<SHA256Hash<UvcControlObservation>>;
   }): Promise<UvcDisinfectionRun> {
-    const run = await this.facility.failDisinfection(input);
-    await this.onFacilityUpdated.emitAll(run.updatedAt);
-    return run;
+    const stored = await this.facility.failDisinfection(input);
+    await this.onFacilityUpdated.emitAll(stored.run.updatedAt);
+    return stored.run;
   }
 
   async getDisinfectionRuns(input: {

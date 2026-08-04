@@ -1,7 +1,6 @@
 {
-  "title": "Disinfection calendar",
-  "description": "Room treatments by date and resource",
-  "demoDescription": "Demonstration records are shown until device journal data is available.",
+  "title": "UVC cycle calendar",
+  "description": "UVC cycles by date and resource",
   "recordCount_one": "{{count}} record",
   "recordCount_other": "{{count}} records",
   "noEntries": "No treatments recorded for this date"

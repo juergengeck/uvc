@@ -23,7 +23,6 @@ export default function CalendarScreen() {
   const router = useRouter();
 
   const [records, setRecords] = useState<UvcJournalRecord[]>([]);
-  const [showingDemo, setShowingDemo] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(Date.now()));
 
   const loadJournalData = useCallback(async () => {
@@ -32,13 +31,10 @@ export default function CalendarScreen() {
       const disinfectionRuns = await instance.deviceControlModel?.getDisinfectionRunRecords();
       if (disinfectionRuns?.length) {
         setRecords(uvcDisinfectionRunRecords(disinfectionRuns));
-        setShowingDemo(false);
         return;
       }
       const latestEvents = await instance.journalModel.retrieveLatestDayEvents();
-      const next = uvcJournalRecords(latestEvents);
-      setRecords(next.records);
-      setShowingDemo(next.showingDemo);
+      setRecords(uvcJournalRecords(latestEvents));
     } catch (error) {
       console.error('[CalendarScreen] Error loading journal data:', error);
     }
@@ -91,7 +87,7 @@ export default function CalendarScreen() {
       <View style={[styles.customHeader, { backgroundColor: theme.colors.background }]}>
         <View style={styles.titleBlock}>
           <Text style={[styles.customTitle, { color: theme.colors.onBackground }]}>
-            {t('title', { defaultValue: 'Disinfection calendar' })}
+            {t('title', { defaultValue: 'UVC cycle calendar' })}
           </Text>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             {t('description')}
@@ -132,15 +128,6 @@ export default function CalendarScreen() {
           onDayPress={onDayPress}
           enableSwipeMonths
         />
-
-        {showingDemo ? (
-          <View style={[styles.demoNotice, { backgroundColor: theme.colors.secondaryContainer }]}>
-            <MaterialCommunityIcons name="shield-check-outline" size={19} color={theme.colors.onSecondaryContainer} />
-            <Text variant="bodySmall" style={{ color: theme.colors.onSecondaryContainer, flex: 1 }}>
-              {t('demoDescription')}
-            </Text>
-          </View>
-        ) : null}
 
         <View style={styles.entriesContainer}>
           <View style={styles.dayHeading}>
@@ -243,15 +230,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginRight: -8,
     marginTop: 6,
-  },
-  demoNotice: {
-    alignItems: 'center',
-    borderRadius: 9,
-    flexDirection: 'row',
-    gap: 9,
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 11,
   },
   entriesContainer: {
     flex: 1,

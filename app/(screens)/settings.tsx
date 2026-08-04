@@ -183,15 +183,6 @@ export default function SettingsScreen() {
             left={props => <List.Icon {...props} icon="devices" />}
             right={props => <List.Icon {...props} icon="chevron-right" />}
           />
-          <List.Item
-            title={t('settings.resources.feeds.title', { defaultValue: 'Camera feeds' })}
-            description={t('settings.resources.feeds.description', {
-              defaultValue: 'Inspect camera-equipped room resources',
-            })}
-            onPress={() => router.push('/(screens)/devices/camera-feeds')}
-            left={props => <List.Icon {...props} icon="cctv" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
-          />
         </View>
 
         {/* Appearance Settings */}

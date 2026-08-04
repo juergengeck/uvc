@@ -109,6 +109,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="messages" 
           options={{
+            href: null,
             tabBarLabel: 'Messages',
             tabBarIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="message" size={size} color={color} />
@@ -138,7 +139,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="journal" 
           options={{
-            title: t('navigation:journal.title', { defaultValue: 'Disinfection journal' }),
+            title: t('navigation:journal.title', { defaultValue: 'UVC cycle journal' }),
             tabBarLabel: 'Journal',
             tabBarIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="calendar-month" size={size} color={color} />

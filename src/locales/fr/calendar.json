@@ -1,7 +1,6 @@
 {
-  "title": "Calendrier de désinfection",
-  "description": "Traitements des salles par date et ressource",
-  "demoDescription": "Des enregistrements de démonstration sont affichés jusqu'à ce que les données des appareils soient disponibles.",
+  "title": "Calendrier des cycles UVC",
+  "description": "Cycles UVC par date et ressource",
   "recordCount_one": "{{count}} enregistrement",
   "recordCount_other": "{{count}} enregistrements",
   "noEntries": "Aucun traitement enregistré pour cette date"

@@ -40,7 +40,6 @@ export default function JournalScreen() {
   const router = useRouter();
 
   const [records, setRecords] = useState<UvcJournalRecord[]>([]);
-  const [showingDemo, setShowingDemo] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [modelState, setModelState] = useState<'initializing' | 'ready' | 'error'>('initializing');
   const [isLoadingEntries, setIsLoadingEntries] = useState(false);
@@ -75,13 +74,10 @@ export default function JournalScreen() {
       setActiveRun(disinfectionRuns?.find(record => record.run.status === 'running')?.run ?? null);
       if (disinfectionRuns?.length) {
         setRecords(uvcDisinfectionRunRecords(disinfectionRuns));
-        setShowingDemo(false);
         return;
       }
       const latestEvents = await instance.journalModel.retrieveLatestDayEvents();
-      const next = uvcJournalRecords(latestEvents);
-      setRecords(next.records);
-      setShowingDemo(next.showingDemo);
+      setRecords(uvcJournalRecords(latestEvents));
     } catch (caughtError) {
       handleError(caughtError);
     } finally {
@@ -222,7 +218,7 @@ export default function JournalScreen() {
   if (!isAuthenticated || !instance || modelState === 'initializing') {
     return (
       <View style={[styles.centerContent, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: tNav('tabs.journal', { defaultValue: 'Disinfection journal' }) }} />
+        <Stack.Screen options={{ title: tNav('tabs.journal', { defaultValue: 'UVC cycle journal' }) }} />
         <LoadingSpinner
           message={tJournal('loading', { defaultValue: 'Loading journal' })}
           subtitle={tJournal('loadingSubtitle')}
@@ -238,7 +234,7 @@ export default function JournalScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen options={{ title: tNav('tabs.journal', { defaultValue: 'Disinfection journal' }) }} />
+      <Stack.Screen options={{ title: tNav('tabs.journal', { defaultValue: 'UVC cycle journal' }) }} />
 
       <View style={styles.intro}>
         <Text variant="headlineSmall">{tJournal('headline')}</Text>
@@ -312,16 +308,6 @@ export default function JournalScreen() {
         </View>
       ) : null}
 
-      {showingDemo ? (
-        <View style={[styles.demoNotice, { backgroundColor: theme.colors.secondaryContainer }]}>
-          <MaterialCommunityIcons name="shield-check-outline" size={20} color={theme.colors.onSecondaryContainer} />
-          <Text variant="bodySmall" style={{ color: theme.colors.onSecondaryContainer, flex: 1 }}>
-            <Text style={{ fontWeight: '700' }}>{tJournal('demoTitle')}</Text>
-            {' — '}{tJournal('demoDescription')}
-          </Text>
-        </View>
-      ) : null}
-
       {isLoadingEntries ? (
         <View style={styles.centerContent}>
           <LoadingSpinner message={tJournal('refreshing')} size="large" />
@@ -336,7 +322,7 @@ export default function JournalScreen() {
       ) : (
         <View style={styles.centerContent}>
           <MaterialCommunityIcons name="calendar-check-outline" size={42} color={theme.colors.onSurfaceVariant} />
-          <Text>{tJournal('noEntries', { defaultValue: 'No disinfection records yet' })}</Text>
+          <Text>{tJournal('noEntries', { defaultValue: 'No UVC cycle records yet' })}</Text>
         </View>
       )}
     </View>
@@ -372,15 +358,6 @@ const styles = StyleSheet.create({
   activeNoticeText: {
     flex: 1,
     gap: 2,
-  },
-  demoNotice: {
-    alignItems: 'center',
-    borderRadius: 10,
-    flexDirection: 'row',
-    gap: 10,
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 12,
   },
   list: {
     padding: 16,

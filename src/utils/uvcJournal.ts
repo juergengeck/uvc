@@ -11,7 +11,6 @@ export interface UvcJournalRecord {
   durationMinutes?: number;
   resources: string[];
   sourceType: string;
-  isDemo: boolean;
   evidenceCount?: number;
 }
 
@@ -88,10 +87,10 @@ function summaryFor(sourceType: string, data: UnknownRecord, status: UvcJournalS
     const action = firstString(data, ['action']);
     return action ? action.replace(/_/g, ' ') : 'Device ownership updated';
   }
-  if (status === 'completed') return 'Disinfection completed';
-  if (status === 'planned') return 'Disinfection planned';
-  if (status === 'running') return 'Disinfection in progress';
-  if (status === 'failed') return 'Disinfection failed';
+  if (status === 'completed') return 'UVC cycle executed';
+  if (status === 'planned') return 'UVC cycle planned';
+  if (status === 'running') return 'UVC cycle in progress';
+  if (status === 'failed') return 'UVC cycle failed';
   return sourceType === 'unknown' ? 'Journal entry' : sourceType.replace(/_/g, ' ');
 }
 
@@ -131,80 +130,16 @@ export function normalizeUvcJournalEvent(event: unknown, index: number): UvcJour
     durationMinutes: durationFor(payload),
     resources: recordResources(payload),
     sourceType,
-    isDemo: false,
   };
 }
 
-function atTime(reference: Date, dayOffset: number, hour: number, minute: number): number {
-  const value = new Date(reference);
-  value.setDate(reference.getDate() + dayOffset);
-  value.setHours(hour, minute, 0, 0);
-  return value.getTime();
-}
-
-export function createUvcDemoJournal(reference = new Date()): UvcJournalRecord[] {
-  const sharedResources = ['UVC lamp 01 · groov RIO', 'ESP32 room sensor'];
-  return [
-    {
-      id: 'demo-treatment-room-03',
-      timestamp: atTime(reference, 0, 9, 45),
-      location: 'Treatment room 03',
-      summary: 'Disinfection completed',
-      status: 'completed',
-      durationMinutes: 12,
-      resources: sharedResources,
-      sourceType: 'DisinfectionRun',
-      isDemo: true,
-    },
-    {
-      id: 'demo-bathroom-east',
-      timestamp: atTime(reference, 0, 7, 20),
-      location: 'Bathroom · east wing',
-      summary: 'Disinfection completed',
-      status: 'completed',
-      durationMinutes: 8,
-      resources: ['UVC lamp 01 · groov RIO'],
-      sourceType: 'DisinfectionRun',
-      isDemo: true,
-    },
-    {
-      id: 'demo-operating-room-01',
-      timestamp: atTime(reference, -1, 18, 10),
-      location: 'Operating room 01',
-      summary: 'Disinfection completed',
-      status: 'completed',
-      durationMinutes: 18,
-      resources: sharedResources,
-      sourceType: 'DisinfectionRun',
-      isDemo: true,
-    },
-    {
-      id: 'demo-treatment-room-02',
-      timestamp: atTime(reference, 1, 16, 30),
-      location: 'Treatment room 02',
-      summary: 'Disinfection planned',
-      status: 'planned',
-      durationMinutes: 12,
-      resources: ['UVC lamp 01 · groov RIO'],
-      sourceType: 'DisinfectionRun',
-      isDemo: true,
-    },
-  ];
-}
-
-export function uvcJournalRecords(events: unknown[] | null | undefined): {
-  records: UvcJournalRecord[];
-  showingDemo: boolean;
-} {
+export function uvcJournalRecords(events: unknown[] | null | undefined): UvcJournalRecord[] {
   if (!events?.length) {
-    return { records: createUvcDemoJournal(), showingDemo: true };
+    return [];
   }
-  return {
-    records: events
-      .map(normalizeUvcJournalEvent)
-      .sort((left, right) => right.timestamp - left.timestamp),
-    showingDemo: false,
-  };
+  return events
+    .map(normalizeUvcJournalEvent)
+    .sort((left, right) => right.timestamp - left.timestamp);
 }
 
 export function uvcDisinfectionRunRecords(records: Array<{
@@ -216,19 +151,18 @@ export function uvcDisinfectionRunRecords(records: Array<{
     timestamp: run.startedAt ?? run.scheduledAt ?? run.createdAt,
     location: run.roomName,
     summary: run.status === 'completed'
-      ? 'Disinfection completed'
+      ? 'UVC cycle executed'
       : run.status === 'planned'
-        ? 'Disinfection planned'
+        ? 'UVC cycle planned'
         : run.status === 'running'
-          ? 'Disinfection in progress'
-          : 'Disinfection failed',
+          ? 'UVC cycle in progress'
+          : 'UVC cycle failed',
     status: run.status,
     durationMinutes: run.startedAt !== undefined && run.endedAt !== undefined
       ? Math.max(1, Math.round((run.endedAt - run.startedAt) / 60_000))
       : undefined,
     resources: resources.map(resource => resource.label),
     sourceType: run.$type$,
-    isDemo: false,
     evidenceCount: (run.startObservations?.size ?? 0) + (run.stopObservations?.size ?? 0),
   }));
 }
