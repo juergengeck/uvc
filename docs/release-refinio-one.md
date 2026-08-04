@@ -24,7 +24,8 @@ Before it can publish, the release command requires:
 
 `--allow-dirty-inputs` does not permit unpushed commits. `--allow-same-version`
 permits an intentional same-version republish but never permits downgrading the
-`latest` release.
+`latest` release. With that flag, omitting `--version` reuses the synchronized
+local package version instead of preparing the next patch.
 
 ## Version assignment
 

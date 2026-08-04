@@ -117,6 +117,13 @@ fi
 
 if [[ -n "$VERSION_OVERRIDE" ]]; then
   VERSION="$VERSION_OVERRIDE"
+elif [[ "$ALLOW_SAME_VERSION" == true ]]; then
+  VERSION_READ_JSON="$(node "$ASSIGN_VERSION_SCRIPT" --json)"
+  VERSION="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(String(value.localVersion || ""));' "$VERSION_READ_JSON")"
+  if [[ -z "$VERSION" ]]; then
+    echo "Could not determine the synchronized local UVC version." >&2
+    exit 1
+  fi
 else
   VERSION_WRITE_JSON="$(node "$ASSIGN_VERSION_SCRIPT" --write --json)"
   VERSION="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(String(value.assignedVersion || ""));' "$VERSION_WRITE_JSON")"

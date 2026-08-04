@@ -188,6 +188,7 @@ test('release orchestration preserves the signed publisher boundary and release 
   assert.match(orchestrator, /create-release-artifacts\.mjs/);
   assert.match(orchestrator, /publish-release\.sh/);
   assert.match(orchestrator, /--dry-run/);
+  assert.match(orchestrator, /value\.localVersion/);
   assert.match(orchestrator, /--skip-provenance-check is allowed only together with --dry-run/);
   assert.match(orchestrator, /--use-existing-descriptor/);
   assert.doesNotMatch(orchestrator, /--manifest-url/);
