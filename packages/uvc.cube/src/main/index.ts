@@ -16,7 +16,9 @@ async function start(): Promise<void> {
     app.dock.setIcon(getAppIconPath());
   }
 
-  const identity = await cubeOneRuntime.init(await getCubeSettingsService().getSettings());
+  const settingsService = getCubeSettingsService();
+  const identity = await cubeOneRuntime.init(await settingsService.getSettings());
+  settingsService.setInstanceId(identity.instanceId);
   startPeerDirectory(
     identity,
     device => cubeOneRuntime.recordDiscovery(device),

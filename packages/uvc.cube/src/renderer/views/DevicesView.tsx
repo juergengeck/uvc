@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router';
-import {useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Camera,
   ChevronRight,
   CircleDot,
+  Lightbulb,
   Link2,
   Radio,
   RefreshCw,
@@ -13,16 +14,12 @@ import {
   WifiOff,
 } from 'lucide-react';
 
-import type { DiscoveryDeviceSnapshot, DiscoveryRuntimeSnapshot } from '@shared/contracts';
-
-interface DevicesViewProps {
-  busyDeviceIds: ReadonlySet<string>;
-  isRefreshing: boolean;
-  onRefresh: () => Promise<void>;
-  onSetupDevice: (deviceId: string, assignedInstanceName: string) => Promise<void>;
-  runtime: DiscoveryRuntimeSnapshot | null;
-  runtimeError: string | null;
-}
+import type {
+  UvcDevice as DiscoveryDeviceSnapshot,
+  UvcDevicesViewProps,
+  UvcLightDeviceKind,
+  UvcLightState,
+} from '@uvc/uvc.ui';
 
 function normalizedTrustState(device: DiscoveryDeviceSnapshot): string {
   return (device.trustState ?? 'unknown').trim().toLowerCase();
@@ -88,12 +85,132 @@ function isHeadlessDevice(device: DiscoveryDeviceSnapshot): boolean {
   return ['esp32', 'groov'].includes((device.type ?? device.role ?? '').trim().toLowerCase());
 }
 
+function isEsp32Device(device: DiscoveryDeviceSnapshot): boolean {
+  return (device.type ?? device.role ?? '').trim().toLowerCase() === 'esp32';
+}
+
+function messageFromError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function Esp32LedToggle({
+  available,
+  deviceId,
+  onReadLight,
+  onSetLight,
+}: {
+  available: boolean;
+  deviceId: string;
+  onReadLight: (deviceId: string, kind: UvcLightDeviceKind) => Promise<UvcLightState>;
+  onSetLight: (deviceId: string, kind: UvcLightDeviceKind, enabled: boolean) => Promise<UvcLightState>;
+}) {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
+
+  const readState = useCallback(async () => {
+    const request = ++requestVersion.current;
+    if (!available) {
+      setBusy(false);
+      setError('LED control is unavailable while the ESP32 is offline.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const observed = await onReadLight(deviceId, 'esp32');
+      if (request === requestVersion.current) {
+        setEnabled(observed.enabled);
+      }
+    } catch (cause) {
+      if (request === requestVersion.current) {
+        setError(messageFromError(cause));
+      }
+    } finally {
+      if (request === requestVersion.current) {
+        setBusy(false);
+      }
+    }
+  }, [available, deviceId, onReadLight]);
+
+  useEffect(() => {
+    void readState();
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [readState]);
+
+  const toggle = async () => {
+    if (enabled === null || busy || !available) {
+      return;
+    }
+    const requested = !enabled;
+    const request = ++requestVersion.current;
+    setBusy(true);
+    setError(null);
+    try {
+      const observed = await onSetLight(deviceId, 'esp32', requested);
+      if (request !== requestVersion.current) {
+        return;
+      }
+      setEnabled(observed.enabled);
+      if (observed.enabled !== requested) {
+        setError(`ESP32 readback remained ${observed.enabled ? 'on' : 'off'}.`);
+      }
+    } catch (cause) {
+      if (request === requestVersion.current) {
+        setError(messageFromError(cause));
+      }
+    } finally {
+      if (request === requestVersion.current) {
+        setBusy(false);
+      }
+    }
+  };
+
+  const label = busy
+    ? enabled === null ? 'Reading…' : 'Updating…'
+    : enabled === null ? 'Unknown' : enabled ? 'On' : 'Off';
+
+  return (
+    <div className="esp32-led-control">
+      <div className="esp32-led-control__heading">
+        <Lightbulb aria-hidden="true" />
+        <span>Attached LED</span>
+      </div>
+      <button
+        aria-checked={enabled === true}
+        aria-label={`Turn ESP32 LED ${enabled ? 'off' : 'on'}`}
+        className={`led-toggle${enabled ? ' led-toggle--on' : ''}`}
+        disabled={!available || busy || enabled === null}
+        onClick={() => void toggle()}
+        role="switch"
+        type="button"
+      >
+        <span className="led-toggle__track" aria-hidden="true"><span /></span>
+        <span>{label}</span>
+      </button>
+      {error ? (
+        <div className="esp32-led-control__error" role="status">
+          <span title={error}>{error}</span>
+          {available ? (
+            <button disabled={busy} onClick={() => void readState()} type="button">Retry</button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DeviceCard({
   busy,
   device,
   local = false,
   pairing,
   onPairDevice,
+  onReadLight,
+  onSetLight,
   onSetupDevice,
 }: {
   busy: boolean;
@@ -101,6 +218,8 @@ function DeviceCard({
   local?: boolean;
   pairing: boolean;
   onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
+  onReadLight: (deviceId: string, kind: UvcLightDeviceKind) => Promise<UvcLightState>;
+  onSetLight: (deviceId: string, kind: UvcLightDeviceKind, enabled: boolean) => Promise<UvcLightState>;
   onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
 }) {
   const trusted = isTrusted(device);
@@ -157,6 +276,14 @@ function DeviceCard({
       </div>
 
       <div className="flow-device-card__actions">
+        {!local && trusted && isEsp32Device(device) ? (
+          <Esp32LedToggle
+            available={device.online === true}
+            deviceId={device.id}
+            onReadLight={onReadLight}
+            onSetLight={onSetLight}
+          />
+        ) : null}
         {local ? (
           <span className="device-state device-state--local">
             <CircleDot /> On this Mac
@@ -192,11 +319,6 @@ function DeviceCard({
             <Radio /> Discovered
           </span>
         )}
-        {camera && trusted ? (
-          <Link className="device-link" to="/feeds">
-            Open feed <ChevronRight />
-          </Link>
-        ) : null}
       </div>
     </article>
   );
@@ -209,6 +331,8 @@ function DeviceGroup({
   eyebrow,
   pairingDeviceId,
   onPairDevice,
+  onReadLight,
+  onSetLight,
   onSetupDevice,
   title,
 }: {
@@ -218,6 +342,8 @@ function DeviceGroup({
   eyebrow: string;
   pairingDeviceId: string | null;
   onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
+  onReadLight: (deviceId: string, kind: UvcLightDeviceKind) => Promise<UvcLightState>;
+  onSetLight: (deviceId: string, kind: UvcLightDeviceKind, enabled: boolean) => Promise<UvcLightState>;
   onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
   title: string;
 }) {
@@ -240,6 +366,8 @@ function DeviceGroup({
               key={device.id}
               pairing={pairingDeviceId === device.id}
               onPairDevice={onPairDevice}
+              onReadLight={onReadLight}
+              onSetLight={onSetLight}
               onSetupDevice={onSetupDevice}
             />
           ))}
@@ -254,11 +382,15 @@ function DeviceGroup({
 export function DevicesView({
   busyDeviceIds,
   isRefreshing,
+  onAcceptInvitation,
+  onCreateInvitation,
+  onReadLight,
   onRefresh,
+  onSetLight,
   onSetupDevice,
   runtime,
   runtimeError,
-}: DevicesViewProps) {
+}: UvcDevicesViewProps) {
   const [invitation, setInvitation] = useState('');
   const [invitationInput, setInvitationInput] = useState('');
   const [pairingStatus, setPairingStatus] = useState<string | null>(null);
@@ -281,7 +413,7 @@ export function DevicesView({
     setIsCreatingInvitation(true);
     setPairingDeviceId(device?.id ?? null);
     try {
-      const created = await window.electronAPI.invokePlan('pairing', 'createInvitation');
+      const created = await onCreateInvitation();
       setInvitation(JSON.stringify(created));
       setPairingStatus(device
         ? `Pairing invitation ready for ${device.name || deviceKindLabel(device)}. Open it on that device to finish pairing.`
@@ -302,7 +434,7 @@ export function DevicesView({
   const acceptInvitation = async () => {
     try {
       const parsed = JSON.parse(invitationInput) as unknown;
-      await window.electronAPI.invokePlan('pairing', 'connectUsingInvitation', parsed);
+      await onAcceptInvitation(parsed);
       setPairingStatus('Device paired successfully.');
       setInvitationInput('');
       await onRefresh();
@@ -375,6 +507,8 @@ export function DevicesView({
                   local
                   pairing={false}
                   onPairDevice={() => undefined}
+                  onReadLight={onReadLight}
+                  onSetLight={onSetLight}
                   onSetupDevice={() => undefined}
                 />
               ))}
@@ -432,6 +566,8 @@ export function DevicesView({
             eyebrow="Ready to use"
             pairingDeviceId={pairingDeviceId}
             onPairDevice={(device) => void createInvitation(device)}
+            onReadLight={onReadLight}
+            onSetLight={onSetLight}
             onSetupDevice={openDeviceSetup}
             title="Connected devices"
           />
@@ -506,6 +642,8 @@ export function DevicesView({
                   key={device.id}
                   pairing={pairingDeviceId === device.id}
                   onPairDevice={(candidate) => void createInvitation(candidate)}
+                  onReadLight={onReadLight}
+                  onSetLight={onSetLight}
                   onSetupDevice={openDeviceSetup}
                 />
               ))}

@@ -2,10 +2,10 @@ import {
   SettingsRegistry,
   defineField,
   defineSection,
+  registerDeviceSettings,
   type AllSettings,
   type SettingsSection,
-} from '@settingscore/registry/SettingsRegistry.ts';
-import { registerDeviceSettings } from '@settingscore/sections/device-settings.ts';
+} from '@refinio/settings.core';
 
 export const UVC_DISCOVERY_SECTION_ID = 'uvc.discovery';
 export const UVC_IDENTITY_SECTION_ID = 'uvc.identity';

@@ -1,8 +1,10 @@
 import {OperationRegistry} from '@refinio/api/registry';
 import {getChumSyncDiagnostics} from '@refinio/one.core/lib/chum-sync.js';
+import {SettingsPlan, registerSettingsPlan} from '@refinio/settings.core';
 
 import {cubeOneRuntime} from '../services/cube-one-runtime.js';
 import {createUvcTestRunnerOperation} from '../services/test-runner-dashboard.js';
+import {getCubeSettingsService} from '../services/cube-settings.js';
 import {
   getDiscoveryRuntimeSnapshot,
   pushDiscoverySettings,
@@ -17,6 +19,7 @@ export function registerUvcPlans(): OperationRegistry {
   if (registered) {
     return registry;
   }
+  registerSettingsPlan(registry, new SettingsPlan(getCubeSettingsService()));
   registry.register('cubeIdentity', {
     get: async () => cubeOneRuntime.getIdentity(),
   }, {category: 'identity'});
@@ -51,12 +54,12 @@ export function registerUvcPlans(): OperationRegistry {
     readLight: async (input: {
       deviceId: string;
       kind: 'groov' | 'esp32';
-      executorPersonId: string;
+      executorPersonId?: string;
     }) => cubeOneRuntime.readLight(input as never),
     setLight: async (input: {
       deviceId: string;
       kind: 'groov' | 'esp32';
-      executorPersonId: string;
+      executorPersonId?: string;
       enabled: boolean;
       intensity?: number;
     }) => cubeOneRuntime.setLight(input as never),

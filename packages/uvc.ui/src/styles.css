@@ -1,0 +1,134 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.nav-list--settings {
+  margin-top: auto;
+}
+
+.journal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.journal-actions > .action-button,
+.journal-actions > .action-button svg {
+  width: auto;
+}
+
+.journal-actions > .action-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-home {
+  display: grid;
+  gap: 28px;
+  width: min(100%, 1040px);
+  margin: 0 auto;
+}
+
+.settings-hero h1 {
+  margin: 8px 0 10px;
+  font-size: clamp(2rem, 3vw, 3rem);
+  letter-spacing: -0.04em;
+}
+
+.settings-hero p,
+.settings-group__header p {
+  margin: 0;
+  color: #9cabc1;
+  line-height: 1.55;
+}
+
+.settings-group {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-group__header h2 {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+}
+
+.settings-group__header > svg {
+  width: 20px;
+  color: #7894be;
+}
+
+.settings-link-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(11, 17, 27, 0.78);
+  color: #e7edf6;
+}
+
+.settings-link-card:hover {
+  border-color: rgba(122, 162, 255, 0.5);
+  background: rgba(20, 29, 45, 0.92);
+}
+
+.settings-link-card__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: rgba(64, 93, 139, 0.34);
+  color: #9fbbeb;
+}
+
+.settings-link-card__icon svg,
+.settings-link-card > svg {
+  width: 19px;
+  height: 19px;
+}
+
+.settings-link-card__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-link-card__copy span,
+.settings-link-card__status,
+.settings-loading {
+  color: #96a5bb;
+}
+
+@keyframes uvc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: uvc-spin 0.8s linear infinite;
+}
+
+@media (max-width: 760px) {
+  .journal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-link-card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .settings-link-card__status {
+    display: none;
+  }
+}

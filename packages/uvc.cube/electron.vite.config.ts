@@ -2,14 +2,12 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
+import { defineConfig } from 'electron-vite';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const settingsCoreSrc = resolve(__dirname, '../../../one/packages/settings.core/src');
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       target: 'node20',
     },
@@ -17,12 +15,10 @@ export default defineConfig({
       alias: {
         '@main': resolve(__dirname, 'src/main'),
         '@shared': resolve(__dirname, 'src/shared'),
-        '@settingscore': settingsCoreSrc,
       },
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       target: 'node20',
       rollupOptions: {
@@ -34,7 +30,6 @@ export default defineConfig({
     resolve: {
       alias: {
         '@shared': resolve(__dirname, 'src/shared'),
-        '@settingscore': settingsCoreSrc,
       },
     },
   },
@@ -44,7 +39,6 @@ export default defineConfig({
       alias: {
         '@renderer': resolve(__dirname, 'src/renderer'),
         '@shared': resolve(__dirname, 'src/shared'),
-        '@settingscore': settingsCoreSrc,
       },
     },
   },

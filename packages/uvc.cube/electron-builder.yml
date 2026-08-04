@@ -1,0 +1,51 @@
+appId: one.refinio.uvc.cube
+productName: UVC Cube
+electronVersion: 32.3.3
+
+directories:
+  buildResources: resources
+  output: ../release
+
+files:
+  - "**/*"
+
+win:
+  executableName: UVC-Cube
+  icon: resources/uvc-logo.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  artifactName: UVC-Cube-${version}-setup.${ext}
+  shortcutName: UVC Cube
+  uninstallDisplayName: UVC Cube
+  createDesktopShortcut: always
+  oneClick: true
+  perMachine: false
+
+mac:
+  icon: resources/uvc-logo.png
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+
+dmg:
+  artifactName: UVC-Cube-${version}.${ext}
+
+linux:
+  icon: resources/uvc-logo.png
+  category: Office
+  maintainer: Refinio
+  synopsis: UVC authority and device workspace
+  executableName: uvc-cube
+  syncDesktopName: true
+  target:
+    - AppImage
+
+appImage:
+  artifactName: UVC-Cube-${version}-${arch}.${ext}
+
+npmRebuild: false
+publish: null

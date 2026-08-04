@@ -1,14 +1,3 @@
-export interface SystemInfo {
-  appName: string;
-  version: string;
-  platform: NodeJS.Platform;
-  arch: string;
-  packaged: boolean;
-  electron: string;
-  chrome: string;
-  node: string;
-}
-
 export interface SettingsFieldOption {
   value: string | number | boolean;
   label: string;
@@ -45,29 +34,6 @@ export interface SettingsSectionSnapshot {
 
 export type SettingsValues = Record<string, unknown>;
 export type SettingsSnapshot = Record<string, SettingsValues>;
-
-export interface WorkspacePackageInfo {
-  name: string;
-  version: string;
-  path: string;
-  description?: string;
-}
-
-export interface WorkspaceHighlight {
-  title: string;
-  expectedPackage: string;
-  description: string;
-  status: 'available' | 'missing';
-}
-
-export interface WorkspaceSnapshot {
-  rootPath: string;
-  packagesPath: string;
-  packageCount: number;
-  packageNames: string[];
-  packages: WorkspacePackageInfo[];
-  highlights: WorkspaceHighlight[];
-}
 
 export interface DiscoveryStatusSnapshot {
   service?: string;
@@ -110,7 +76,7 @@ export interface DiscoveryDeviceSnapshot {
   capabilities?: string[];
 }
 
-export interface CubeDisinfectionRecord {
+export interface CubeUvcCycleRecord {
   id: string;
   timestamp: number;
   durationMinutes?: number;
@@ -163,11 +129,7 @@ export interface DiscoverySettingsPushResult {
 
 export interface ElectronApi {
   isElectron: boolean;
-  getSystemInfo: () => Promise<SystemInfo>;
-  getWorkspaceSnapshot: () => Promise<WorkspaceSnapshot>;
   getSettingsSections: () => Promise<SettingsSectionSnapshot[]>;
-  getSettingsSnapshot: () => Promise<SettingsSnapshot>;
-  updateSettingsSection: (sectionId: string, values: SettingsValues) => Promise<SettingsSnapshot>;
   getDiscoveryRuntimeSnapshot: () => Promise<DiscoveryRuntimeSnapshot>;
   getCubeIdentity: () => Promise<CubeIdentitySnapshot>;
   invokePlan: <T = unknown>(operation: string, method: string, params?: unknown) => Promise<T>;

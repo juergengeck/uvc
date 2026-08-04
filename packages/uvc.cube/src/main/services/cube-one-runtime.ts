@@ -100,7 +100,7 @@ import {app} from 'electron';
 import path from 'node:path';
 import {createPublicKey, randomUUID, verify as verifyNodeSignature} from 'node:crypto';
 
-import type {CubeDisinfectionRecord, DiscoveryDeviceSnapshot, SettingsSnapshot} from '@shared/contracts';
+import type {CubeUvcCycleRecord, DiscoveryDeviceSnapshot, SettingsSnapshot} from '@shared/contracts';
 import {DEFAULT_UVC_COMM_SERVER_URL} from '@shared/settings/registry';
 
 const chumDiagnostics = createMessageBus('uvc-cube-chum-diagnostics');
@@ -461,8 +461,8 @@ export class CubeOneRuntime {
         );
       },
       deriveAssignedIdentityIds: async ({email, instanceName: assignedInstanceName}) => {
-        const personId = await calculateIdHashOfObj({$type$: 'Person', email});
-        const instanceId = await calculateIdHashOfObj({
+        const personId = await calculateIdHashOfObj<Pick<Person, '$type$' | 'email'>>({$type$: 'Person', email});
+        const instanceId = await calculateIdHashOfObj<Pick<Instance, '$type$' | 'name' | 'owner'>>({
           $type$: 'Instance',
           name: assignedInstanceName,
           owner: personId,
@@ -616,25 +616,32 @@ export class CubeOneRuntime {
   async readLight(input: {
     deviceId: string;
     kind: 'groov' | 'esp32';
-    executorPersonId: SHA256IdHash<Person>;
+    executorPersonId?: SHA256IdHash<Person>;
   }): Promise<UvcControlObservation> {
-    if (!this.controlPlan) {
+    if (!this.controlPlan || !this.ownerPersonId) {
       throw new Error('[UvcCube] control plan is not initialized');
     }
-    return await this.controlPlan.execute(input, 'read');
+    return await this.controlPlan.execute({
+      ...input,
+      executorPersonId: input.executorPersonId ?? this.ownerPersonId,
+    }, 'read');
   }
 
   async setLight(input: {
     deviceId: string;
     kind: 'groov' | 'esp32';
-    executorPersonId: SHA256IdHash<Person>;
+    executorPersonId?: SHA256IdHash<Person>;
     enabled: boolean;
     intensity?: number;
   }): Promise<UvcControlObservation> {
-    if (!this.controlPlan) {
+    if (!this.controlPlan || !this.ownerPersonId) {
       throw new Error('[UvcCube] control plan is not initialized');
     }
-    return await this.controlPlan.execute(input, 'set', {
+    return await this.controlPlan.execute({
+      deviceId: input.deviceId,
+      kind: input.kind,
+      executorPersonId: input.executorPersonId ?? this.ownerPersonId,
+    }, 'set', {
       enabled: input.enabled,
       ...(input.intensity !== undefined ? {intensity: input.intensity} : {}),
     });
@@ -648,7 +655,7 @@ export class CubeOneRuntime {
     return await Promise.all(hashes.map(hash => getObject(hash as never) as Promise<UvcStateEntry>));
   }
 
-  async disinfectionRecords(): Promise<CubeDisinfectionRecord[]> {
+  async disinfectionRecords(): Promise<CubeUvcCycleRecord[]> {
     if (!this.facility) {
       throw new Error('[UvcCube] facility plan is not initialized');
     }

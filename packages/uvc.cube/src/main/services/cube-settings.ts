@@ -1,8 +1,18 @@
 import { app } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type {Instance} from '@refinio/one.core/lib/recipes.js';
+import type {SHA256IdHash} from '@refinio/one.core/lib/util/type-checks.js';
 
-import { SettingsRegistry, type AllSettings } from '@settingscore/registry/SettingsRegistry.ts';
+import {
+  SettingsRegistry,
+  createInstanceTargetRef,
+  type AllSettings,
+  type SectionValues,
+  type SettingsPlanStorage,
+  type TargetKind,
+  type TargetRef,
+} from '@refinio/settings.core';
 
 import type { SettingsFieldSnapshot, SettingsSectionSnapshot, SettingsSnapshot, SettingsValues } from '@shared/contracts';
 import {
@@ -16,11 +26,17 @@ function cloneSettings<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-class CubeSettingsService {
+class CubeSettingsService implements SettingsPlanStorage {
   private cachedSettings: SettingsSnapshot | null = null;
+  private instanceId: SHA256IdHash<Instance> | null = null;
+  private readonly listeners = new Set<(settings: AllSettings) => void>();
 
   constructor() {
     ensureUvcSettingsSectionsRegistered();
+  }
+
+  public setInstanceId(instanceId: string): void {
+    this.instanceId = instanceId as SHA256IdHash<Instance>;
   }
 
   private get settingsPath(): string {
@@ -46,7 +62,10 @@ class CubeSettingsService {
       }
       this.cachedSettings = merged;
       return cloneSettings(merged);
-    } catch {
+    } catch (cause) {
+      if (!isMissingFileError(cause)) {
+        throw cause;
+      }
       const defaultsClone = cloneSettings(defaults);
       await this.persist(defaultsClone);
       return defaultsClone;
@@ -96,6 +115,54 @@ class CubeSettingsService {
     }));
   }
 
+  public get(): Promise<AllSettings> {
+    return this.getSettings();
+  }
+
+  public async getSection(moduleId: string): Promise<SectionValues> {
+    const settings = await this.getSettings();
+    return settings[moduleId] ?? {};
+  }
+
+  public updateField(moduleId: string, key: string, value: unknown): Promise<AllSettings> {
+    return this.updateSection(moduleId, { [key]: value });
+  }
+
+  public async resetSection(moduleId: string): Promise<AllSettings> {
+    const section = SettingsRegistry.getSection(moduleId);
+    if (!section) {
+      throw new Error(`Unknown settings section: ${moduleId}`);
+    }
+    return this.updateSection(moduleId, SettingsRegistry.getSectionDefaults(section));
+  }
+
+  public subscribe(listener: (settings: AllSettings) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  public invalidateCache(): void {
+    this.cachedSettings = null;
+  }
+
+  public getTargetRef(): TargetRef {
+    if (!this.instanceId) {
+      throw new Error('[CubeSettingsService] ONE instance id is not available yet');
+    }
+    return createInstanceTargetRef(this.instanceId);
+  }
+
+  public getTargetKind(): TargetKind {
+    return 'instance';
+  }
+
+  public getInstanceIdHash(): SHA256IdHash<Instance> {
+    if (!this.instanceId) {
+      throw new Error('[CubeSettingsService] ONE instance id is not available yet');
+    }
+    return this.instanceId;
+  }
+
   private mergeWithDefaults(settings: SettingsSnapshot, defaults: AllSettings): SettingsSnapshot {
     const merged: SettingsSnapshot = {};
 
@@ -119,7 +186,14 @@ class CubeSettingsService {
     this.cachedSettings = cloneSettings(settings);
     await fs.mkdir(path.dirname(this.settingsPath), { recursive: true });
     await fs.writeFile(this.settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+    for (const listener of this.listeners) {
+      listener(cloneSettings(settings));
+    }
   }
+}
+
+function isMissingFileError(cause: unknown): cause is NodeJS.ErrnoException {
+  return cause instanceof Error && 'code' in cause && cause.code === 'ENOENT';
 }
 
 let cubeSettingsService: CubeSettingsService | null = null;

@@ -8,11 +8,7 @@ const planCall = <T>(operation: string, method: string, params?: unknown): Promi
 
 const electronApi: ElectronApi = {
   isElectron: true,
-  getSystemInfo: () => ipcRenderer.invoke('system:info'),
-  getWorkspaceSnapshot: () => ipcRenderer.invoke('workspace:snapshot'),
   getSettingsSections: () => ipcRenderer.invoke('settings:sections'),
-  getSettingsSnapshot: () => ipcRenderer.invoke('settings:get'),
-  updateSettingsSection: (sectionId: string, values) => ipcRenderer.invoke('settings:updateSection', sectionId, values),
   getDiscoveryRuntimeSnapshot: () => planCall('discovery', 'getRuntime'),
   getCubeIdentity: () => planCall('cubeIdentity', 'get'),
   invokePlan: (operation, method, params) => planCall(operation, method, params),

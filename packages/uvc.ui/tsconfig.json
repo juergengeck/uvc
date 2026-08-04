@@ -7,17 +7,9 @@
     "strict": true,
     "jsx": "react-jsx",
     "allowSyntheticDefaultImports": true,
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
-    "baseUrl": ".",
-    "paths": {
-      "@main/*": ["src/main/*"],
-      "@renderer/*": ["src/renderer/*"],
-      "@shared/*": ["src/shared/*"]
-    }
+    "noEmit": true
   },
-  "exclude": ["node_modules", "out", "dist"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
