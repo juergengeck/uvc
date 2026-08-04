@@ -147,7 +147,7 @@ do
       printf 'Installed UVC RIO %s for %s on groov firmware %s (PID %s).\n' \
         "$version" "$model" "$firmware" "$stable_pid"
       printf 'Configuration: %s\n' "$config"
-      printf 'Disable Shell access in groov Manage after commissioning.\n'
+      printf 'Keep SSH available on a trusted management network for break-glass UVC recovery.\n'
       exit 0
     fi
   else

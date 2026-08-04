@@ -98,7 +98,9 @@ Releases are immutable. Updates switch `current` atomically and never replace
 - Provide a host-side SSH installer for online and local-archive installs.
 - Verify the Refinio manifest, Merkle proof, signature chain, and archive hash.
 - Provide `doctor`, `rollback`, and consistent-state `backup` commands.
-- Tell the operator to disable Shell access after commissioning.
+- Keep SSH available as the break-glass service-control path, restricted to a
+  trusted management network. Do not disable it until an independent,
+  authenticated path can inspect and restart the UVC service.
 
 ### 3. RIO runtime profile
 

@@ -17,10 +17,13 @@ and service control through Shell access, but product support for a
 Shell-modified device is limited. Refinio supports the UVC application and its
 modifications. The Groov Manage API remains the local I/O boundary.
 
-For production, enable Shell only on a trusted commissioning network, use
-credentials distinct from groov Manage, and disable Shell in groov Manage after
-installation. See Opto 22's
-[cybersecurity guidance](https://documents.opto22.com/2310_Tech_Note_groov_Products_Cybersecurity_Design_Best_Practices.pdf).
+UVC depends on Shell access as its break-glass service-control and recovery
+path. Keep the Shell license installed and SSH enabled on UVC-managed devices,
+use credentials distinct from groov Manage, and restrict port 22 to a trusted
+management network at the network boundary. Do not disable the on-device Shell
+unless another authenticated path can inspect and restart `uvc-headless.service`.
+Disabling it while groov Manage is unavailable leaves physical access as the
+only recovery path.
 
 The first declared public target is `GRV-R7-MM1001-10`, ARMv7, on official
 firmware 4.1.2 or newer with Node.js major 20 or 22. Other RIO models require a

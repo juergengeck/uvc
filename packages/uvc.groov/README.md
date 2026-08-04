@@ -108,5 +108,6 @@ The installed commands are available under `/home/dev/uvc/current/bin`:
 - `backup` creates a password-encrypted consistent-state archive.
 - `restore` restores an encrypted backup only with an explicit `--yes`.
 
-After installation, edit `/home/dev/uvc/shared/uvc.env`, commission the device,
-and disable Shell access in groov Manage for normal production operation.
+After installation, edit `/home/dev/uvc/shared/uvc.env` and commission the
+device. Keep SSH available as the break-glass recovery path for the UVC service,
+with port 22 restricted to a trusted management network.

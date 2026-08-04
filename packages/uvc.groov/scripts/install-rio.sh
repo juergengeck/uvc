@@ -88,4 +88,4 @@ ssh "$target" \
   "set -eu; work=\$(mktemp -d /tmp/uvc-rio-release.XXXXXX); trap 'rm -rf \"\$work\" \"$remote_archive\"' EXIT; tar -xzf '$remote_archive' -C \"\$work\"; release=\$(find \"\$work\" -mindepth 1 -maxdepth 1 -type d | head -n 1); sudo env$remote_environment sh \"\$release/bin/install\""
 
 printf 'UVC RIO installation completed on %s.\n' "$target"
-printf 'Configure /home/dev/uvc/shared/uvc.env, commission the device, then disable Shell access in groov Manage.\n'
+printf 'Configure /home/dev/uvc/shared/uvc.env and commission the device. Keep SSH available on a trusted management network for break-glass UVC recovery.\n'
