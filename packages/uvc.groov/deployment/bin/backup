@@ -1,0 +1,48 @@
+#!/bin/sh
+
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "$script_dir/rio-common"
+
+output="${1:-}"
+[ -n "$output" ] || uvc_fail "usage: backup <output.uvc-rio-backup>"
+case "$output" in
+  /*) ;;
+  *) output="$(pwd)/$output" ;;
+esac
+[ ! -e "$output" ] || uvc_fail "backup destination already exists: $output"
+
+root="$(uvc_root)"
+[ -d "$root/shared" ] || uvc_fail "shared state is missing: $root/shared"
+
+if [ -z "${UVC_BACKUP_PASSWORD:-}" ]; then
+  printf 'Backup password (minimum 12 characters): ' >/dev/tty
+  stty -echo </dev/tty
+  IFS= read -r UVC_BACKUP_PASSWORD </dev/tty
+  stty echo </dev/tty
+  printf '\n' >/dev/tty
+  export UVC_BACKUP_PASSWORD
+fi
+
+temporary="$(mktemp -d /tmp/uvc-rio-backup.XXXXXX)"
+was_active=false
+cleanup() {
+  if [ "$was_active" = true ]; then
+    sudo systemctl start uvc-headless.service >/dev/null 2>&1 || true
+  fi
+  rm -rf "$temporary"
+}
+trap cleanup EXIT INT TERM
+
+if systemctl is-active --quiet uvc-headless.service; then
+  was_active=true
+  sudo systemctl stop uvc-headless.service
+fi
+
+tar -C "$root" -czf "$temporary/state.tar.gz" shared
+"$script_dir/recovery-crypto.mjs" encrypt "$temporary/state.tar.gz" "$output"
+chmod 0600 "$output"
+
+printf 'Encrypted UVC RIO backup written to %s\n' "$output"
+printf 'Store it off-device before updating groov firmware.\n'

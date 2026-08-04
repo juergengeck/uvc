@@ -1,0 +1,6 @@
+This development package contains a bundled JavaScript application assembled
+from Refinio, UVC, VGER, and their third-party dependencies.
+
+Public releases must replace this file with the complete notices generated from
+the exact VGER headless build closure. The public archive builder refuses a
+placeholder notice file when invoked with --public.

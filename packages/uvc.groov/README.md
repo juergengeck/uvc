@@ -71,3 +71,42 @@ The module and channel have no defaults. A process cannot write hardware until b
 For the supported Opto 22 SSH deployment, identity-safe service flags, rollback
 runner, and live DNS-SD validation, see
 [`../../docs/groov-rio-deployment.md`](../../docs/groov-rio-deployment.md).
+
+## Release packaging
+
+Public RIO releases use Opto 22's official `GROOV-LIC-SHELL` customization
+surface and Refinio's signed release-root contract. They are application
+archives, not groov firmware or disk images.
+
+Build a development release from a clean VGER headless bundle:
+
+```bash
+npm run build:rio-release -- \
+  --bundle /tmp/vger-deploy/bundle.mjs \
+  --version 0.1.0 \
+  --output-dir /tmp/uvc-rio-release
+```
+
+For a public artifact, also pass `--public`, `--sbom <complete-spdx.json>`, and
+`--notices <complete-third-party-notices>`. The builder produces the immutable
+archive and a `.publication.json` descriptor for the existing Refinio signer.
+
+Install from a local archive during development:
+
+```bash
+./scripts/install-rio.sh \
+  --archive /tmp/uvc-rio-release/uvc-rio-0.1.0.tar.gz \
+  --model GRV-R7-MM1001-10 \
+  --firmware 4.1.2 \
+  dev@rio.local
+```
+
+The installed commands are available under `/home/dev/uvc/current/bin`:
+
+- `doctor` reports model, firmware, runtime, service, and health state.
+- `rollback` atomically exchanges the current and previous releases.
+- `backup` creates a password-encrypted consistent-state archive.
+- `restore` restores an encrypted backup only with an explicit `--yes`.
+
+After installation, edit `/home/dev/uvc/shared/uvc.env`, commission the device,
+and disable Shell access in groov Manage for normal production operation.

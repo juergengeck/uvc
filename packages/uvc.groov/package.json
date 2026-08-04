@@ -19,8 +19,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:rio-release": "node scripts/build-rio-release.mjs",
+    "build:rio-compliance": "node scripts/generate-rio-compliance.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "npm run build && node --test dist/test/*.test.js test/*.test.mjs"
   },
   "engines": {
     "node": ">=18.0.0"
