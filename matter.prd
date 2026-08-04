@@ -1,0 +1,768 @@
+# UVC Matter and Thread Superset
+
+## Product Requirements Document
+
+- Status: Draft direction
+- Date: 2026-07-30
+- Scope: UVC ESP32-C6 firmware, QUICVC transports, UVC clients, and Matter interoperability
+- Product assumption: UVC should provide a strict semantic superset of Matter
+
+## 1. Executive Summary
+
+UVC will support Matter as a standards-compliant interoperability surface while
+retaining QUICVC as the richer UVC protocol for verifiable identity, provenance,
+journal synchronization, safety workflows, and domain-specific operations.
+
+The intended result is not a fork or modification of Matter. A standard Matter
+commissioner and controller must be able to commission, discover, inspect, and
+control the standard capabilities of the device without understanding UVC or
+QUICVC. UVC-aware peers gain additional capabilities through:
+
+1. Manufacturer-specific Matter clusters for small, stable extensions that
+   benefit from Matter subscriptions and fabric security.
+2. QUICVC over IPv6 for richer and evolving UVC semantics.
+
+Both protocol surfaces must feed one authoritative device-state and safety
+engine. Neither Matter callbacks nor QUICVC packet handlers may directly own
+physical actuator state.
+
+The ESP32-C6 is suitable hardware because it includes Wi-Fi, Bluetooth LE, and
+an IEEE 802.15.4 radio capable of running OpenThread. The first foundational
+change is to make QUICVC address-family neutral and support IPv6. Thread can
+then become another QUICVC network bearer, and Matter-over-Thread can be added
+without duplicating the UVC application model.
+
+## 2. Goals
+
+### 2.1 Primary Goals
+
+- Provide a genuinely conforming Matter surface for standard device
+  capabilities.
+- Run Matter over Thread on the existing ESP32-C6 target.
+- Run QUICVC over IPv6, including over a Thread network.
+- Preserve existing UVC identity, ownership, journal, and control semantics.
+- Represent Matter and QUICVC as adapters around one canonical state and safety
+  model.
+- Allow standard Matter ecosystems to use the device without installing or
+  understanding UVC software.
+- Allow UVC-aware peers to obtain stronger identity, provenance, evidence, and
+  workflow semantics than Matter provides.
+- Preserve an incremental migration path for existing IPv4/Wi-Fi installations.
+
+### 2.2 Secondary Goals
+
+- Reuse the same physical device identity while keeping protocol credentials
+  separate.
+- Reuse the same Thread attachment for Matter and QUICVC IPv6 traffic.
+- Publish UVC DNS-SD discovery through a Thread Border Router using the Thread
+  Service Registration Protocol (SRP).
+- Support a unified onboarding experience when the UVC application acts as a
+  Matter commissioner.
+- Establish a production-capable partition, secure manufacturing, and OTA
+  direction.
+
+## 3. Non-Goals
+
+- Creating a proprietary protocol that merely resembles Matter.
+- Requiring QUICVC knowledge for standard Matter operations.
+- Replacing QUICVC with Matter.
+- Encoding the full ONE/QUICVC object model into Matter attributes.
+- Treating Matter fabric membership as proof of UVC Person identity or UVC
+  ownership.
+- Building the ESP32-C6 device as the product's Thread Border Router.
+- Shipping permanent Wi-Fi, Thread, and BLE traffic concurrently in the first
+  combined release.
+- Allowing a generic Matter command to bypass UVC safety interlocks.
+
+## 4. Definitions and Compatibility Contract
+
+### 4.1 Matter
+
+Matter is the standard application, commissioning, security, and device-model
+surface. It uses IPv6 over Thread, Wi-Fi, or Ethernet. In the target product,
+Matter-over-Thread is the preferred configuration.
+
+### 4.2 Thread
+
+Thread is an IPv6 mesh network over IEEE 802.15.4. It is a network bearer, not
+an application protocol. Supporting Thread does not by itself make a device
+Matter-compatible.
+
+### 4.3 QUICVC
+
+QUICVC is the UVC-native application and security protocol used for verifiable
+credentials, ownership, discovery, control, journal exchange, and related UVC
+semantics. QUICVC will support both IPv4 and IPv6 transports.
+
+### 4.4 Superset
+
+“Superset of Matter” means:
+
+- Every standard Matter capability exposed by the product behaves according to
+  the Matter specification.
+- UVC adds capabilities without changing the required behavior of standard
+  Matter clusters, commands, commissioning, fabrics, or sessions.
+- Advanced operations may exist only in UVC, or may have a small
+  manufacturer-specific Matter projection.
+- A non-UVC Matter controller receives a useful and internally consistent
+  standard device.
+
+It does not mean:
+
+- Adding mandatory proprietary fields to standard Matter clusters.
+- Requiring an additional UVC handshake before otherwise-valid standard Matter
+  commands work.
+- Replacing Matter PASE, CASE, DAC attestation, operational certificates, or
+  fabric management with QUICVC equivalents.
+
+## 5. Current-State Findings
+
+### 5.1 Hardware and SDK
+
+- The release build explicitly targets `esp32c6`.
+- ESP32-C6 provides Wi-Fi 6 on 2.4 GHz, Bluetooth LE, and IEEE 802.15.4 for
+  Thread.
+- The inspected firmware build was produced with ESP-IDF 5.5.5.
+- Current ESP-Matter mainline guidance recommends a tested ESP-IDF version;
+  the combined build must pin a known-compatible ESP-Matter, connectedhomeip,
+  and ESP-IDF tuple rather than float independently.
+
+Relevant repository locations:
+
+- `scripts/build-esp32-firmware-release.sh`
+- `scripts/esp32-release-sdkconfig.defaults`
+- `../vger/packages/esp32.core/firmware/esp32-quicvc-project`
+
+### 5.2 Current Radio and Network Ownership
+
+The firmware currently:
+
+- Initializes Wi-Fi in station mode.
+- Initializes NimBLE directly.
+- Registers a custom QUICVC GATT service.
+- Starts custom BLE advertising.
+- Creates QUICVC UDP services.
+- Publishes `_one-refinio._udp` or the UVC bootstrap service through mDNS.
+
+Matter also expects to own or coordinate:
+
+- BLE commissioning advertisements and GATT behavior.
+- Network commissioning.
+- OpenThread initialization for a Thread product.
+- Matter DNS-SD advertisements.
+- Persistent fabric and commissioning state.
+
+The combined image therefore cannot independently initialize a second BLE
+host or run two unrelated BLE lifecycle managers.
+
+### 5.3 IPv4 Assumptions
+
+The QUICVC firmware currently uses IPv4-specific types and operations in the
+transport, wire, and service layers:
+
+- `AF_INET`
+- `struct sockaddr_in`
+- `INET_ADDRSTRLEN`
+- IPv4 broadcast via `INADDR_BROADCAST`
+- IPv4 textual addresses for cached peer locations
+
+These assumptions are present beyond a single transport module. They appear in
+`main.c`, `main_attestation.c`, `quicvc_transport.c`,
+`quicvc_transport_enhanced.c`, and `quicvc_wire.c`.
+
+The mobile UVC client also relies heavily on `udp4` and
+`255.255.255.255` discovery. Firmware-only IPv6 support would therefore be
+insufficient.
+
+### 5.4 Discovery
+
+The current UVC mDNS service is already a useful abstraction:
+
+- Assigned devices publish `_one-refinio._udp`.
+- Bootstrap devices publish a separate provisioning service.
+- TXT records convey device identity and capabilities.
+
+IPv6 does not provide IPv4-style broadcast. On Thread, the product must
+register its UVC service using the OpenThread SRP client. A Thread Border
+Router can then advertise the service using mDNS on the adjacent Wi-Fi or
+Ethernet infrastructure.
+
+### 5.5 Flash and Persistent Storage
+
+The current public image:
+
+- Uses 4 MB flash.
+- Uses a single factory application partition.
+- Has no OTA application slots.
+- Allocates `0x6000` bytes (24 KiB) to NVS.
+- Produces an application binary of approximately 1.46 MB.
+
+ESP-Matter adds substantial flash and RAM requirements. It also adds
+commissioning state, fabric state, factory data, attestation credentials, and
+potential OTA requirements. The current partition table is not a credible
+production layout for the combined product without measurement and redesign.
+
+An 8 MB flash module is the preferred production baseline for the combined
+Matter/Thread/UVC image, especially when dual-slot OTA is required.
+
+### 5.6 Identity and Authorization
+
+Matter and UVC have related but distinct identity domains:
+
+- Matter Device Attestation Certificate (DAC): manufacturing authenticity.
+- Matter operational certificates: per-fabric operational identity.
+- Matter fabrics: one or more administrative trust domains.
+- UVC device keys and credentials: UVC-native device identity.
+- UVC Person/owner identity: application-level ownership and authority.
+
+These credentials must not be merged or substituted for one another. The
+product may create a signed binding stating that the identities refer to the
+same physical device.
+
+The existing UVC implementation primarily models one owner. Matter is
+multi-fabric. The command authorization and precedence policy must be
+deliberate rather than inferred from network attachment.
+
+### 5.7 Safety
+
+The project can ultimately control UVC equipment, not merely a harmless
+development-board indicator. A standard Matter `OnOff` command must not become
+a direct GPIO write for a germicidal emitter.
+
+All commands must be submitted to the same policy and safety engine. That
+engine determines whether the operation is accepted, delayed, rejected, or
+terminated and records the observed physical outcome.
+
+## 6. Target Architecture
+
+```text
+Matter controller                         UVC peer
+       |                                     |
+Matter clusters and CASE               QUICVC over UDP
+       |                                     |
+       +------------------+------------------+
+                          |
+                 Canonical command API
+                          |
+                Policy and safety engine
+                          |
+             Desired/observed device state
+                          |
+                  Hardware controller
+                          |
+                Physical state readback
+                          |
+       +------------------+------------------+
+       |                                     |
+Matter attributes/events             UVC journal/evidence
+```
+
+### 6.1 Architectural Ownership
+
+- The device core owns physical state and safety.
+- The Matter adapter owns standard Matter projections and callbacks.
+- The QUICVC adapter owns UVC protocol serialization and identity proofs.
+- The network layer owns IPv4, IPv6, Wi-Fi, and Thread endpoints.
+- The discovery layer owns mDNS and SRP service publication.
+- A credential binding layer relates, but does not merge, Matter and UVC
+  identities.
+
+### 6.2 QUICVC Endpoint Abstraction
+
+Introduce a family-neutral endpoint type with:
+
+- `sockaddr_storage`
+- Actual address length
+- Address family
+- Port
+- Interface index or IPv6 scope identifier
+- Formatting and parsing helpers
+- Equality and hashing that include scope where required
+
+Protocol handlers must receive this endpoint abstraction rather than
+`struct sockaddr_in`.
+
+Provide explicit transport instances:
+
+- UDP4/Wi-Fi for compatibility.
+- UDP6/Wi-Fi for transition testing.
+- UDP6/Thread for the target configuration.
+- BLE only where commissioning or an explicitly retained UVC BLE feature
+  requires it.
+
+### 6.3 Discovery Architecture
+
+- Wi-Fi IPv4/IPv6: publish `_one-refinio._udp` through mDNS.
+- Thread: register `_one-refinio._udp` through the SRP client.
+- Matter: publish the standard Matter commissionable or operational services.
+- Bootstrap and operational discovery must remain separate.
+- UVC ownership “silent mode” must never suppress required Matter operational
+  discovery.
+- Clients must prefer resolved unicast endpoints over broadcast.
+
+### 6.4 Matter Projection
+
+The initial standard Matter surface should remain intentionally small:
+
+- Root Node and Descriptor behavior required by Matter.
+- Basic Information.
+- Identify, where appropriate.
+- A standard device type only when its semantics truthfully match the physical
+  product.
+- On/Off or other standard controls only for operations safe and meaningful to
+  expose to generic ecosystems.
+- Standard diagnostics and OTA behavior when included in the selected release.
+
+Candidate UVC manufacturer-specific attributes or commands:
+
+- Operating mode.
+- Interlock state.
+- Cycle state and progress.
+- Remaining cycle time.
+- Fault or inhibited state.
+- Completion outcome.
+
+The full journal, credential graph, signed provenance, and complex workflow
+model remains in QUICVC.
+
+### 6.5 Command and State Semantics
+
+Every control request must produce an internal command containing:
+
+- Source protocol.
+- Authenticated principal or fabric.
+- Requested operation.
+- Correlation identifier.
+- Timestamp or monotonic ordering information.
+- Applicable safety context.
+
+The safety engine returns:
+
+- Accepted, pending, rejected, or failed.
+- Normalized reason.
+- Desired state.
+- Observed state when available.
+- Evidence or journal references.
+
+Matter attributes reflect canonical observed state, not merely the latest
+requested value.
+
+### 6.6 Commissioning
+
+Target Matter-over-Thread flow:
+
+1. The user scans the standard Matter onboarding payload.
+2. A Matter commissioner establishes PASE over BLE.
+3. The commissioner supplies the Thread operational dataset.
+4. The device joins Thread and receives Matter fabric credentials.
+5. The device becomes a fully functional standard Matter node.
+6. The UVC application discovers the additional UVC DNS-SD service.
+7. Optional UVC enrollment binds UVC identity and authority.
+
+If the UVC application implements the Matter commissioner role, these steps
+may be presented as one user journey. Commissioning through another ecosystem
+must still leave the Matter surface fully usable.
+
+## 7. Functional Requirements
+
+### MAT-001: Strict Matter Base Compatibility
+
+A standard Matter commissioner and controller shall commission and operate the
+standard capabilities without QUICVC participation.
+
+### MAT-002: QUICVC IPv6 Transport
+
+QUICVC shall send and receive unicast UDP over IPv6 without altering its
+application-level wire semantics solely because of the address family.
+
+### MAT-003: IPv4 Compatibility
+
+The migration shall retain the existing IPv4/Wi-Fi QUICVC path until a
+separate removal decision is made.
+
+### MAT-004: Thread Attachment
+
+The ESP32-C6 shall operate as an OpenThread end device using its native
+IEEE 802.15.4 radio. The product shall assume the presence of an external
+Thread Border Router for access from phones and infrastructure networks.
+
+### MAT-005: Thread Service Discovery
+
+The device shall register its UVC DNS-SD service through SRP. A client on the
+infrastructure network shall be able to discover and reach the device through
+a conforming Thread Border Router.
+
+### MAT-006: Shared Device Core
+
+Matter and QUICVC shall use the same command, safety, desired-state, and
+observed-state implementation.
+
+### MAT-007: Matter Endpoint
+
+The product shall expose a standards-compliant Matter endpoint whose selected
+device type and clusters truthfully represent the safe generic functionality
+of the device.
+
+### MAT-008: UVC Extensions
+
+UVC-specific functionality shall be divided between a small stable
+manufacturer-specific Matter extension and the richer QUICVC protocol.
+
+### MAT-009: Separate Credential Domains
+
+Matter credentials and UVC credentials shall use separate keys, namespaces,
+and lifecycle rules.
+
+### MAT-010: Identity Binding
+
+The device may publish a signed UVC object binding its hardware identity,
+Matter attestation identity, Matter operational identity, and UVC device
+identity. The binding shall not disclose private keys or collapse authorization
+domains.
+
+### MAT-011: Explicit Authorization
+
+The product shall define which Matter fabrics and UVC principals may request
+each operation. Matter multi-fabric behavior shall not be silently reduced to
+the existing single-owner model.
+
+### MAT-012: Single BLE Lifecycle
+
+The combined image shall initialize NimBLE exactly once. Matter commissioning
+and any retained UVC GATT functionality shall share a coordinated lifecycle.
+
+### MAT-013: Honest Safety Outcomes
+
+Matter command responses and attributes shall reflect the authoritative safety
+decision and physical state. A prohibited operation shall not report successful
+activation.
+
+### MAT-014: Client IPv6 Support
+
+UVC clients shall resolve AAAA records, retain IPv6 scope where required, open
+UDP6 sockets, and communicate using resolved unicast endpoints.
+
+### MAT-015: Datagram Discipline
+
+QUICVC over Thread shall use bounded payloads and a measured fragmentation,
+chunking, acknowledgement, and retry strategy appropriate for 802.15.4.
+
+### MAT-016: Factory Reset
+
+Factory reset behavior shall explicitly define whether it clears:
+
+- Matter fabrics.
+- Thread network state.
+- UVC ownership.
+- UVC identity.
+- Journal data.
+- Manufacturing credentials.
+
+Manufacturing attestation credentials shall not be erased by an ordinary
+factory reset.
+
+### MAT-017: OTA and Rollback
+
+The production design shall define Matter-aware OTA image versioning, rollback,
+and preservation of Matter and UVC durable identity.
+
+### MAT-018: Observability
+
+Diagnostics shall report:
+
+- Active transport and address family.
+- Thread role and attachment state.
+- Matter commissioning and fabric count.
+- UVC enrollment state.
+- Free heap and minimum free heap.
+- Radio coexistence indicators where available.
+- Datagram fragmentation, retransmission, and loss.
+- Command source and normalized safety outcome without leaking credentials.
+
+## 8. Non-Functional Requirements
+
+### 8.1 Interoperability
+
+- Standard Matter tests shall pass with UVC disabled or absent.
+- Unknown UVC manufacturer-specific clusters shall not impair standard
+  controllers.
+- The device shall work with at least one independent Thread Border Router and
+  more than one Matter commissioner implementation before release.
+
+### 8.2 Security
+
+- No shared private key between Matter and UVC identity systems.
+- Matter factory data shall use production credentials rather than SDK test
+  credentials for production devices.
+- UVC enrollment shall require explicit proof and policy.
+- Network attachment alone shall convey no actuator authority.
+- Secure boot, flash encryption, protected key storage, and signed OTA shall be
+  evaluated as part of production hardening.
+
+### 8.3 Reliability
+
+- Loss of one protocol adapter shall not corrupt canonical state.
+- A Thread detach/reattach shall not duplicate physical commands.
+- Matter subscriptions and UVC journal events shall converge on the same
+  observed state after reconnect.
+- Factory reset and OTA interruption shall be testable and deterministic.
+
+### 8.4 Resource Budget
+
+The combined image shall establish measured budgets for:
+
+- Application binary size.
+- Static DRAM and IRAM.
+- Free heap at boot.
+- Minimum free heap during Matter commissioning.
+- Minimum free heap during concurrent Matter and QUICVC activity.
+- Stack high-water marks.
+- NVS and factory partition usage.
+
+No production decision shall rely solely on the fact that the linker accepts
+the image.
+
+### 8.5 Radio Behavior
+
+- The first Matter-over-Thread product configuration should disable Wi-Fi
+  station operation after migration unless a validated requirement needs it.
+- BLE scanning shall not run continuously alongside Thread.
+- Retained BLE functionality shall be minimized after Matter commissioning.
+- A single-chip Thread Border Router is outside the product scope.
+
+## 9. Release Variants
+
+During migration, maintain explicit build variants rather than a single
+unbounded tri-radio configuration:
+
+1. `uvc-c6-wifi`
+   - Existing QUICVC over IPv4/Wi-Fi.
+   - Compatibility and rollback baseline.
+
+2. `uvc-c6-ipv6`
+   - QUICVC over IPv4 and IPv6 on Wi-Fi.
+   - Used to validate endpoint and client refactoring before Thread.
+
+3. `uvc-c6-thread`
+   - QUICVC over IPv6/Thread.
+   - Engineering validation of OpenThread, SRP, and constrained-network
+     behavior.
+
+4. `uvc-c6-thread-matter`
+   - Target superset product.
+   - Matter-over-Thread plus QUICVC-over-Thread.
+   - Coordinated Matter commissioning and optional UVC enrollment.
+
+Matter-over-Wi-Fi may be maintained as an engineering comparison build, but it
+is not the preferred final Thread product.
+
+## 10. Planned Delivery
+
+### Phase 0: Decisions and Reproducible Baseline
+
+- Pin compatible ESP-IDF, ESP-Matter, and connectedhomeip revisions.
+- Record current firmware flash, RAM, heap, task, and network measurements.
+- Define the initial Matter device type and safe standard capability.
+- Define the Matter-fabric versus UVC-owner authorization policy.
+- Decide whether production hardware moves to 8 MB flash.
+
+Exit criteria:
+
+- Reproducible baseline build.
+- Written identity and authorization decision.
+- Initial resource budget.
+- Selected Matter standard surface.
+
+### Phase 1: Address-Family-Neutral QUICVC
+
+- Add the family-neutral endpoint abstraction.
+- Remove `struct sockaddr_in` from application and wire-layer interfaces.
+- Add explicit UDP4 and UDP6 transports.
+- Replace IPv4-only address formatting and cached address storage.
+- Add IPv4, IPv6 global, IPv6 link-local, scope, and mixed-family tests.
+
+Exit criteria:
+
+- Existing IPv4 integration tests remain green.
+- QUICVC request/response and ownership flows pass over IPv6/Wi-Fi.
+- No application protocol handler requires an IPv4 structure.
+
+### Phase 2: UVC Client IPv6 and Discovery
+
+- Add UDP6 capability to desktop and mobile clients.
+- Resolve UVC DNS-SD services to IPv6 endpoints.
+- Preserve IPv6 interface scope.
+- Prefer service discovery and unicast over broadcast.
+- Add dual-stack discovery and reconnect tests.
+
+Exit criteria:
+
+- Desktop and mobile clients control an ESP32-C6 using IPv6 unicast.
+- IPv4 fallback remains functional.
+
+### Phase 3: OpenThread QUICVC
+
+- Add OpenThread and the Thread network interface.
+- Run QUICVC UDP6 on Thread.
+- Register the UVC service through SRP.
+- Validate reachability through an external Border Router.
+- Measure packet sizes, fragmentation, loss, latency, and heap.
+
+Exit criteria:
+
+- A LAN client discovers the UVC service through Border Router mDNS.
+- The client completes QUICVC discovery, authentication, control, and journal
+  operations over Thread.
+- Detach and reattach preserve identity and recover connectivity.
+
+### Phase 4: Matter Superset Integration
+
+- Use the ESP-Matter Thread application as the combined composition root.
+- Integrate the UVC device core rather than allowing Matter callbacks to
+  control hardware directly.
+- Add the initial standard Matter endpoint.
+- Coordinate BLE and Matter commissioning.
+- Bind Matter state changes and UVC journal evidence to the same command
+  results.
+- Add the minimal manufacturer-specific UVC cluster if justified.
+
+Exit criteria:
+
+- Independent Matter commissioner completes BLE/Thread commissioning.
+- Standard Matter commands work without UVC enrollment.
+- UVC enrollment and QUICVC remain available as an optional extension.
+- Matter and QUICVC report identical canonical observed state.
+- Safety rejection is represented consistently on both interfaces.
+
+### Phase 5: Production Hardening
+
+- Replace test Matter credentials with production manufacturing data.
+- Finalize partition table, OTA, rollback, and factory reset.
+- Enable and validate selected hardware security features.
+- Execute Matter, Thread, Bluetooth, and product-specific certification plans.
+- Run prolonged coexistence, power, reconnect, corruption, and upgrade tests.
+
+Exit criteria:
+
+- Production partition and manufacturing process approved.
+- Certification candidate passes required pretests.
+- Resource budgets include acceptable operating margin.
+- OTA and rollback preserve intended durable state.
+
+## 11. Acceptance Scenarios
+
+### 11.1 Standard Matter-Only User
+
+1. User commissions the device with a non-UVC Matter commissioner.
+2. Device joins Thread.
+3. Controller reads standard attributes.
+4. Controller requests a safe standard operation.
+5. Device executes through the safety engine.
+6. Controller observes the resulting state.
+
+Expected: No UVC application or credential is required.
+
+### 11.2 UVC-Enriched User
+
+1. Device is already commissioned into Matter.
+2. UVC client discovers `_one-refinio._udp` through the Border Router.
+3. User performs explicit UVC enrollment.
+4. UVC client submits an advanced operation.
+5. Device records principal, policy, command, and observed outcome.
+6. Matter subscribers observe the standard projection of the same state.
+
+Expected: Rich UVC semantics coexist with correct Matter behavior.
+
+### 11.3 Conflicting Commands
+
+1. A Matter fabric requests activation.
+2. A UVC policy or physical interlock prohibits activation.
+3. The safety engine rejects the command.
+4. Matter does not report the actuator as active.
+5. UVC records the rejected request and reason.
+
+Expected: Protocol differences do not bypass safety or create divergent state.
+
+### 11.4 Network Recovery
+
+1. Device loses Thread attachment during an operation.
+2. Physical control remains in a defined safe state.
+3. Device reattaches and republishes Matter and UVC services.
+4. Matter attributes and UVC observed state converge.
+5. No command is executed twice.
+
+### 11.5 Multi-Fabric Operation
+
+1. Device is commissioned into multiple Matter fabrics.
+2. Each fabric can use the standard capability allowed by product policy.
+3. UVC ownership remains separate.
+4. Removing a Matter fabric does not erase UVC identity.
+5. Removing UVC ownership does not silently remove unrelated Matter fabrics.
+
+## 12. Risks and Mitigations
+
+| Risk | Impact | Direction |
+| --- | --- | --- |
+| IPv4 assumptions are spread across application code | Thread port becomes invasive | Introduce one endpoint abstraction before adding OpenThread |
+| Mobile client depends on UDP4 broadcast | Firmware works but product does not | Deliver client IPv6 and DNS-SD support as a required phase |
+| Matter and UVC both initialize NimBLE | Initialization failure or unstable commissioning | Give the combined composition root one BLE lifecycle |
+| Wi-Fi, BLE, and 802.15.4 share one radio | Latency, packet loss, commissioning failures | Prefer Thread plus commissioning BLE; avoid permanent tri-radio use |
+| Matter consumes significant RAM and flash | Runtime exhaustion despite successful linking | Establish measured budgets and prefer 8 MB production flash |
+| Thread fragmentation hurts QUICVC journal traffic | Loss and poor latency | Bound datagrams and add measured chunk/retry behavior |
+| Matter multi-fabric conflicts with one UVC owner | Ambiguous authority | Define separate domains and an explicit command policy |
+| Matter and UVC state diverge | Unsafe or misleading control | Require one canonical state and event source |
+| Generic Matter light semantics misrepresent UVC equipment | Unsafe activation or certification mismatch | Expose only truthful, safe standard capabilities |
+| SDK revisions drift | Build or runtime incompatibility | Pin and qualify the complete SDK tuple |
+| Factory reset erases the wrong credentials | Bricked enrollment or lost identity | Specify partition ownership and reset scope explicitly |
+
+## 13. Open Product Decisions
+
+- Which standard Matter device type truthfully represents the first physical
+  product?
+- Is any germicidal emitter activation appropriate for generic Matter control,
+  or should Matter expose status and safe auxiliary controls only?
+- Which operations are available to any commissioned Matter fabric?
+- Does UVC ownership override, constrain, or remain independent from Matter
+  fabric administrators?
+- Will the UVC mobile application implement a Matter commissioner?
+- Is an 8 MB ESP32-C6 module mandatory for production?
+- Which UVC fields justify a stable manufacturer-specific Matter cluster?
+- What Thread device role and power profile are required for the physical
+  installation?
+- Which durable objects survive UVC reset, Matter factory reset, and full
+  device reset?
+- Is Matter OTA required in the first certified release?
+
+## 14. Directional Decisions
+
+The following direction is recorded by this PRD:
+
+1. UVC is a semantic superset of Matter, not a Matter fork.
+2. Standard Matter behavior remains independently interoperable.
+3. QUICVC gains IPv6 before Thread or Matter integration.
+4. Thread is treated as an IPv6 bearer shared by Matter and QUICVC.
+5. Matter and QUICVC are adapters around one canonical safety-controlled
+   device core.
+6. Matter and UVC credential domains remain distinct and may be cryptographically
+   bound.
+7. UVC discovery over Thread uses SRP and Border Router DNS-SD publication.
+8. The target combined image is Matter-over-Thread plus QUICVC-over-Thread.
+9. Rich or evolving UVC semantics remain in QUICVC; Matter custom extensions
+   stay small and stable.
+10. Production planning assumes a partition redesign and favors 8 MB flash.
+
+## 15. External Technical References
+
+- ESP-IDF OpenThread guide:
+  `https://docs.espressif.com/projects/esp-idf/en/latest/esp32c6/api-guides/openthread.html`
+- ESP-Matter programming guide:
+  `https://docs.espressif.com/projects/esp-matter/en/latest/esp32c6/`
+- ESP-Matter development and Thread/Wi-Fi configuration:
+  `https://docs.espressif.com/projects/esp-matter/en/latest/esp32c6/developing.html`
+- ESP-Matter RAM and flash optimization:
+  `https://docs.espressif.com/projects/esp-matter/en/latest/esp32c6/optimizations.html`
+- ESP-Matter production considerations:
+  `https://docs.espressif.com/projects/esp-matter/en/latest/esp32c6/production.html`
+- OpenThread SRP and Border Router discovery:
+  `https://openthread.io/codelabs/openthread-border-router`
+
