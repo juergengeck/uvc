@@ -36,6 +36,7 @@ export default defineConfig({
   renderer: {
     plugins: [react()],
     resolve: {
+      dedupe: ['react', 'react-dom', '@tanstack/react-router'],
       alias: {
         '@renderer': resolve(__dirname, 'src/renderer'),
         '@shared': resolve(__dirname, 'src/shared'),
