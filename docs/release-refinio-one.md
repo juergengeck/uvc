@@ -74,7 +74,7 @@ esbuild metafile from the VGER headless package:
 
 ```bash
 VERSION=0.1.1
-pnpm --dir ../vger/packages/vger.headless bundle
+NO_WHATSAPP=1 NO_FOTOS=1 pnpm --dir ../vger/packages/vger.headless bundle
 node packages/uvc.groov/scripts/generate-rio-compliance.mjs \
   --metafile /tmp/vger-deploy/bundle-meta.json \
   --bundle-cwd ../vger/packages/vger.headless \
@@ -94,6 +94,11 @@ ESP32-C6 public firmware:
 ```bash
 npm run build:esp32-release -- --version 0.1.1
 ```
+
+Set `IDF_PATH` to the ESP-IDF version pinned by the firmware project's
+`dependencies.lock` (currently v5.5.5). The build helper honors that path even
+when another `idf.py` is already on `PATH`, and rejects a mismatched SDK before
+starting the build.
 
 ## Validate and publish
 

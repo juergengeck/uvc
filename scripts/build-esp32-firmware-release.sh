@@ -27,12 +27,33 @@ if [[ ! -f "$project_dir/CMakeLists.txt" ]]; then
 fi
 output_dir="${output_dir:-$uvc_root/release/$version}"
 
-if ! command -v idf.py >/dev/null 2>&1; then
-  if [[ -n "${IDF_PATH:-}" && -f "$IDF_PATH/export.sh" ]]; then
-    # shellcheck disable=SC1090
-    source "$IDF_PATH/export.sh" >/dev/null
-  else
-    echo "idf.py is unavailable; source the ESP-IDF export.sh first" >&2
+if [[ -n "${IDF_PATH:-}" ]]; then
+  if [[ ! -f "$IDF_PATH/export.sh" ]]; then
+    echo "IDF_PATH does not contain export.sh: $IDF_PATH" >&2
+    exit 2
+  fi
+  # Honor the explicitly selected SDK even when another idf.py is already on PATH.
+  # shellcheck disable=SC1090
+  source "$IDF_PATH/export.sh" >/dev/null
+elif ! command -v idf.py >/dev/null 2>&1; then
+  echo "idf.py is unavailable; set IDF_PATH or source the ESP-IDF export.sh first" >&2
+  exit 2
+fi
+
+dependency_lock="$project_dir/dependencies.lock"
+if [[ -f "$dependency_lock" ]]; then
+  expected_idf_version="$(awk '
+    /^  idf:$/ { in_idf = 1; next }
+    in_idf && /^    version:/ {
+      value = $2
+      gsub(/[\047\042]/, "", value)
+      print value
+      exit
+    }
+  ' "$dependency_lock")"
+  idf_version_output="$(idf.py --version)"
+  if [[ -n "$expected_idf_version" && "$idf_version_output" != *"v$expected_idf_version"* ]]; then
+    echo "ESP-IDF version mismatch: firmware lock requires v$expected_idf_version, found: $idf_version_output" >&2
     exit 2
   fi
 fi
