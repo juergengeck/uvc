@@ -88,7 +88,7 @@ const packageJson = JSON.parse(await readFile(path.join(PACKAGE_ROOT, 'package.j
 const version = String(args.version || packageJson.version || '').trim();
 if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) fail(`Invalid release version: ${version}`);
 
-const requestedBundlePath = path.resolve(args.bundle || '/tmp/vger-deploy/bundle.mjs');
+const requestedBundlePath = path.resolve(args.bundle || path.join(PACKAGE_ROOT, '../uvc.headless/bundle/uvc-headless.mjs'));
 const outputDir = path.resolve(args['output-dir'] || '/tmp/uvc-rio-release');
 const archiveBase = `uvc-rio-${version}`;
 const releaseRoot = path.join(outputDir, archiveBase);
@@ -109,8 +109,8 @@ if (await stat(archivePath).catch(() => null)) fail(`Archive already exists: ${a
 
 run(process.execPath, ['--check', bundlePath]);
 const helpOutput = run(process.execPath, [bundlePath, '--help'], {cwd: outputDir});
-if (!/VGER Headless Server/.test(helpOutput)) {
-  fail('Headless bundle did not execute its CLI entrypoint during the --help smoke test');
+if (!/UVC Headless Server/.test(helpOutput)) {
+  fail('UVC headless bundle did not execute its CLI entrypoint during the --help smoke test');
 }
 await mkdir(path.join(releaseRoot, 'app'), {recursive: true});
 await copyFile(bundlePath, path.join(releaseRoot, 'app', 'uvc-headless.mjs'));

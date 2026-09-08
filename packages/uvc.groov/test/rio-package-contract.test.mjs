@@ -140,7 +140,7 @@ test('release builder creates the declared archive and publication descriptor', 
   const extracted = path.join(temporary, 'extracted');
   await writeFile(bundle, [
     'if (process.argv.includes("--help")) {',
-    '  console.log("VGER Headless Server");',
+    '  console.log("UVC Headless Server");',
     '} else {',
     '  console.log("fixture");',
     '}',

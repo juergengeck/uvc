@@ -9,7 +9,7 @@ bundle_path="${GROOV_HEADLESS_BUNDLE:-}"
 version="${GROOV_RELEASE_VERSION:-$(node -p "require('$package_dir/package.json').version")}"
 
 if [[ -z "$bundle_path" || ! -f "$bundle_path" ]]; then
-  echo "Set GROOV_HEADLESS_BUNDLE to the built VGER headless bundle.mjs" >&2
+  echo "Set GROOV_HEADLESS_BUNDLE to the built UVC headless bundle (packages/uvc.headless/bundle/uvc-headless.mjs)" >&2
   exit 2
 fi
 

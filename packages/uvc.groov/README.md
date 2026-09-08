@@ -78,11 +78,11 @@ Public RIO releases use Opto 22's official `GROOV-LIC-SHELL` customization
 surface and Refinio's signed release-root contract. They are application
 archives, not groov firmware or disk images.
 
-Build a development release from a clean VGER headless bundle:
+Build a development release from a clean UVC headless bundle:
 
 ```bash
 npm run build:rio-release -- \
-  --bundle /tmp/vger-deploy/bundle.mjs \
+  --bundle /tmp/uvc-headless.mjs \
   --version 0.1.0 \
   --output-dir /tmp/uvc-rio-release
 ```

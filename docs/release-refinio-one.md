@@ -70,7 +70,7 @@ npm --prefix packages/uvc.cube run dist:windows
 npm --prefix packages/uvc.cube run dist:linux
 ```
 
-Public groov RIO package, after producing `/tmp/vger-deploy/bundle.mjs` and its
+Public groov RIO package, after producing `/tmp/uvc-headless.mjs` and its
 esbuild metafile from the VGER headless package:
 
 ```bash
@@ -83,7 +83,7 @@ node packages/uvc.groov/scripts/generate-rio-compliance.mjs \
   --output-dir "release/$VERSION"
 node packages/uvc.groov/scripts/build-rio-release.mjs \
   --public \
-  --bundle /tmp/vger-deploy/bundle.mjs \
+  --bundle /tmp/uvc-headless.mjs \
   --sbom "release/$VERSION/uvc-rio-$VERSION.sbom.spdx.json" \
   --notices "release/$VERSION/uvc-rio-$VERSION.THIRD_PARTY_NOTICES" \
   --version "$VERSION" \

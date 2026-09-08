@@ -1,0 +1,37 @@
+{
+  "name": "@uvc/headless",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/UvcHeadlessRuntime.js",
+  "types": "dist/UvcHeadlessRuntime.d.ts",
+  "bin": {
+    "uvc-headless": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:app": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "dependencies": {
+    "@refinio/one.core": "link:../../../one/packages/one.core",
+    "@refinio/one.models": "link:../../../one/packages/one.models",
+    "@refinio/connection.core": "link:../../../one/packages/connection.core",
+    "@refinio/trie.core": "link:../../../one/packages/trie.core",
+    "@refinio/uvc.core": "link:../../../one/packages/uvc.core",
+    "@vger/vger.core": "link:../../../one/packages/vger.core",
+    "@vger/vger.headless": "link:../../../vger/packages/vger.headless",
+    "@uvc/groov-authority": "link:../uvc.groov",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18",
+    "esbuild": "^0.25.10"
+  },
+  "packageManager": "pnpm@10.11.0"
+}
