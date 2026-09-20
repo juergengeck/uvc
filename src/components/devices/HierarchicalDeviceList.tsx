@@ -369,22 +369,37 @@ export const HierarchicalDeviceList: React.FC = () => {
     }
   }, [router]);
 
-  const getItemIcon = (type: string) => {
+  const getItemIcon = (type: string, item?: HierarchicalItem) => {
     switch (type) {
       case 'organisation': return 'office-building';
       case 'department': return 'briefcase';
       case 'room': return 'door';
-      case 'device': return 'devices';
+      case 'device': {
+        const devType = (item?.data as Device)?.deviceType?.toLowerCase();
+        if (devType === 'lamp') return 'lightbulb';
+        if (devType === 'sensor') return 'radar';
+        if (devType === 'esp32') return 'chip';
+        if (devType === 'computer') return 'desktop-classic';
+        if (devType === 'phone') return 'cellphone';
+        if (devType === 'tablet') return 'tablet';
+        if (devType === 'iot') return 'access-point';
+        return 'devices';
+      }
       default: return 'folder';
     }
   };
 
-  const getItemColor = (type: string) => {
+  const getItemColor = (type: string, item?: HierarchicalItem) => {
     switch (type) {
       case 'organisation': return theme.colors.primary;
       case 'department': return theme.colors.secondary;
       case 'room': return theme.colors.tertiary;
-      case 'device': return theme.colors.onSurfaceVariant;
+      case 'device': {
+        const devType = (item?.data as Device)?.deviceType?.toLowerCase();
+        if (devType === 'lamp') return '#a855f7';
+        if (devType === 'sensor') return '#10b981';
+        return theme.colors.onSurfaceVariant;
+      }
       default: return theme.colors.onSurface;
     }
   };
@@ -415,8 +430,8 @@ export const HierarchicalDeviceList: React.FC = () => {
                 )}
                 <List.Icon 
                   {...props} 
-                  icon={getItemIcon(item.type)} 
-                  color={getItemColor(item.type)}
+                  icon={getItemIcon(item.type, item)} 
+                  color={getItemColor(item.type, item)}
                   style={!canExpand ? { marginLeft: 28 } : undefined}
                 />
               </View>
@@ -582,8 +597,8 @@ export const HierarchicalDeviceList: React.FC = () => {
                       left={(props) => (
                         <List.Icon
                           {...props}
-                          icon="devices"
-                          color={theme.colors.onSurfaceVariant}
+                          icon={getItemIcon('device', device)}
+                          color={getItemColor('device', device)}
                           style={{ marginLeft: 28 }}
                         />
                       )}

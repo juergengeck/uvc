@@ -120,7 +120,10 @@ export default class CommServerManager implements ITransport {
       // A changed Person key is accepted only through a route whose instance key
       // was persisted for that same Person during pairing. The handshake has
       // already proved possession of the presented Person key at this point.
-      this.connectionsModel.setKeyMismatchHandler(async (
+      // ConnectionsModel no longer fronts this hook since the pairing
+      // finalization consolidation; wire the PairingManager field directly,
+      // the same way connection.core's ConnectionPlan does.
+      this.connectionsModel.pairing.onKeyMismatch = async (
         remotePersonId,
         message,
         remotePublicKey,
@@ -137,7 +140,7 @@ export default class CommServerManager implements ITransport {
           + `on ${registered ? 'registered' : 'unknown'} route ${remotePublicKey.slice(0, 16)}: ${message}`,
         );
         return registered;
-      });
+      };
 
       // Create BlacklistModel exactly like one.leute
       this.blacklistModel = new BlacklistModel();

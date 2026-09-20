@@ -2,11 +2,11 @@
  * Role utilities and types
  */
 
-import type { Person } from '@refinio/one.core/lib/recipes';
-import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks';
-import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel';
+import type { Person } from '@refinio/one.core/lib/recipes.js';
+import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
+import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
 import type { RoleCertificate } from '@/utils/RoleCertificate';
-import type { CertificateData } from '@refinio/one.models/lib/models/Leute/TrustedKeysManager';
+import type { CertificateData } from '@refinio/one.models/lib/models/Leute/TrustedKeysManager.js';
 
 /**
  * Available roles in the system
@@ -19,13 +19,112 @@ export enum Role {
 }
 
 /**
+ * UVC Facility & Operational Roles (EN 17141 compliance & device architecture)
+ */
+export enum UvcRole {
+    ADMIN = 'admin',
+    DOCTOR = 'doctor',
+    PHYSICIAN = 'physician',
+    OPERATOR = 'operator',
+    TECHNICIAN = 'technician',
+    AUDITOR = 'auditor',
+    PATIENT = 'patient',
+    LAMP = 'lamp',
+    SENSOR = 'sensor'
+}
+
+export interface RoleDescriptor {
+    key: string;
+    title: string;
+    description: string;
+    badgeIcon: string;
+    color: string;
+    authorityLevel: 'root' | 'clinical' | 'technical' | 'observational';
+}
+
+export const UVC_ROLE_DESCRIPTORS: Record<string, RoleDescriptor> = {
+    admin: {
+        key: 'admin',
+        title: 'Facility Administrator',
+        description: 'Root authority for key certification, role issuance, and EN 17141 compliance signing.',
+        badgeIcon: 'shield-crown',
+        color: '#dc2626',
+        authorityLevel: 'root'
+    },
+    doctor: {
+        key: 'doctor',
+        title: 'Clinician / Physician',
+        description: 'Authorized to approve disinfection phase protocols, cycle recipes, and trigger emergency stop.',
+        badgeIcon: 'stethoscope',
+        color: '#2563eb',
+        authorityLevel: 'clinical'
+    },
+    physician: {
+        key: 'physician',
+        title: 'Attending Physician',
+        description: 'Clinical authorization for intervention schedules and patient chamber safety protocols.',
+        badgeIcon: 'doctor',
+        color: '#3b82f6',
+        authorityLevel: 'clinical'
+    },
+    operator: {
+        key: 'operator',
+        title: 'Technical Operator',
+        description: 'Calibrates 254nm radiometer sensors, monitors quartz lamp tube burn hours, and starts runs.',
+        badgeIcon: 'wrench',
+        color: '#f59e0b',
+        authorityLevel: 'technical'
+    },
+    technician: {
+        key: 'technician',
+        title: 'Biomedical Technician',
+        description: 'Maintains sensor telemetry, hardware diagnostics, and chamber air handling validation.',
+        badgeIcon: 'cog',
+        color: '#eab308',
+        authorityLevel: 'technical'
+    },
+    auditor: {
+        key: 'auditor',
+        title: 'Compliance Auditor',
+        description: 'Read-only verification of sealed EN 17141 cryptographic cycle journal chains.',
+        badgeIcon: 'clipboard-check',
+        color: '#10b981',
+        authorityLevel: 'observational'
+    },
+    patient: {
+        key: 'patient',
+        title: 'Patient / Subject',
+        description: 'Read-only access to assigned cycle certificates and personal exposure logs.',
+        badgeIcon: 'account',
+        color: '#6b7280',
+        authorityLevel: 'observational'
+    },
+    lamp: {
+        key: 'lamp',
+        title: 'UVC Emitter Fixture',
+        description: 'Headless lamp device node providing UV-C 254nm germicidal output.',
+        badgeIcon: 'lightbulb',
+        color: '#a855f7',
+        authorityLevel: 'technical'
+    },
+    sensor: {
+        key: 'sensor',
+        title: 'Radiometer / Dosimeter',
+        description: 'Headless sensor node streaming real-time irradiance and cumulative dose metrics.',
+        badgeIcon: 'gauge',
+        color: '#06b6d4',
+        authorityLevel: 'technical'
+    }
+};
+
+/**
  * Check if a person has a specific role
  */
 export async function hasRole(
     leuteModel: LeuteModel,
     personId: SHA256IdHash<Person>,
-    role: Role,
-    appName: string
+    role: Role | UvcRole | string,
+    appName: string = 'uvc'
 ): Promise<boolean> {
     try {
         // Get all certificates for this person
@@ -38,7 +137,7 @@ export async function hasRole(
         for (const certificateData of certificatesData) {
             const certificate = certificateData.certificate as RoleCertificate;
             if (
-                certificate.app === appName &&
+                (!appName || certificate.app === appName || certificate.app === 'uvc' || certificate.app === 'vger' || certificate.app === 'flexibel') &&
                 certificate.role === role &&
                 certificate.person === personId
             ) {
@@ -58,8 +157,8 @@ export async function hasRole(
  */
 export async function getPersonIdsForRole(
     leuteModel: LeuteModel,
-    role: Role,
-    appName: string
+    role: Role | UvcRole | string,
+    appName: string = 'uvc'
 ): Promise<SHA256IdHash<Person>[]> {
     try {
         // Get all certificates for all persons
@@ -80,7 +179,10 @@ export async function getPersonIdsForRole(
         return allCertificates
             .filter(cert => {
                 const certificate = cert.certificate;
-                return certificate.app === appName && certificate.role === role;
+                return (
+                    (!appName || certificate.app === appName || certificate.app === 'uvc' || certificate.app === 'vger' || certificate.app === 'flexibel') &&
+                    certificate.role === role
+                );
             })
             .map(cert => cert.certificate.person);
     } catch (error) {
@@ -91,4 +193,8 @@ export async function getPersonIdsForRole(
 
 export default {
     Role,
+    UvcRole,
+    UVC_ROLE_DESCRIPTORS,
+    hasRole,
+    getPersonIdsForRole
 };

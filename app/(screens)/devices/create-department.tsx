@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { TextInput, Button, useTheme, Text, HelperText, Card, Title, List, RadioButton } from 'react-native-paper';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useInstance } from '@src/providers/app';
 import { Namespaces } from '@src/i18n/namespaces';
@@ -28,37 +28,42 @@ export default function CreateDepartmentScreen() {
     ? organisations.find(item => item.hash === selectedOrgHash)?.org.name || params.organisationName
     : null;
 
-  // Load organisations from OrganisationModel
-  useEffect(() => {
-    const loadOrganisations = async () => {
-      try {
-        setLoadingOrgs(true);
-        if (!models?.appModel?.organisationModel) {
-          console.error('[CreateDepartment] OrganisationModel not available');
-          return;
-        }
-        
-        const orgs = await models.appModel.organisationModel.getAllOrganisations();
-        // Transform to the expected structure
-        const orgList = orgs.map(item => ({
-          hash: item.hash,
-          org: item.organisation
-        }));
-        setOrganisations(orgList);
-        
-        // If we have a preselected organisation from params, ensure it's selected
-        if (params.organisationHash) {
-          setSelectedOrgHash(params.organisationHash as SHA256Hash);
-        }
-      } catch (error) {
-        console.error('[CreateDepartment] Error loading organisations:', error);
-      } finally {
-        setLoadingOrgs(false);
+  // Reload organisations every time the screen gains focus: the user may have
+  // just created one on the pushed create-organisation screen, and a
+  // mount-only load would keep showing the stale (empty) list with the button
+  // disabled.
+  const loadOrganisations = useCallback(async () => {
+    try {
+      setLoadingOrgs(true);
+      if (!models?.appModel?.organisationModel) {
+        console.error('[CreateDepartment] OrganisationModel not available');
+        return;
       }
-    };
-    
-    loadOrganisations();
-  }, [params.organisationHash]);
+
+      const orgs = await models.appModel.organisationModel.getAllOrganisations();
+      // Transform to the expected structure
+      const orgList = orgs.map(item => ({
+        hash: item.hash,
+        org: item.organisation
+      }));
+      setOrganisations(orgList);
+
+      // If we have a preselected organisation from params, ensure it's selected
+      if (params.organisationHash) {
+        setSelectedOrgHash(params.organisationHash as SHA256Hash);
+      }
+    } catch (error) {
+      console.error('[CreateDepartment] Error loading organisations:', error);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }, [models?.appModel?.organisationModel, params.organisationHash]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadOrganisations();
+    }, [loadOrganisations]),
+  );
 
   const handleCreate = async () => {
     setError(null);

@@ -20,6 +20,11 @@
       "@lama/llama-module": ["llama-module/src"]
     },
     "resolveJsonModule": true,
+    // The lane modules (src/lab) run unbundled in workers under Node type
+    // stripping and in bundler workers, so lane-local imports use explicit
+    // `.ts` extensions. This flag permits exactly that; nothing in this
+    // config emits (all checks run with --noEmit), which the flag requires.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "moduleResolution": "bundler",
     "customConditions": [],

@@ -16,6 +16,8 @@ interface RoomWithDept {
 }
 
 const DEVICE_TYPES = [
+  { label: 'Lamp', value: 'Lamp', icon: 'lightbulb' },
+  { label: 'Sensor', value: 'Sensor', icon: 'radar' },
   { label: 'ESP32', value: 'ESP32', icon: 'chip' },
   { label: 'Computer', value: 'Computer', icon: 'desktop-classic' },
   { label: 'Phone', value: 'Phone', icon: 'cellphone' },
@@ -25,6 +27,9 @@ const DEVICE_TYPES = [
 ];
 
 const CAPABILITIES = [
+  'UVC Emitter',
+  'UVC Radiometer',
+  'Safety Interlock',
   'Temperature Sensor',
   'Humidity Sensor',
   'Motion Detection',
@@ -87,6 +92,18 @@ export default function AddDeviceScreen() {
         ? prev.filter(c => c !== capability)
         : [...prev, capability]
     );
+  };
+
+  const handleSelectDeviceType = (typeValue: string) => {
+    setDeviceType(typeValue);
+    // Pre-select relevant UVC capabilities if none are currently selected
+    if (selectedCapabilities.length === 0) {
+      if (typeValue === 'Lamp') {
+        setSelectedCapabilities(['UVC Emitter', 'Safety Interlock']);
+      } else if (typeValue === 'Sensor') {
+        setSelectedCapabilities(['UVC Radiometer']);
+      }
+    }
   };
 
   const handleCreate = async () => {
@@ -194,7 +211,7 @@ export default function AddDeviceScreen() {
                   <Chip
                     key={type.value}
                     selected={deviceType === type.value}
-                    onPress={() => setDeviceType(type.value)}
+                    onPress={() => handleSelectDeviceType(type.value)}
                     style={styles.chip}
                     icon={type.icon}
                   >

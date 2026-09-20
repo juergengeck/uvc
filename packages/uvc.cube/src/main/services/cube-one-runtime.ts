@@ -320,7 +320,10 @@ export class CubeOneRuntime {
         this.pairedPeople.add(personId);
       }
     }
-    this.connectionsModel.setKeyMismatchHandler(async (
+    // ConnectionsModel no longer fronts this hook since the pairing
+    // finalization consolidation; wire the PairingManager field directly,
+    // the same way connection.core's ConnectionPlan does.
+    this.connectionsModel.pairing.onKeyMismatch = async (
       remotePersonId,
       message,
       remotePublicKey,
@@ -337,7 +340,7 @@ export class CubeOneRuntime {
         + `on ${registered ? 'registered' : 'unknown'} route ${remotePublicKey.slice(0, 16)}: ${message}`,
       );
       return registered;
-    });
+    };
     const cryptoApi = await createCryptoApiFromDefaultKeys(ownerInstanceId);
     const publicKey = Buffer.from(cryptoApi.publicEncryptionKey).toString('hex');
     const publicSignKey = Buffer.from(cryptoApi.publicSignKey).toString('base64');

@@ -30,13 +30,18 @@
       "fr": "French",
       "description": "Set the app display language"
     },
+    "data": {
+      "title": "Data"
+    },
     "dataManagement": {
       "title": "Data Management",
       "import": {
         "title": "Import Data",
-        "description": "Import your data from a backup file",
-        "placeholder": "Select a file to import",
+        "description": "Restore UVC devices, rooms, and settings from a backup file",
+        "placeholder": "Select a backup file to import",
         "success": "Data imported successfully",
+        "restoredSummary": "Restored {{orgCount}} organization(s) and {{roomCount}} room(s).",
+        "validBackup": "Backup data parsed and verified successfully.",
         "error": {
           "failed": "Failed to import data",
           "invalidFile": "Invalid backup file",
@@ -45,8 +50,11 @@
       },
       "export": {
         "title": "Export Data",
-        "description": "Save your data to a backup file",
+        "description": "Back up UVC devices, rooms, and settings to a backup file",
         "success": "Data exported successfully",
+        "downloadStarted": "Backup file downloaded successfully.",
+        "savedToDocs": "Backup file saved to documents.",
+        "fileReady": "Backup file created in cache.",
         "error": {
           "failed": "Failed to export data"
         }

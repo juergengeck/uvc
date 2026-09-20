@@ -88,6 +88,14 @@ export default function ScreensLayout() {
                             headerTitle: t('settings:settings.title'),
                         }}
                     />
+
+                    <Stack.Screen
+                        name="roles"
+                        options={{
+                            headerTitle: 'Roles & Authority',
+                            headerLargeTitle: false,
+                        }}
+                    />
                     
 
                     <Stack.Screen

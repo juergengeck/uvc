@@ -151,3 +151,7 @@ test-*.js
 
 # Setup markers
 .llama-setup-done
+
+# Lab lane worker bundle (built by scripts/build-lane-worker.mjs)
+public/lane.worker.js
+public/lane.worker.js.map

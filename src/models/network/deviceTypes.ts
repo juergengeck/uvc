@@ -6,7 +6,9 @@
  */
 
 export enum DeviceType {
-  // Hardware devices
+  // UVC Hardware devices
+  LAMP = 'Lamp',
+  SENSOR = 'Sensor',
   ESP32 = 'ESP32',
   
   // Software applications
@@ -25,7 +27,11 @@ export enum DeviceType {
  * Check if a device type is a hardware device
  */
 export function isHardwareDevice(type: string): boolean {
-  return type === DeviceType.ESP32;
+  return type === DeviceType.ESP32 ||
+         type === DeviceType.LAMP ||
+         type === DeviceType.SENSOR ||
+         type?.toLowerCase() === 'lamp' ||
+         type?.toLowerCase() === 'sensor';
 }
 
 /**
@@ -43,6 +49,12 @@ export function isApplicationDevice(type: string): boolean {
  */
 export function getDeviceTypeDisplayName(type: string): string {
   switch (type) {
+    case DeviceType.LAMP:
+    case 'lamp':
+      return 'UVC Lamp';
+    case DeviceType.SENSOR:
+    case 'sensor':
+      return 'UVC Sensor';
     case DeviceType.ESP32:
       return 'ESP32 Device';
     case DeviceType.APPLICATION:
@@ -64,6 +76,12 @@ export function getDeviceTypeDisplayName(type: string): string {
  */
 export function getDeviceTypeIcon(type: string): string {
   switch (type) {
+    case DeviceType.LAMP:
+    case 'lamp':
+      return 'lightbulb';
+    case DeviceType.SENSOR:
+    case 'sensor':
+      return 'radar';
     case DeviceType.ESP32:
       return 'chip';
     case DeviceType.APPLICATION:

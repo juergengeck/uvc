@@ -185,6 +185,22 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* UVC Governance & Roles */}
+        <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
+          {t('settings.roles.sectionTitle', { defaultValue: 'GOVERNANCE & ROLES' }).toUpperCase()}
+        </Text>
+        <View style={themedStyles.settingsSection}>
+          <List.Item
+            title={t('settings.roles.title', { defaultValue: 'Role Management' })}
+            description={t('settings.roles.description', {
+              defaultValue: 'EN 17141 authority, credentials, and role certificates',
+            })}
+            onPress={() => router.push('/(screens)/roles')}
+            left={props => <List.Icon {...props} icon="shield-account" />}
+            right={props => <List.Icon {...props} icon="chevron-right" />}
+          />
+        </View>
+
         {/* Appearance Settings */}
         <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
           {t('settings.appearance.title').toUpperCase()}
@@ -231,20 +247,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Health Settings */}
-        <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
-          {t('settings.health.title', { defaultValue: 'HEALTH' }).toUpperCase()}
-        </Text>
-        <View style={themedStyles.settingsSection}>
-          <List.Item
-            title={t('settings.health.title', { defaultValue: 'Health Data' })}
-            description={t('settings.health.description', { defaultValue: 'Apple Health and device integrations' })}
-            onPress={() => router.push('/(screens)/health-settings')}
-            left={props => <List.Icon {...props} icon="heart-pulse" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
-          />
-        </View>
-
         {/* Network Settings */}
         <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
           {t('settings.network.title', { defaultValue: 'NETWORK' }).toUpperCase()}
@@ -273,16 +275,23 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Data Management */}
+        {/* Data */}
         <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
-          {t('settings.dataManagement.title').toUpperCase()}
+          {t('settings.data.title', { defaultValue: 'DATA' }).toUpperCase()}
         </Text>
         <View style={themedStyles.settingsSection}>
           <List.Item
-            title={t('settings.dataManagement.export.title')}
-            description={t('settings.dataManagement.export.description')}
-            onPress={() => router.push('/(screens)/data-management')}
+            title={t('settings.dataManagement.export.title', { defaultValue: 'Export Data' })}
+            description={t('settings.dataManagement.export.description', { defaultValue: 'Back up UVC devices, rooms, and settings' })}
+            onPress={() => router.push({ pathname: '/(screens)/data-management', params: { action: 'export' } })}
             left={props => <List.Icon {...props} icon="database-export" />}
+            right={props => <List.Icon {...props} icon="chevron-right" />}
+          />
+          <List.Item
+            title={t('settings.dataManagement.import.title', { defaultValue: 'Import Data' })}
+            description={t('settings.dataManagement.import.description', { defaultValue: 'Restore UVC devices, rooms, and settings' })}
+            onPress={() => router.push({ pathname: '/(screens)/data-management', params: { action: 'import' } })}
+            left={props => <List.Icon {...props} icon="database-import" />}
             right={props => <List.Icon {...props} icon="chevron-right" />}
           />
         </View>

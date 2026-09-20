@@ -27,19 +27,31 @@
       "de": "Deutsch",
       "fr": "Französisch"
     },
+    "data": {
+      "title": "Daten"
+    },
     "dataManagement": {
       "title": "Datenverwaltung",
       "import": {
         "title": "Daten importieren",
-        "description": "Importieren Sie Ihre Daten aus einer Sicherungsdatei",
-        "placeholder": "Wählen Sie eine Datei zum Importieren",
+        "description": "Stellen Sie UVC-Geräte, Räume und Einstellungen aus einer Sicherungsdatei wieder her",
+        "placeholder": "Wählen Sie eine Sicherungsdatei zum Importieren",
+        "success": "Daten erfolgreich importiert",
+        "restoredSummary": "{{orgCount}} Organisation(en) und {{roomCount}} Raum/Räume wiederhergestellt.",
+        "validBackup": "Sicherungsdaten erfolgreich überprüft.",
         "error": {
-          "failed": "Fehler beim Importieren der Daten"
+          "failed": "Fehler beim Importieren der Daten",
+          "invalidFile": "Ungültige Sicherungsdatei",
+          "noFile": "Keine Datei ausgewählt"
         }
       },
       "export": {
         "title": "Daten exportieren",
-        "description": "Speichern Sie Ihre Daten in einer Sicherungsdatei",
+        "description": "Sichern Sie UVC-Geräte, Räume und Einstellungen in einer Sicherungsdatei",
+        "success": "Daten erfolgreich exportiert",
+        "downloadStarted": "Sicherungsdatei wird heruntergeladen.",
+        "savedToDocs": "Sicherungsdatei in Dokumenten gespeichert.",
+        "fileReady": "Sicherungsdatei im Cache erstellt.",
         "error": {
           "failed": "Fehler beim Exportieren der Daten"
         }

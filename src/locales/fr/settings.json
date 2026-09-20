@@ -27,19 +27,31 @@
       "de": "Allemand",
       "fr": "Français"
     },
+    "data": {
+      "title": "Données"
+    },
     "dataManagement": {
       "title": "Gestion des données",
       "import": {
         "title": "Importer les données",
-        "description": "Importer vos données depuis un fichier de sauvegarde",
-        "placeholder": "Sélectionner un fichier à importer",
+        "description": "Restaurer les appareils UVC, pièces et paramètres depuis une sauvegarde",
+        "placeholder": "Sélectionner un fichier de sauvegarde à importer",
+        "success": "Données importées avec succès",
+        "restoredSummary": "{{orgCount}} organisation(s) et {{roomCount}} pièce(s) restaurée(s).",
+        "validBackup": "Données de sauvegarde validées avec succès.",
         "error": {
-          "failed": "Échec de l'importation des données"
+          "failed": "Échec de l'importation des données",
+          "invalidFile": "Fichier de sauvegarde invalide",
+          "noFile": "Aucun fichier sélectionné"
         }
       },
       "export": {
         "title": "Exporter les données",
-        "description": "Sauvegarder vos données dans un fichier de sauvegarde",
+        "description": "Sauvegarder les appareils UVC, pièces et paramètres dans un fichier",
+        "success": "Données exportées avec succès",
+        "downloadStarted": "Téléchargement du fichier de sauvegarde commencé.",
+        "savedToDocs": "Fichier de sauvegarde enregistré dans les documents.",
+        "fileReady": "Fichier de sauvegarde créé dans le cache.",
         "error": {
           "failed": "Échec de l'exportation des données"
         }

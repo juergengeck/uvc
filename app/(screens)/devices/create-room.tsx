@@ -1,21 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { TextInput, Button, useTheme, Text, HelperText, Card, Title, RadioButton } from 'react-native-paper';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useInstance } from '@src/providers/app';
 import { Namespaces } from '@src/i18n/namespaces';
-import type { Room, Department, Organisation } from '@OneObjectInterfaces';
 import type { SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
 import { getObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import type {UvcRoomKind} from '@refinio/uvc.core';
-
-interface DepartmentOption {
-  hash: SHA256Hash;
-  department: Department;
-  displayName: string;
-  orgName?: string;
-}
+import { buildDepartmentOptions } from '@src/utils/organisationOptions';
+import type { DepartmentOption } from '@src/utils/organisationOptions';
 
 export default function CreateRoomScreen() {
   const theme = useTheme();
@@ -38,24 +32,20 @@ export default function CreateRoomScreen() {
   const [error, setError] = useState<string | null>(null);
 
 
-  // Load available departments
-  useEffect(() => {
-    if (models?.appModel?.organisationModel) {
-      loadDepartments();
-    }
-  }, [models?.appModel?.organisationModel]);
-
-  const loadDepartments = async () => {
+  // Reload departments every time the screen gains focus: the user may have
+  // just created one on the pushed create-department screen, and a mount-only
+  // load would keep showing the stale (empty) list with the button disabled.
+  const loadDepartments = useCallback(async () => {
     try {
       setLoadingDepts(true);
       setError(null);
-      
+
       if (!models?.appModel?.organisationModel) {
         console.error('[CreateRoom] OrganisationModel not available');
         setLoadingDepts(false);
         return;
       }
-      
+
       // Check if OrganisationModel is properly initialized
       if (models.appModel.organisationModel.currentState !== 'Initialised') {
         console.warn('[CreateRoom] OrganisationModel not yet initialized, state:', models.appModel.organisationModel.currentState);
@@ -69,30 +59,18 @@ export default function CreateRoomScreen() {
         }, 2000);
         return;
       }
-      
+
       // Get all departments and organisations
       const [depts, orgs] = await Promise.all([
         models.appModel.organisationModel.getAllDepartments(),
         models.appModel.organisationModel.getAllOrganisations()
       ]);
-      
-      // Create a map of org hashes to names for display
-      const orgMap = new Map<string, string>();
-      orgs.forEach(org => {
-        orgMap.set(org.hash, org.organisation.name);
-      });
-      
-      // Build department options with org names for display
-      const deptOptions: DepartmentOption[] = depts.map(item => {
-        const orgName = orgMap.get(item.department.organisation) || 'Unknown';
-        return {
-          hash: item.hash,
-          department: item.department,
-          displayName: `${item.department.name} (${orgName})`,
-          orgName
-        };
-      });
-      
+
+      const deptOptions: DepartmentOption[] = buildDepartmentOptions(
+        depts.map(item => ({ hash: item.hash, department: { name: item.department.name, organisation: item.department.organisation } })),
+        orgs.map(org => ({ hash: org.hash, organisation: { name: org.organisation.name } })),
+      );
+
       console.log('[CreateRoom] Total department options:', deptOptions.length);
       setDepartments(deptOptions);
     } catch (error) {
@@ -100,7 +78,15 @@ export default function CreateRoomScreen() {
     } finally {
       setLoadingDepts(false);
     }
-  };
+  }, [models?.appModel?.organisationModel]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (models?.appModel?.organisationModel) {
+        loadDepartments();
+      }
+    }, [models?.appModel?.organisationModel, loadDepartments]),
+  );
 
   const handleCreate = async () => {
     setError(null);
