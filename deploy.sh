@@ -42,6 +42,24 @@ import hashlib
 import re
 import sys
 root = Path(sys.argv[1])
+# Cloudflare Pages never uploads node_modules directories, so Expo's vendored
+# assets (icon fonts, navigation images) would 404 into the HTML fallback.
+# Serve them from assets/vendor and point the bundles there before versioning.
+vendored = root / 'assets' / 'node_modules'
+if vendored.is_dir():
+    target = root / 'assets' / 'vendor'
+    if target.exists():
+        sys.exit(f'{target} already exists; cannot relocate Expo node_modules assets.')
+    vendored.rename(target)
+    for script in (root / '_expo').rglob('*.js'):
+        text = script.read_text()
+        if '/assets/node_modules/' in text:
+            script.write_text(text.replace('/assets/node_modules/', '/assets/vendor/'))
+stale = [str(path) for path in root.rglob('*') if 'node_modules' in path.parts]
+stale += [str(path) for path in root.rglob('*') if path.suffix in ('.js', '.html', '.css')
+          and '/assets/node_modules/' in path.read_text(errors='ignore')]
+if stale:
+    sys.exit('Deployment still references node_modules assets: ' + ', '.join(stale[:5]))
 html = root / 'mobile.html'
 text = html.read_text().replace('href="/favicon.ico"', 'href="/app-icon.ico"')
 # A CDN can cache the website fallback at a new script URL during rollout.
