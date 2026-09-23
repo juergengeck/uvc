@@ -38,6 +38,32 @@ export function cycleLine(cycle: CycleStateView): string {
   return `cycle ${shortId(cycle.cycleId)}: ${state}, ${cycle.energyReadings} energy / ${cycle.sensorReadings} readings`;
 }
 
+/** A signed record is evidence of a cycle, not a room-release decision. */
+export function roomCleaningStatus(
+  cycles: CycleStateView[],
+  knownCycleIds: string[],
+  unavailable = false,
+): { title: string; detail: string } {
+  if (unavailable || knownCycleIds.some(id => !cycles.some(cycle => cycle.cycleId === id))) {
+    return { title: 'Updating cleaning status', detail: 'Waiting for the latest cleaning record.' };
+  }
+  if (!cycles.length) {
+    return { title: 'Awaiting cleaning', detail: 'No room cleaning has been recorded.' };
+  }
+  if (cycles.some(cycle => !cycle.ended)) {
+    return { title: 'Cleaning in progress', detail: 'The cleaning cycle has not finished.' };
+  }
+  const latestId = knownCycleIds[knownCycleIds.length - 1];
+  const cycle = cycles.find(cycle => cycle.cycleId === latestId) ?? cycles[cycles.length - 1];
+  if (!cycle.energyReadings || !cycle.sensorReadings) {
+    return { title: 'Cleaning not confirmed', detail: 'The cycle ended without a complete cleaning record.' };
+  }
+  if (!cycle.signedBy || cycle.signerRole !== 'admin') {
+    return { title: 'Awaiting verification', detail: 'The cycle has ended. Waiting for Admin to verify its records.' };
+  }
+  return { title: 'Cleaning recorded', detail: 'Admin has verified the cycle records. Room readiness is not assessed by this simulation.' };
+}
+
 export interface ColumnModel {
   role: string;
   title: string;

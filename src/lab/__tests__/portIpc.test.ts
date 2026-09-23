@@ -103,4 +103,16 @@ describe('lane port IPC', () => {
     client.fail(new Error('worker gone'));
     await assertion;
   });
+
+  it('rejects calls started after failure and ignores late results', async () => {
+    const [_dead, hostPort] = linkedPorts();
+    const client = new LaneApiClient(hostPort);
+    const pending = client.call('h', 'm');
+    client.fail(new Error('worker gone'));
+    await expect(pending).rejects.toThrow('worker gone');
+    await expect(client.call('h', 'after-stop')).rejects.toThrow('worker gone');
+
+    // A result already in the browser task queue must not throw after fail().
+    expect(() => _dead.postMessage({ kind: 'ipc-result', id: 1, ok: true, value: 'late' })).not.toThrow();
+  });
 });

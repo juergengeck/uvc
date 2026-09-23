@@ -9,7 +9,8 @@
  * Each page load boots a fresh session: reloading into persisted worker
  * state wedges CHUM (paired and connected, but nothing flows), and one.models
  * offers no repair short of a fresh instance — so every load gets its own
- * storage directory and stale sessions are pruned.
+ * storage directory. Other sessions may still be running in another tab;
+ * never delete their databases during startup.
  */
 import '@refinio/one.core/lib/system/load-browser.js';
 import { startLaneInstance } from './laneInstance.ts';
@@ -22,9 +23,9 @@ interface LaneKeyMessage {
   email?: string;
   secret?: string;
   session?: string;
-  relayUrl?: string;
+  commServerUrl?: string;
+  appBaseUrl?: string;
 }
-
 const scope = self as unknown as DedicatedWorkerGlobalScope & {
   postMessage(message: unknown): void;
   onmessage: ((event: MessageEvent) => void) | null;
@@ -50,11 +51,6 @@ scope.onmessage = (event: MessageEvent) => {
   const session = typeof message.session === 'string' && message.session !== '' ? message.session : 'default';
   const email = typeof message.email === 'string' && message.email.includes('@') ? message.email : `${key}@lab.local`;
   const secret = typeof message.secret === 'string' && message.secret !== '' ? message.secret : `lab-${key}`;
-  const relayUrl = typeof message.relayUrl === 'string' ? message.relayUrl : '';
-  if (relayUrl === '') {
-    scope.postMessage({ kind: 'boot-failed', key, error: 'UVC lab: lane worker needs a relayUrl.' });
-    return;
-  }
   const directory = `uvc-lab-${lane}-${key}-${session}`;
   startLaneInstance({
     port,
@@ -63,35 +59,11 @@ scope.onmessage = (event: MessageEvent) => {
     email,
     secret,
     directory,
-    endpoint: { kind: 'commserver', url: relayUrl },
+    endpoint: { kind: 'lab', url: `lab://${key}` },
     createMessageChannel: () => new MessageChannel(),
+    commServerUrl: typeof message.commServerUrl === 'string' ? message.commServerUrl : undefined,
+    appBaseUrl: typeof message.appBaseUrl === 'string' ? message.appBaseUrl : undefined,
   }).catch(error => {
     scope.postMessage({ kind: 'boot-failed', key, error: error instanceof Error ? error.stack : String(error) });
   });
-  void pruneOldSessions(lane, key, directory);
 };
-
-/** Best-effort cleanup of previous loads' directories. Never blocks boot. */
-async function pruneOldSessions(lane: string, key: string, keep: string): Promise<void> {
-  try {
-    const databases = await indexedDB.databases?.();
-    if (!Array.isArray(databases)) return;
-    const prefix = `uvc-lab-${lane}-${key}-`;
-    await Promise.all(
-      databases
-        .map(entry => entry.name ?? '')
-        .filter(name => name.startsWith(prefix) && name !== keep)
-        .map(
-          name =>
-            new Promise<void>(resolve => {
-              const request = indexedDB.deleteDatabase(name);
-              request.onsuccess = () => resolve();
-              request.onerror = () => resolve();
-              request.onblocked = () => resolve();
-            }),
-        ),
-    );
-  } catch {
-    // IndexedDB enumeration is not portable; stale sessions simply remain.
-  }
-}

@@ -28,9 +28,13 @@ export const UVC_LANE_CYCLE_TYPES = [
   'UvcLanePhase',
   'UvcLaneCycle',
   'UvcLaneLightState',
+  'UvcLaneLightChange',
+  'UvcLaneSensorState',
+  'UvcLaneSensorChange',
   'UvcLaneEnergy',
   'UvcLaneReading',
   'UvcLaneCycleSignature',
+  'UvcLaneChangeAttestation',
   'UvcLaneJournal',
   'UvcLaneStreamHead',
 ] as const;
@@ -38,6 +42,7 @@ export const UVC_LANE_CYCLE_TYPES = [
 interface RecipeRule {
   itemprop: string;
   isId?: boolean;
+  optional?: boolean;
   itemtype: unknown;
 }
 
@@ -57,6 +62,15 @@ const integer = (itemprop: string, isId = false) => ({
 const person = (itemprop: string) => ({
   itemprop,
   itemtype: { type: 'referenceToId', allowedTypes: new Set(['Person']) },
+});
+const objectRef = (itemprop: string, allowedTypes: string[], optional = false) => ({
+  itemprop,
+  ...(optional ? { optional: true } : {}),
+  itemtype: { type: 'referenceToObj', allowedTypes: new Set(allowedTypes) },
+});
+const objectRefArray = (itemprop: string, allowedTypes: string[]) => ({
+  itemprop,
+  itemtype: { type: 'array', item: { type: 'referenceToObj', allowedTypes: new Set(allowedTypes) } },
 });
 
 export const UvcLaneCycleRecipes: LaneRecipe[] = [
@@ -91,6 +105,37 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
   },
   {
     $type$: 'Recipe',
+    name: 'UvcLaneLightChange',
+    rule: [
+      idText('stream'),
+      integer('seq', true),
+      integer('on'),
+      text('reason'),
+      person('updatedBy'),
+      integer('recordedAt'),
+      text('prev'),
+    ],
+  },
+  {
+    $type$: 'Recipe',
+    name: 'UvcLaneSensorState',
+    rule: [idText('stateId'), integer('on'), text('reason'), person('updatedBy'), integer('updatedAt')],
+  },
+  {
+    $type$: 'Recipe',
+    name: 'UvcLaneSensorChange',
+    rule: [
+      idText('stream'),
+      integer('seq', true),
+      integer('on'),
+      text('reason'),
+      person('updatedBy'),
+      integer('recordedAt'),
+      text('prev'),
+    ],
+  },
+  {
+    $type$: 'Recipe',
     name: 'UvcLaneEnergy',
     rule: [
       idText('stream'),
@@ -120,6 +165,24 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
   },
   {
     $type$: 'Recipe',
+    name: 'UvcLaneChangeAttestation',
+    rule: [
+      idText('scope'),
+      text('lane'),
+      text('cycleId'),
+      objectRef('cycleVersion', ['UvcLaneCycle'], true),
+      objectRefArray('lampRecords', ['UvcLaneLightChange', 'UvcLaneEnergy']),
+      objectRefArray('sensorRecords', ['UvcLaneSensorChange', 'UvcLaneReading']),
+      person('signer'),
+      text('signerRole'),
+      integer('signedAt'),
+      objectRef('signingKey', ['Keys']),
+      objectRef('adminRole', ['UvcLaneRole']),
+      text('signature'),
+    ],
+  },
+  {
+    $type$: 'Recipe',
     name: 'UvcLaneJournal',
     rule: [
       idText('stream'),
@@ -128,6 +191,9 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
       text('summary'),
       integer('recordedAt'),
       text('prev'),
+      objectRef('attestation', ['UvcLaneChangeAttestation'], true),
+      // The one lamp or sensor signal this entry reports as signed by `attestation`.
+      objectRef('record', ['UvcLaneLightChange', 'UvcLaneSensorChange'], true),
     ],
   },
   {
@@ -166,6 +232,29 @@ export interface UvcLaneLightState {
   updatedAt: number;
 }
 
+export interface UvcLaneLightChange extends UvcLaneStreamEntry {
+  $type$: 'UvcLaneLightChange';
+  on: number;
+  reason: string;
+  updatedBy: string;
+}
+
+export interface UvcLaneSensorState {
+  $type$: 'UvcLaneSensorState';
+  stateId: string;
+  on: number;
+  reason: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+export interface UvcLaneSensorChange extends UvcLaneStreamEntry {
+  $type$: 'UvcLaneSensorChange';
+  on: number;
+  reason: string;
+  updatedBy: string;
+}
+
 export interface UvcLaneStreamEntry {
   stream: string;
   seq: number;
@@ -194,6 +283,22 @@ export interface UvcLaneCycleSignature {
   recordsJson: string;
 }
 
+export interface UvcLaneChangeAttestation {
+  $type$: 'UvcLaneChangeAttestation';
+  scope: string;
+  lane: string;
+  cycleId: string;
+  cycleVersion?: string;
+  lampRecords: string[];
+  sensorRecords: string[];
+  signer: string;
+  signerRole: string;
+  signedAt: number;
+  signingKey: string;
+  adminRole: string;
+  signature: string;
+}
+
 export interface UvcLaneJournal {
   $type$: 'UvcLaneJournal';
   stream: string;
@@ -202,6 +307,8 @@ export interface UvcLaneJournal {
   summary: string;
   recordedAt: number;
   prev: string;
+  attestation?: string;
+  record?: string;
 }
 
 export interface UvcLaneStreamHead {
@@ -282,6 +389,69 @@ export function createUvcLaneLightState(input: {
   };
 }
 
+export function createUvcLaneLightChange(input: {
+  stream: string;
+  seq: number;
+  on: boolean;
+  reason: string;
+  updatedBy: SHA256IdHash<Person> | string;
+  recordedAt: number;
+  prev?: string;
+}): UvcLaneLightChange {
+  const prev = input.prev ?? '';
+  if (typeof prev !== 'string') fail('prev must be a string.');
+  return {
+    $type$: 'UvcLaneLightChange',
+    stream: laneName(input.stream, 'stream'),
+    seq: timestamp(input.seq, 'seq'),
+    on: input.on === true ? 1 : 0,
+    reason: typeof input.reason === 'string' ? input.reason : '',
+    updatedBy: personHash(input.updatedBy, 'updatedBy'),
+    recordedAt: timestamp(input.recordedAt, 'recordedAt'),
+    prev,
+  };
+}
+
+export function createUvcLaneSensorState(input: {
+  stateId: string;
+  on: boolean;
+  reason: string;
+  updatedBy: SHA256IdHash<Person> | string;
+  updatedAt: number;
+}): UvcLaneSensorState {
+  return {
+    $type$: 'UvcLaneSensorState',
+    stateId: laneName(input.stateId, 'stateId'),
+    on: input.on === true ? 1 : 0,
+    reason: typeof input.reason === 'string' ? input.reason : '',
+    updatedBy: personHash(input.updatedBy, 'updatedBy'),
+    updatedAt: timestamp(input.updatedAt, 'updatedAt'),
+  };
+}
+
+export function createUvcLaneSensorChange(input: {
+  stream: string;
+  seq: number;
+  on: boolean;
+  reason: string;
+  updatedBy: SHA256IdHash<Person> | string;
+  recordedAt: number;
+  prev?: string;
+}): UvcLaneSensorChange {
+  const prev = input.prev ?? '';
+  if (typeof prev !== 'string') fail('prev must be a string.');
+  return {
+    $type$: 'UvcLaneSensorChange',
+    stream: laneName(input.stream, 'stream'),
+    seq: timestamp(input.seq, 'seq'),
+    on: input.on === true ? 1 : 0,
+    reason: typeof input.reason === 'string' ? input.reason : '',
+    updatedBy: personHash(input.updatedBy, 'updatedBy'),
+    recordedAt: timestamp(input.recordedAt, 'recordedAt'),
+    prev,
+  };
+}
+
 export function createUvcLaneEnergy(input: {
   stream: string;
   seq: number;
@@ -341,6 +511,80 @@ export function createUvcLaneCycleSignature(input: {
   };
 }
 
+export function changeAttestationPayload(input: {
+  scope: string;
+  lane: string;
+  cycleId?: string;
+  cycleVersion?: string;
+  lampRecords: string[];
+  sensorRecords: string[];
+  signer: SHA256IdHash<Person> | string;
+  signerRole: string;
+  signedAt: number;
+  signingKey: string;
+  adminRole: string;
+}): string {
+  const cycleVersion = input.cycleVersion;
+  if (cycleVersion !== undefined && (typeof cycleVersion !== 'string' || !HASH.test(cycleVersion))) {
+    fail('cycleVersion must be a SHA-256 hash.');
+  }
+  const lampRecords = input.lampRecords.length > 0 ? idHashList(input.lampRecords, 'lampRecords') : [];
+  const sensorRecords = input.sensorRecords.length > 0 ? idHashList(input.sensorRecords, 'sensorRecords') : [];
+  if (lampRecords.length + sensorRecords.length === 0) fail('attestation needs at least one lamp or sensor record.');
+  if (typeof input.signingKey !== 'string' || !HASH.test(input.signingKey)) fail('signingKey must be a SHA-256 hash.');
+  if (typeof input.adminRole !== 'string' || !HASH.test(input.adminRole)) fail('adminRole must be a SHA-256 hash.');
+  return JSON.stringify({
+    scope: laneName(input.scope, 'scope'),
+    lane: laneName(input.lane, 'lane'),
+    cycleId: typeof input.cycleId === 'string' ? input.cycleId : '',
+    cycleVersion: cycleVersion ?? '',
+    lampRecords,
+    sensorRecords,
+    signer: personHash(input.signer, 'signer'),
+    signerRole: laneName(input.signerRole, 'signerRole'),
+    signedAt: timestamp(input.signedAt, 'signedAt'),
+    signingKey: input.signingKey,
+    adminRole: input.adminRole,
+  });
+}
+
+export function createUvcLaneChangeAttestation(input: {
+  scope: string;
+  lane: string;
+  cycleId?: string;
+  cycleVersion?: string;
+  lampRecords: string[];
+  sensorRecords: string[];
+  signer: SHA256IdHash<Person> | string;
+  signerRole: string;
+  signedAt: number;
+  signingKey: string;
+  adminRole: string;
+  signature: string;
+}): UvcLaneChangeAttestation {
+  const payload = JSON.parse(changeAttestationPayload(input)) as Omit<UvcLaneChangeAttestation, '$type$' | 'signature'> & {
+    cycleVersion: string;
+  };
+  if (typeof input.signature !== 'string' || !/^[0-9a-f]{128}$/.test(input.signature)) {
+    fail('signature must be a 64-byte Ed25519 signature.');
+  }
+  return {
+    $type$: 'UvcLaneChangeAttestation',
+    scope: payload.scope,
+    lane: payload.lane,
+    cycleId: payload.cycleId,
+    ...(payload.cycleVersion === '' ? {} : { cycleVersion: payload.cycleVersion }),
+    lampRecords: payload.lampRecords,
+    sensorRecords: payload.sensorRecords,
+    signer: payload.signer,
+    signerRole: payload.signerRole,
+    signedAt: payload.signedAt,
+    signingKey: payload.signingKey,
+    adminRole: payload.adminRole,
+    signature: input.signature,
+  };
+}
+
 export function createUvcLaneJournal(input: {
   stream: string;
   seq: number;
@@ -348,9 +592,18 @@ export function createUvcLaneJournal(input: {
   summary: string;
   recordedAt: number;
   prev?: string;
+  attestation?: string;
+  record?: string;
 }): UvcLaneJournal {
   const prev = input.prev ?? '';
   if (typeof prev !== 'string') fail('prev must be a string.');
+  if (input.attestation !== undefined && (typeof input.attestation !== 'string' || !HASH.test(input.attestation))) {
+    fail('attestation must be a SHA-256 hash.');
+  }
+  if (input.record !== undefined) {
+    if (typeof input.record !== 'string' || !HASH.test(input.record)) fail('record must be a SHA-256 hash.');
+    if (input.attestation === undefined) fail('a signed record entry needs its attestation.');
+  }
   return {
     $type$: 'UvcLaneJournal',
     stream: laneName(input.stream, 'stream'),
@@ -359,6 +612,8 @@ export function createUvcLaneJournal(input: {
     summary: laneName(input.summary, 'summary'),
     recordedAt: timestamp(input.recordedAt, 'recordedAt'),
     prev,
+    ...(input.attestation === undefined ? {} : { attestation: input.attestation }),
+    ...(input.record === undefined ? {} : { record: input.record }),
   };
 }
 

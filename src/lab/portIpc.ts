@@ -94,6 +94,7 @@ export class LaneApiClient {
   #pending = new Map<number, PendingCall>();
   #feed = new Set<(row: FeedRow) => void>();
   #control = new Set<(message: unknown) => void>();
+  #failure?: Error;
 
   constructor(port: LanePort) {
     this.#port = port;
@@ -105,7 +106,10 @@ export class LaneApiClient {
     const msg = message as Partial<ResultMessage> & { kind?: string; row?: FeedRow };
     if (msg?.kind === 'ipc-result') {
       const task = this.#pending.get(msg.id as number);
-      if (!task) throw new Error(`Lane IPC: result for unknown call ${msg.id}.`);
+      // A worker can answer after the host has failed or stopped it. The
+      // response is no longer actionable; do not turn that expected race
+      // into an uncaught exception on the message event loop.
+      if (!task) return;
       this.#pending.delete(msg.id as number);
       if (msg.ok) task.resolve(msg.value);
       else task.reject(new Error(msg.error));
@@ -119,10 +123,16 @@ export class LaneApiClient {
   }
 
   #invoke(channel: string, ...args: unknown[]): Promise<unknown> {
+    if (this.#failure) return Promise.reject(this.#failure);
     const id = (this.#seq += 1);
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
-      this.#port.postMessage({ kind: 'ipc-invoke', id, channel, args });
+      try {
+        this.#port.postMessage({ kind: 'ipc-invoke', id, channel, args });
+      } catch (error) {
+        this.#pending.delete(id);
+        this.fail(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
@@ -155,7 +165,9 @@ export class LaneApiClient {
   }
 
   fail(error: Error): void {
-    for (const task of this.#pending.values()) task.reject(error);
+    if (!this.#failure) this.#failure = error;
+    const failure = this.#failure;
+    for (const task of this.#pending.values()) task.reject(failure);
     this.#pending.clear();
   }
 }

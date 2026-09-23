@@ -1,13 +1,18 @@
 import {
   UVC_LANE_CYCLE_TYPES,
   UvcLaneCycleRecipes,
+  changeAttestationPayload,
+  createUvcLaneChangeAttestation,
   createUvcLaneCycle,
   createUvcLaneCycleSignature,
   createUvcLaneEnergy,
   createUvcLaneJournal,
   createUvcLaneLightState,
+  createUvcLaneLightChange,
   createUvcLanePhase,
   createUvcLaneReading,
+  createUvcLaneSensorChange,
+  createUvcLaneSensorState,
   createUvcLaneStreamHead,
 } from '../uvcLaneCycleRecipes.ts';
 
@@ -20,9 +25,13 @@ describe('UVC lane cycle recipes', () => {
       'UvcLanePhase',
       'UvcLaneCycle',
       'UvcLaneLightState',
+      'UvcLaneLightChange',
+      'UvcLaneSensorState',
+      'UvcLaneSensorChange',
       'UvcLaneEnergy',
       'UvcLaneReading',
       'UvcLaneCycleSignature',
+      'UvcLaneChangeAttestation',
       'UvcLaneJournal',
       'UvcLaneStreamHead',
     ]);
@@ -32,9 +41,13 @@ describe('UVC lane cycle recipes', () => {
     expect(isId('UvcLanePhase')).toEqual(['planId']);
     expect(isId('UvcLaneCycle')).toEqual(['cycleId']);
     expect(isId('UvcLaneLightState')).toEqual(['stateId']);
+    expect(isId('UvcLaneLightChange')).toEqual(['stream', 'seq']);
+    expect(isId('UvcLaneSensorState')).toEqual(['stateId']);
+    expect(isId('UvcLaneSensorChange')).toEqual(['stream', 'seq']);
     expect(isId('UvcLaneEnergy')).toEqual(['stream', 'seq']);
     expect(isId('UvcLaneReading')).toEqual(['stream', 'seq']);
     expect(isId('UvcLaneCycleSignature')).toEqual(['cycleId']);
+    expect(isId('UvcLaneChangeAttestation')).toEqual(['scope']);
     expect(isId('UvcLaneJournal')).toEqual(['stream', 'seq']);
     expect(isId('UvcLaneStreamHead')).toEqual(['stream']);
   });
@@ -68,6 +81,14 @@ describe('UVC lane cycle recipes', () => {
       updatedBy: PERSON,
       updatedAt: 12,
     });
+    expect(createUvcLaneSensorState({ stateId: 'sensor', on: false, reason: 'manual off', updatedBy: PERSON, updatedAt: 13 })).toEqual({
+      $type$: 'UvcLaneSensorState',
+      stateId: 'sensor',
+      on: 0,
+      reason: 'manual off',
+      updatedBy: PERSON,
+      updatedAt: 13,
+    });
   });
 
   it('creates metered streams, signatures, journals, and heads', () => {
@@ -85,6 +106,12 @@ describe('UVC lane cycle recipes', () => {
     expect(
       createUvcLaneReading({ stream: 'c1:sensor', seq: 0, irradianceMwCm2: 42, recordedBy: PERSON, recordedAt: 14, prev: 'h' }),
     ).toMatchObject({ $type$: 'UvcLaneReading', seq: 0, irradianceMwCm2: 42, prev: 'h' });
+    expect(
+      createUvcLaneLightChange({ stream: 'lane:light-changes', seq: 0, on: false, reason: 'off', updatedBy: PERSON, recordedAt: 14 }),
+    ).toMatchObject({ $type$: 'UvcLaneLightChange', seq: 0, on: 0, reason: 'off', prev: '' });
+    expect(
+      createUvcLaneSensorChange({ stream: 'lane:sensor-changes', seq: 0, on: true, reason: 'on', updatedBy: PERSON, recordedAt: 14 }),
+    ).toMatchObject({ $type$: 'UvcLaneSensorChange', seq: 0, on: 1, reason: 'on', prev: '' });
     expect(
       createUvcLaneCycleSignature({ cycleId: 'c1', signerRole: 'admin', signer: PERSON, signedAt: 15, recordIds: [HASH] }),
     ).toEqual({
@@ -105,6 +132,29 @@ describe('UVC lane cycle recipes', () => {
       head: HASH,
       count: 1,
     });
+  });
+
+  it('creates a canonical signed change attestation over exact object versions', () => {
+    const input = {
+      scope: 'c1',
+      lane: 'lane',
+      cycleId: 'c1',
+      cycleVersion: HASH,
+      lampRecords: [HASH],
+      sensorRecords: ['a'.repeat(64)],
+      signer: PERSON,
+      signerRole: 'admin',
+      signedAt: 17,
+      signingKey: 'b'.repeat(64),
+      adminRole: 'c'.repeat(64),
+    };
+    expect(changeAttestationPayload(input)).toBe(JSON.stringify(input));
+    expect(createUvcLaneChangeAttestation({ ...input, signature: 'd'.repeat(128) })).toEqual({
+      $type$: 'UvcLaneChangeAttestation',
+      ...input,
+      signature: 'd'.repeat(128),
+    });
+    expect(() => createUvcLaneChangeAttestation({ ...input, signature: 'bad' })).toThrow('signature');
   });
 
   it('rejects backward closes, empty signatures, and bad hashes', () => {

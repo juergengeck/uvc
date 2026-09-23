@@ -4,10 +4,32 @@ import {
   connectionLine,
   cycleLine,
   journalLine,
+  roomCleaningStatus,
   shortId,
 } from '../laneViewModel.ts';
 
 describe('lane column view model', () => {
+  it('reports cleaning progress without equating signed records with room readiness', () => {
+    const cycle = { cycleId: 'c', planId: 'p', ended: true, energyReadings: 2, sensorReadings: 1, signedBy: 'a', signerRole: 'admin' };
+    expect(roomCleaningStatus([], []).title).toBe('Awaiting cleaning');
+    expect(roomCleaningStatus([cycle], ['c'], true).title).toBe('Updating cleaning status');
+    expect(roomCleaningStatus([cycle], ['c', 'new']).title).toBe('Updating cleaning status');
+    expect(roomCleaningStatus([{ ...cycle, ended: false }], ['c']).title).toBe('Cleaning in progress');
+    expect(roomCleaningStatus([{ ...cycle, energyReadings: 0 }], ['c']).title).toBe('Cleaning not confirmed');
+    expect(roomCleaningStatus([{ ...cycle, sensorReadings: 0 }], ['c']).title).toBe('Cleaning not confirmed');
+    expect(roomCleaningStatus([{ ...cycle, signedBy: null }], ['c']).title).toBe('Awaiting verification');
+    expect(roomCleaningStatus([{ ...cycle, signerRole: 'lamp' }], ['c']).title).toBe('Awaiting verification');
+    expect(roomCleaningStatus([cycle], ['c'])).toEqual({
+      title: 'Cleaning recorded',
+      detail: 'Admin has verified the cycle records. Room readiness is not assessed by this simulation.',
+    });
+    // A previous verified cycle must not conceal an open cycle or a newer incomplete record.
+    const open = { ...cycle, cycleId: 'open', ended: false };
+    expect(roomCleaningStatus([open, cycle], ['open', 'c']).title).toBe('Cleaning in progress');
+    const incomplete = { ...cycle, cycleId: 'new', energyReadings: 0 };
+    expect(roomCleaningStatus([incomplete, cycle], ['c', 'new']).title).toBe('Cleaning not confirmed');
+  });
+
   it('shortens hashes and degrades missing ones', () => {
     expect(shortId('a'.repeat(64))).toBe('a'.repeat(12));
     expect(shortId(null)).toBe('—');
@@ -25,8 +47,8 @@ describe('lane column view model', () => {
 
   it('summarizes chats, journals, and cycles', () => {
     expect(chatLine({ seq: 0, sender: 's', text: 'hi', sentAt: 1 })).toBe('s: hi');
-    expect(journalLine({ idHash: 'h', seq: 0, kind: 'signature', summary: 'signed', recordedAt: 1, signatures: [] })).toBe(
-      '[signature] signed',
+    expect(journalLine({ idHash: 'h', seq: 0, kind: 'attestation', summary: 'signed', recordedAt: 1, signatures: [], verified: true })).toBe(
+      '[attestation] signed',
     );
     expect(
       cycleLine({ cycleId: 'c', planId: 'p', ended: true, energyReadings: 2, sensorReadings: 1, signedBy: 'a', signerRole: 'admin' }),
@@ -43,8 +65,10 @@ describe('lane column view model', () => {
       instanceId: 'i',
       connections: [{ remotePersonId: 'q', remoteInstanceId: null, isConnected: true, isInternetOfMe: false }],
       chatTail: [],
-      journalTail: [{ idHash: 'h', seq: 0, kind: 'light', summary: 'ON', recordedAt: 1, signatures: [] }],
+      journalTail: [{ idHash: 'h', seq: 0, kind: 'light', summary: 'ON', recordedAt: 1, signatures: [], verified: false }],
       cycles: [],
+      deviceChanges: [],
+      attestations: [],
     };
     const live = columnModel(snapshot, { paused: false });
     expect(live.badge).toBe('live');

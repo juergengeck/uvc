@@ -1,30 +1,32 @@
-import { buildUvcIoMInviteUrl, decodeUvcIoMInvite } from '../iomInvite.ts';
+import { buildUvcIoMInviteUrl, decodeUvcIoMInvite, normalizeUvcLabUrl } from '../iomInvite.ts';
 
 const VERSION = 7;
 const PERSON = 'a'.repeat(64);
 const PUBLIC_KEY = 'k'.repeat(40);
 const TOKEN = 'u0j_hEFqjQ93oS_GB8-Lxyz12';
-const RELAY = 'wss://relay.example.test/comm';
+const COMM_SERVER = 'wss://api.glue.one/comm';
+const APP_BASE = 'https://projektor.one/browser/#/uvclab';
 const EMAIL = 'admin@lab.local';
 
 const built = (): string =>
-  buildUvcIoMInviteUrl({ relayUrl: RELAY, email: EMAIL, person: PERSON, token: TOKEN, publicKey: PUBLIC_KEY, pairingProtocolVersion: VERSION })
+  buildUvcIoMInviteUrl({ appBaseUrl: APP_BASE, email: EMAIL, person: PERSON, token: TOKEN, url: COMM_SERVER, publicKey: PUBLIC_KEY, pairingProtocolVersion: VERSION })
     .invitationUrl;
 
 describe('lane IoM invitation codec', () => {
   it('round-trips a minted invitation', () => {
-    const { invitationUrl, joinRoomUrl } = buildUvcIoMInviteUrl({
-      relayUrl: RELAY,
+    const { invitationUrl } = buildUvcIoMInviteUrl({
+      appBaseUrl: APP_BASE,
       email: EMAIL,
       person: PERSON,
       token: TOKEN,
+      url: COMM_SERVER,
       publicKey: PUBLIC_KEY,
       pairingProtocolVersion: VERSION,
     });
-    expect(joinRoomUrl).toBe(`${RELAY}?token=${TOKEN}&side=join`);
+    expect(invitationUrl).toContain('projektor.one/browser/');
     expect(decodeUvcIoMInvite(invitationUrl, VERSION)).toEqual({
       token: TOKEN,
-      url: joinRoomUrl,
+      url: COMM_SERVER,
       publicKey: PUBLIC_KEY,
       pairingProtocolVersion: VERSION,
       pairingMode: 'primed',
@@ -72,8 +74,28 @@ describe('lane IoM invitation codec', () => {
     url.searchParams.set('fe', 'not-an-email');
     expect(() => decodeUvcIoMInvite(url.toString(), VERSION)).toThrow('bad email');
     expect(() => decodeUvcIoMInvite(':::not-a-url:::', VERSION)).toThrow();
-    expect(() => buildUvcIoMInviteUrl({ relayUrl: RELAY, email: 'nope', person: PERSON, token: TOKEN, publicKey: PUBLIC_KEY, pairingProtocolVersion: VERSION })).toThrow(
+    expect(() => buildUvcIoMInviteUrl({ appBaseUrl: APP_BASE, email: 'nope', person: PERSON, token: TOKEN, url: COMM_SERVER, publicKey: PUBLIC_KEY, pairingProtocolVersion: VERSION })).toThrow(
       'bad email',
     );
   });
+
+  it('rejects non-websocket pairing services', () => {
+    expect(() => buildUvcIoMInviteUrl({
+      appBaseUrl: APP_BASE,
+      email: EMAIL,
+      person: PERSON,
+      token: TOKEN,
+      url: 'https://api.glue.one/comm',
+      publicKey: PUBLIC_KEY,
+      pairingProtocolVersion: VERSION,
+    })).toThrow('bad commserver');
+  });
 });
+
+ it('restores Expo Router fragment-before-query serialization for joined devices', () => {
+   const canonical = new URL(built());
+   canonical.searchParams.set('role', 'admin');
+   const expoUrl = `${canonical.origin}${canonical.pathname}${canonical.hash}${canonical.search}`;
+   expect(normalizeUvcLabUrl(expoUrl).href).toBe(canonical.href);
+   expect(decodeUvcIoMInvite(expoUrl, VERSION)).toEqual(decodeUvcIoMInvite(canonical.href, VERSION));
+ });

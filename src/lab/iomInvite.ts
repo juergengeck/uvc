@@ -7,8 +7,12 @@
  * an `encodeURIComponent(JSON)` fragment carrying `{token, url, publicKey,
  * pairingProtocolVersion, pairingMode: "primed", identityRelation:
  * "same-person", deviceEnrollmentPersonId, mode: "IoM"}`. The fragment `url`
- * is the join-side relay room; the origin is only an entry point and is
- * never fetched. Acceptance is paste-only; no route links to it.
+ * is the Glue commserver both sides dial. The visible origin is only the UVC
+ * lane entry point and is never fetched by the codec.
+ *
+ * The invitation fragment carries the canonical commserver URL returned by
+ * PairingManager. The visible URL points back to the UVC lane so scanning it
+ * opens the joining app; it is not a relay endpoint.
  *
  * The pairing protocol version is injected by the caller (it lives in
  * one.models, which this runtime-import-free module must not touch) so the
@@ -17,7 +21,7 @@
 
 export interface UvcIoMInvite {
   token: string;
-  /** Join-side rendezvous room both devices dial through the relay. */
+  /** Commserver both devices dial for discovery and pairing. */
   url: string;
   publicKey: string;
   pairingProtocolVersion: number;
@@ -40,36 +44,52 @@ function reject(reason: string): never {
   throw new Error(`UVC lab: not a lane IoM invitation (${reason}).`);
 }
 
-export function relayRoomUrl(relay: string, token: string, side: 'host' | 'join'): string {
-  return `${relay}?token=${token}&side=${side}`;
-}
-
-function relayHttpOrigin(relayUrl: string): string {
+function validateCommServerUrl(commServerUrl: string): void {
   let url: URL;
   try {
-    url = new URL(relayUrl);
+    url = new URL(commServerUrl);
   } catch {
-    return reject('bad rendezvous');
+    return reject('bad commserver');
   }
-  if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return reject('bad rendezvous');
-  return `${url.protocol === 'wss:' ? 'https:' : 'http:'}//${url.host}`;
+  if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return reject('bad commserver');
+}
+
+/** Expo Router can serialize a fragment before its search parameters. Restore
+ * only the encoded JSON invitation shape; payload validation remains strict. */
+export function normalizeUvcLabUrl(value: string): URL {
+  const url = new URL(value);
+  const separator = url.hash.indexOf('?');
+  if (!url.search && /^#%7b/i.test(url.hash) && separator > 0) {
+    const payload = url.hash.slice(0, separator);
+    const query = new URLSearchParams(url.hash.slice(separator + 1));
+    if (/%7d$/i.test(payload) && query.get('invited') === 'true') {
+      url.search = query.toString();
+      url.hash = payload;
+    }
+  }
+  return url;
 }
 
 /** Mint the shareable IoM URL for a primed same-person invitation. */
 export function buildUvcIoMInviteUrl(input: {
-  relayUrl: string;
+  appBaseUrl: string;
   email: string;
   person: string;
   token: string;
+  url: string;
   publicKey: string;
   pairingProtocolVersion: number;
-}): { invitationUrl: string; joinRoomUrl: string } {
-  const { relayUrl, email, person, token, publicKey, pairingProtocolVersion } = input;
+}): { invitationUrl: string } {
+  const { appBaseUrl, email, person, token, url, publicKey, pairingProtocolVersion } = input;
   if (!email.includes('@')) reject('bad email');
   if (!TOKEN_PATTERN.test(token)) reject('bad token');
-  const origin = relayHttpOrigin(relayUrl);
-  const joinRoomUrl = relayRoomUrl(relayUrl, token, 'join');
-  const inviteUrl = new URL(`${origin}/invites/inviteDevice/`);
+  validateCommServerUrl(url);
+  let inviteUrl: URL;
+  try {
+    inviteUrl = new URL(appBaseUrl);
+  } catch {
+    return reject('bad app URL');
+  }
   inviteUrl.searchParams.set('invited', 'true');
   inviteUrl.searchParams.set('connectionMode', 'primed');
   inviteUrl.searchParams.set('fe', email);
@@ -77,7 +97,7 @@ export function buildUvcIoMInviteUrl(input: {
   inviteUrl.hash = encodeURIComponent(
     JSON.stringify({
       token,
-      url: joinRoomUrl,
+      url,
       publicKey,
       pairingProtocolVersion,
       pairingMode: 'primed',
@@ -86,18 +106,18 @@ export function buildUvcIoMInviteUrl(input: {
       mode: 'IoM',
     }),
   );
-  return { invitationUrl: inviteUrl.toString(), joinRoomUrl };
+  return { invitationUrl: inviteUrl.toString() };
 }
 
 /**
  * Strictly validate an invitation URL; anything else fails fast. Only the
- * path (mode), the `fe`/`fdi` params and the fragment (token, relay room)
+ * path (mode), the `fe`/`fdi` params and the fragment (token, commserver)
  * matter — the origin is never fetched.
  */
 export function decodeUvcIoMInvite(invitationUrl: string, pairingProtocolVersion: number): UvcIoMInvite {
   let url: URL;
   try {
-    url = new URL(String(invitationUrl ?? '').trim());
+    url = normalizeUvcLabUrl(String(invitationUrl ?? '').trim());
   } catch {
     return reject('unparseable URL');
   }
@@ -115,8 +135,8 @@ export function decodeUvcIoMInvite(invitationUrl: string, pairingProtocolVersion
   if (pathMode && embeddedMode && pathMode !== embeddedMode) return reject('mode conflict');
   if ((pathMode ?? embeddedMode) !== 'IoM') return reject('wrong mode');
   if (typeof fragment.token !== 'string' || !TOKEN_PATTERN.test(fragment.token)) return reject('bad token');
-  if (typeof fragment.url !== 'string') return reject('bad rendezvous');
-  relayHttpOrigin(fragment.url);
+  if (typeof fragment.url !== 'string') return reject('bad commserver');
+  validateCommServerUrl(fragment.url);
   if (typeof fragment.publicKey !== 'string' || fragment.publicKey.length < 32) return reject('bad public key');
   if (fragment.pairingProtocolVersion !== pairingProtocolVersion) return reject('protocol mismatch');
   if (fragment.pairingMode !== 'primed') return reject('bad pairing mode');

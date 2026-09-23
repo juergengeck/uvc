@@ -1,129 +1,136 @@
-# UVC Lab Lane — operator runbook
+# UVC lab lane
 
-Four browser worker roles (`admin`, `doctor`, `lamp`, `sensor`) in one tab at
-`/lab` (with backward-compatible aliases for `user` and `light`). They register,
-pair over the CommServer handover, run metered disinfection cycles, and the admin
-signs the sensor and actor recordings.
+`/lab` is a development workspace with independent Admin, Doctor, Lamp and Sensor
+workers. It uses the current Amway/EK pattern: staged startup, semantic object
+feeds, separate worker storage, a host-switched local mesh and a separate
+CommServer transport for joining devices. The Flexibel-style lane shows fixed
+360 × 640 mobile views in Admin, Doctor,
+Lamp, Sensor order. All four apps stay side by side in one row, with independent
+vertical scrolling. Each IoM QR invitation sits below its app, outside the mobile view.
+Narrow windows scroll the lane horizontally. A joining device shows only its own app.
 
-The lane presents:
-1. **Doctor App**: Realistic clinical mobile app for room sanitization planning,
-   cycle initiation, emergency halt, active dose tracking, and team messaging.
-2. **Admin App**: Realistic clinical director mobile app for EN 17141 compliance
-   certification queues, one-click sign & certify, and mesh trust monitoring.
-3. **Lamp Simulator**: Physical UVC emitter fixture graphic featuring quartz glass tube,
-   glowing 254nm ultraviolet luminescence rays, tube temperature & wattage telemetry,
-   hardware toggle, and energy delivery pulses.
-4. **Sensor Simulator**: Industrial optical radiometer probe featuring an optical quartz
-   sensor dome, high-contrast digital LCD readout (`mW/cm²` irradiance, `J/m²` dose),
-   manual sample capture, and 1 Hz continuous metering.
-5. **Diagnostics Drawer**: Collapsible low-level telemetry drawer beneath each role for
-   raw ONE connection states, event journals, and IoM enrollment QR codes.
+The real UVC logo and shared green palette identify the workspace. All hardware
+inputs are explicitly simulated. Admin attestations sign exact received record
+versions. They attest to the recorded changes, not hygiene, dose achievement or compliance.
 
-Lane posture (EN 17141): a completed cycle documents delivered energy against
-the planned phase. It is execution evidence, never a conformance claim and
-never microbiological evidence. Lane accounts are synthetic
-(`<role>@lab.local`); no secrets leave the browser.
+## Build and run
 
-## Build
-
-```bash
-npm run build:lane-worker   # esbuild -> public/lane.worker.js (git-ignored)
-npx expo export --platform web   # emits dist/, copies the worker asset
+```sh
+npm run build:lane-worker
+npx expo start --web --port 8081
+# Or create a static web build:
+npx expo export --platform web
 ```
 
-The `/lab` route spawns the worker by URL (`/lane.worker.js`); Metro cannot
-bundle workers, so the bundle step is mandatory — without it the columns
-stay in "waiting for worker".
+Open `http://localhost:8081/lab`. The worker build is required because Metro does
+not bundle Web Workers. Static hosting must serve `/lane.worker.js` and route
+`/lab` to the application. Use HTTPS or localhost for browser crypto support.
 
-## Test
+Startup reports worker initialization, role anchors, each peer pairing and a
+welcome message with verified arrival. A failed pair produces a partial status,
+not a successful mesh claim. Each pair is checked against both expected Person
+and Instance identities. Activity retains the latest 200 events.
 
-```bash
-npm run test:lane            # 45 tests: units + 4-role worker mesh
+## Production deployment
+
+Run `./deploy.sh` to build the worker and Expo app, preserve the public website
+from `../one.uvc/html`, and publish the combined output to Cloudflare Pages
+(`uvc-one`, production branch `main`). Set `UVC_WEBSITE_DIR` to use another local
+copy of those website assets. `./deploy.sh --build-only` assembles the same output
+in `.expo/pages-deploy` without publishing.
+
+The website remains at `/`; `/app/` redirects to the updated `/journal` app.
+Calendar is `/calendar`, and the four-instance lab is `/lab`. The deployment
+allows the Glue relay used by IoM pairing and serves the lab worker without a
+long-lived cache. The app's worker URL includes the worker bundle's SHA-256 build
+version, preventing an older cached worker from running against newer app APIs.
+
+## Exercise a cycle
+
+1. In Lamp, enter a phase title, target dose and duration, then save it.
+2. Start a cycle in Lamp. Select that cycle in Sensor after it replicates.
+3. In Lamp, enter simulated energy in mJ and record it. Recording light on/off
+   changes lab state only; it never operates physical hardware.
+4. In Sensor, use **Record sensor on**, then enter simulated irradiance in mW/cm²
+   and record it. The sensor starts off; **Record sensor off** stops further readings.
+5. Admin automatically signs received lamp and sensor changes and shares the
+   attestations with Doctor. **Device changes** shows pending and attested records.
+   Signing runs in Admin's worker while the cycle is open and after later changes.
+6. Doctor shows room-cleaning progress and verification status. Detailed device
+   changes and the journal are available in Doctor’s Settings. Check the attestation
+   there and in the Admin journal. The receiving
+   worker verifies the signature before marking the corresponding changes attested.
+7. Close the cycle in Lamp when recording is complete. Admin automatically
+   attests the final closed version. Earlier attestations stay in both journals.
+
+Lamp and sensor on/off changes also work without a cycle and are automatically
+attested after they arrive at Admin. These manual simulations never operate physical hardware.
+Signing processes changes in sequence and skips versions already attested, so
+attestation feeds do not create a signing loop. Signing errors appear in Admin.
+
+The view shows actual replicated record counts. It does not derive delivered
+dose from a timer or random measurements. Contact chats and journals are projected
+from storage. Admin and Doctor also project the shared Admin-owned attestation
+stream into their journals, keeping Doctor's own entries independent. Admin can
+explicitly publish role assignments.
+
+## Contact chat
+
+Chat follows Projektor's Amway lane: each app lists its other contacts with a
+chat icon. Select a contact to open a private one-to-one conversation, send with
+**Send** or Enter, and use **Close chat** to return to the contact list. Messages
+show sender and time, with your own messages aligned to the right.
+
+Messages use ONE TopicModel/TopicRoom channels shared only by the two people.
+Closed conversations show unread badges; opening a conversation clears its badge.
+Repeated text counts as separate messages, while replayed channel events do not
+inflate unread counts. Switching to Settings keeps notification subscriptions
+active. Each app's XLSX export includes its own contact-chat history.
+
+## Join another device
+
+Scan the IoM QR below the desired app. Invitations are minted once the workers
+are ready; use **New QR invite** below that app to renew an invitation. Invitations
+expire after ten minutes, and open `/lab?role=…&invited=true…` with the
+pairing payload in the fragment. The second browser boots just that role and
+requires **Join device** to accept the invitation. The worker validates the
+canonical protocol and exact owner identity. Keep the originating browser open.
+To publish team records from the joining device, first use **Publish role assignments**
+on the original Admin. The joining worker reads that replicated role list to
+select the actual team audience, and refuses incomplete assignments.
+The default relay is `wss://api.glue.one/comm`; a `commServer` query parameter may
+select a ws/wss test relay. For a physical phone, use a host address reachable
+from that phone; localhost links refer to the phone itself.
+
+Each app has its own Settings and theme control. Dark mode uses light logo lettering
+with the original green checkmark on a transparent background.
+
+Each visit has a fresh storage directory. Startup never deletes other sessions'
+IndexedDB databases, since another tab may still use them. Unmounting terminates
+workers and rejects outstanding calls. Clearing site data remains a browser action.
+
+## Data
+
+**Settings → Data → Export XLSX** inside each app reads that worker’s snapshot and downloads
+an Excel workbook with Workers, Connections, Cycles, Device changes, Attestations,
+Journal and Messages plus
+an Overview describing scope. Journal and message tails contain up to 20 recent
+entries per worker. An export read failure is shown instead of an empty success.
+This extract is not a backup. Product memory remains in the main application's
+Settings → Data; the lab does not invent a memory collection.
+
+## Verification
+
+```sh
+npm run test:lane
+npx jest src/data --runInBand
+npm run build:lane-worker
+npx expo export --platform web
 ```
 
-The mesh test boots real lane workers in worker threads, pairs them over the
-in-process `lab:` transport, and proves identity isolation, IoP flags, chat
-arrival, same-email person reproduction with foreigner refusal, and a full
-planned → metered → signed cycle with journal evidence. Live CommServer
-pairing was additionally proven headless once (see `/tmp/uvc-lab-spike/`;
-throwaway probe, not committed).
-
-## Operate
-
-Open `/lab` in a browser (`http://localhost:8081/lab`). Boot takes seconds:
-worker anchors, mesh pairing, welcome chat, then per-role IoM QRs. The header
-flips to Live Lane when all four columns report.
-
-### Role Interfaces & Operation Flow
-
-1. **Doctor App (Room Sanitization Controller)**:
-   - **Plan Phase**: Enter a target phase title (e.g. `OR-4 Pre-Op Surface Disinfection`),
-     required target dose (default `250 J/m²`), and planned duration (`120s`).
-   - **Start Cycle**: Dispatches the planned cycle across the mesh.
-   - **Emergency Off**: Halts the cycle immediately, extinguishing lamp emission and
-     closing the running cycle in the journal.
-   - **Team Comms**: View and send real-time coordination messages to other actors in the suite.
-
-2. **Lamp Simulator (254nm Germicidal Fixture)**:
-   - **Fixture Graphic**: Renders a high-output quartz glass emitter tube with cathode/anode
-     filaments. When energized (`ON`), projects vivid 254nm ultraviolet luminescence with
-     dynamic radiation rays and warning indicators.
-   - **Telemetry**: Displays rated wattage (55W / 0W standby) and surface tube temperature.
-   - **Manual Power Toggle**: Switch the lamp emitter state directly from the fixture panel.
-   - **Energy Delivery**: Pulses delivered dose packets (+500 mJ) recorded directly into the
-     active cycle ledger.
-
-3. **Sensor Simulator (Optical Radiometer Probe)**:
-   - **Probe Graphic**: Renders a germicidal optical sensor dome with quartz diffuser window
-     tuned for 254nm spectral sensitivity.
-   - **Digital LCD Readout**: Displays high-contrast industrial measurements:
-     - Real-time Irradiance: `mW/cm²` (drops to baseline when lamp is OFF).
-     - Accumulated Dose: `J/m²` integrated over cycle exposure.
-   - **Sample Reading**: Trigger immediate manual optical acquisition.
-   - **Auto-Meter**: Toggle continuous 1 Hz integration loop for automated exposure metering.
-
-4. **Admin App (Compliance & Quality Assurance)**:
-   - **Certification Queue**: Unsigned completed cycles automatically appear with target vs.
-     measured dosage summaries.
-   - **Sign & Certify**: One-click EN 17141 certification cryptographically signs the record
-     with the Admin's private key, generating an immutable timestamped audit seal.
-   - **Mesh Trust Monitor**: Real-time view of trusted counterparty nodes in the clinical zone.
-
-5. **IoM Second-Device Enrollment**:
-   - Expand the "Hardware & Diagnostics" drawer at the bottom of any column.
-   - Scan the rendered IoM QR code with a mobile device running the Expo app to enroll the
-     phone as an additional trusted device for that role's identity.
-
-### Troubleshooting
-
-- A red notice names the column and step.
-- `signed in as a different person than the seeded pairing`: Worker storage predates the lane.
-  Click "Reset & Re-anchor" or clear browser site data, then reload.
-- `IoM invite unavailable` past a minute: Worker initialization stalled. Click "Reboot Lane".
-- Individual columns are isolated: an issue in one role never crashes the other three.
-
-## Architecture
-
-```text
-/lab (Web browser tab)
- ├── Lane Header (Mesh Status, Reboot, EN 17141 Badge)
- ├── Grid of 4 Roles:
- │    ├── [Doctor]  -> Clinical Phone Frame (Plan, Cycle Control, Chat, Progress)
- │    ├── [Admin]   -> Compliance Phone Frame (Queue, Sign & Certify, Audit Trail)
- │    ├── [Lamp]    -> Physical UVC Fixture Graphic (Quartz Tube, Glow Rays, Telemetry)
- │    └── [Sensor]  -> Optical Radiometer Graphic (LCD Display, Irradiance, Dose)
- └── Diagnostics Drawers (per role):
-      ├── ONE Identity & Instance IDs
-      ├── Handover Links & IoM Flags
-      ├── Device Event Journal
-      └── IoM Enrollment QR
-```
-
-## Follow-ups (out of scope)
-
-1. Live browser run (4 workers + relay + UI) — verify manually on the dev server:
-   all paired, correct IoM flags, chat arrived, full signed cycle, all QRs rendered.
-2. ESP32 bridging service (telemetry → sensor feed, hardware column).
-3. ONE AffirmationCertificate issuance for cycle signatures (lane-local
-   signed records already carry signer, role, timestamp, record hashes).
-4. Committed E2E automation; optional Reset-lane action.
+The lane suite exercises real worker-thread pairing and replication, identity
+isolation, planned/recorded/closed/reviewed cycles, role management, transport
+readiness, IPC lifecycle and strict invitation decoding. A live browser check
+should additionally cover narrow/wide layouts, joining a second tab/device and
+opening the downloaded XLSX. External relay availability is a separate concern
+from the local mesh.

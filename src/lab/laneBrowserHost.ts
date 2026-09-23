@@ -19,7 +19,8 @@ export interface LaneWorkerLaunch {
   email: string;
   secret: string;
   session: string;
-  relayUrl: string;
+  commServerUrl?: string;
+  appBaseUrl: string;
   workerUrl: string;
 }
 
@@ -29,7 +30,8 @@ export function spawnLaneWorker({
   email,
   secret,
   session,
-  relayUrl,
+  commServerUrl,
+  appBaseUrl,
   workerUrl,
 }: LaneWorkerLaunch): SpawnedLaneWorker {
   const WorkerCtor =
@@ -48,11 +50,11 @@ export function spawnLaneWorker({
     // Errors also surface through boot-failed/failed IPC calls; the listener
     // exists so failures are never silent in the console.
   });
-  worker.postMessage({ kind: 'lane-key', key: role, lane, email, secret, session, relayUrl });
+  worker.postMessage({ kind: 'lane-key', key: role, lane, email, secret, session, commServerUrl, appBaseUrl });
   return {
     port,
     terminate: () => worker.terminate(),
     onError: (callback: (error: Error) => void) =>
-      worker.addEventListener('error', event => callback(event instanceof Error ? event : new Error(String(event)))),
+      worker.addEventListener('error', event => callback(new Error(event.message || 'Lane worker failed to load'))),
   };
 }

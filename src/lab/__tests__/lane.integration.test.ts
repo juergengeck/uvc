@@ -85,7 +85,7 @@ async function poll<T>(label: string, fn: () => Promise<T | null>, timeoutMs: nu
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(tmpdir(), 'uvc-lane-'));
-  host = await startLaneHost({ keys: ['admin', 'user'], spawn: spawnWorker });
+  host = await startLaneHost({ keys: ['admin', 'doctor', 'lamp', 'sensor', 'user'], spawn: spawnWorker });
 });
 
 afterAll(async () => {
@@ -191,15 +191,16 @@ describe('lane worker mesh', () => {
   it('reproduces the owner person on the same email and refuses foreigners', async () => {
     const { admin, user } = clients();
     const adminPerson = host?.persons.admin ?? '';
-    // Real key material from the role's own pairing manager; the join room
-    // points at a dead port so the accept run can only proceed past the
-    // identity check, never pair. No relay touched.
+    // Real key material from the role's own pairing manager; the invitation
+    // points at a dead commserver so accept can only proceed past the identity
+    // check, never pair.
     const minted = await admin.call<{ publicKey: string }>('connection', 'createInvite', { mode: 'primed' });
     const { invitationUrl } = buildUvcIoMInviteUrl({
-      relayUrl: 'wss://127.0.0.1:1/comm',
+      appBaseUrl: 'http://localhost/browser/#/uvclab',
       email: 'admin@lab.local',
       person: adminPerson,
       token: 'u0j_hEFqjQ93oS_GB8-L0123456789abcdef',
+      url: 'wss://127.0.0.1:1/comm',
       publicKey: minted.publicKey,
       // Mirrors the stack's PAIRING_PROTOCOL_VERSION (one.models lib
       // declares it as literal 2); the worker checks the fragment against
@@ -242,42 +243,140 @@ describe('lane worker mesh', () => {
         start() {},
       };
       const secondClient = new LaneApiClient(port);
-      // Passes the identity check, then fails reaching the dead relay room —
+      const firstIdentity = await admin.call<{ person: string; instanceId: string }>('uvcLane', 'whoAmI');
+      const secondIdentity = await secondClient.call<{ person: string; instanceId: string }>('uvcLane', 'whoAmI');
+      expect(secondIdentity.person).toBe(firstIdentity.person);
+      expect(secondIdentity.instanceId).toBeTruthy();
+      expect(secondIdentity.instanceId).not.toBe(firstIdentity.instanceId);
+      // Passes the identity check, then fails reaching the dead commserver —
       // proving the token authorizes this same-person instance.
       await expect(
         secondClient.call('uvcLane', 'acceptIoMInvite', { invitationUrl, timeoutMs: 15_000 }),
-      ).rejects.toThrow(/rendezvous|timed out|unreachable|refused|ECONN/i);
+      ).rejects.toThrow(/commserver|timed out|unreachable|refused|ECONN/i);
     } finally {
       await second.terminate();
     }
   });
 
   it('runs a planned, metered, signed cleaning cycle across roles', async () => {
-    const { admin, user } = clients();
+    const { admin, doctor, lamp, sensor } = clients();
     const persons = host?.persons ?? {};
-    const audience = [persons.admin, persons.user];
-    // The user plans the sanitation phase; the light toggles and meters,
-    // the sensor records, the user closes, the admin signs.
-    const { planId } = await user.call<{ planId: string; idHash: string }>('uvcLane', 'planPhase', {
+    const audience = [persons.admin, persons.doctor, persons.lamp, persons.sensor];
+    const roleClients = { admin, doctor, lamp, sensor };
+    const roleNames = Object.keys(roleClients) as Array<keyof typeof roleClients>;
+    await Promise.all(roleNames.map(role => roleClients[role].call('uvcLane', 'configureLane', {
+      lane: LANE,
+      adminPerson: persons.admin,
+    })));
+    for (let i = 0; i < roleNames.length; i += 1) {
+      for (let j = i + 1; j < roleNames.length; j += 1) {
+        const inviter = roleClients[roleNames[i]];
+        const joiner = roleClients[roleNames[j]];
+        const invite = await inviter.call<{ url: string; publicKey: string; token: string; pairingMode?: string }>(
+          'connection',
+          'createInvite',
+          { mode: 'primed' },
+        );
+        await joiner.call('connection', 'connectWithInvite', invite);
+      }
+    }
+    // Sensors start inactive. Only the sensor worker can activate itself, and
+    // readings remain rejected on the producer while it is inactive.
+    await expect(sensor.call('uvcLane', 'readSensorState')).resolves.toBeNull();
+    await expect(
+      sensor.call('uvcLane', 'recordReading', { cycleId: `${LANE}:inactive`, irradianceMwCm2: 1, audience }),
+    ).rejects.toThrow('sensor must be active');
+    await expect(
+      lamp.call('uvcLane', 'setSensorState', { on: true, reason: 'wrong role', audience }),
+    ).rejects.toThrow('only the sensor role');
+
+    const sensorFeed: FeedRow[] = [];
+    const stopSensorFeed = admin.onFeed(row => {
+      if (row.type === 'UvcLaneSensorState' || row.type === 'UvcLaneSensorChange') sensorFeed.push(row);
+    });
+    try {
+      await sensor.call('uvcLane', 'setSensorState', { on: true, reason: 'preflight on', audience });
+      const onState = await poll('sensor on state visible to admin', async () => {
+        const state = await admin.call<{ on: boolean; reason: string } | null>('uvcLane', 'readSensorState');
+        return state?.on === true ? state : null;
+      }, 90_000);
+      expect(onState).toMatchObject({ on: true, reason: 'preflight on' });
+      await sensor.call('uvcLane', 'setSensorState', { on: false, reason: 'preflight off', audience });
+      const offState = await poll('sensor off state visible to admin', async () => {
+        const state = await admin.call<{ on: boolean; reason: string } | null>('uvcLane', 'readSensorState');
+        return state?.on === false ? state : null;
+      }, 90_000);
+      expect(offState).toMatchObject({ on: false, reason: 'preflight off' });
+      await expect(
+        sensor.call('uvcLane', 'recordReading', { cycleId: `${LANE}:inactive`, irradianceMwCm2: 1, audience }),
+      ).rejects.toThrow('sensor must be active');
+      await sensor.call('uvcLane', 'setSensorState', { on: true, reason: 'measurement ready', audience });
+      await poll('sensor activation feed reaches admin', async () => (
+        sensorFeed.some(row => row.type === 'UvcLaneSensorState' && row.kind === 'sensor')
+          && sensorFeed.some(row => row.type === 'UvcLaneSensorChange' && row.kind === 'sensor-change')
+          ? sensorFeed
+          : null
+      ), 90_000);
+    } finally {
+      stopSensorFeed();
+    }
+
+    // Standalone lamp and sensor transitions share one independently
+    // reviewable scope, including ON and OFF before an admin review.
+    await lamp.call('uvcLane', 'setLightState', { on: true, reason: 'preflight on', audience });
+    await lamp.call('uvcLane', 'setLightState', { on: false, reason: 'preflight off', audience });
+    const standalone = await poll('standalone device changes visible', async () => {
+      const read = await admin.call<{ changes: Array<{ hash: string; kind: string }> }>('uvcLane', 'readChanges', {});
+      return read.changes.length === 5 ? read : null;
+    }, 90_000);
+    expect(standalone.changes.filter(change => change.kind === 'sensor')).toHaveLength(3);
+    const signedStandalone = await admin.call<{ verified: boolean; records: number }>('uvcLane', 'signChanges', {
+      audience,
+      expectedHashes: standalone.changes.map(change => change.hash),
+    });
+    expect(signedStandalone).toMatchObject({ verified: true, records: 5 });
+    const doctorStandalone = await poll('doctor receives verified sensor state attestation', async () => {
+      const read = await doctor.call<{
+        changes: Array<{ kind: string; attested: boolean }>;
+        attestation: { verified: boolean; records: string[] } | null;
+      }>('uvcLane', 'readChanges', {});
+      return read.attestation?.verified === true && read.changes.length === 5 ? read : null;
+    }, 90_000);
+    expect(doctorStandalone.changes.filter(change => change.kind === 'sensor').every(change => change.attested)).toBe(true);
+    const doctorStandaloneJournal = await poll('doctor receives shared sensor state attestation journal', async () => {
+      const tail = await doctor.call<{ entries: { kind: string; summary: string; verified: boolean }[] }>('uvcLane', 'tailJournal', {
+        stream: `${LANE}:attestations:admin`,
+      });
+      return tail.entries.some(entry => entry.kind === 'attestation' && entry.verified
+        && entry.summary.includes('3 sensor changes')) ? tail : null;
+    }, 90_000);
+    expect(doctorStandaloneJournal.entries.some(entry => entry.summary.includes('3 sensor changes'))).toBe(true);
+
+    // The lamp configures, starts, meters and closes; the sensor records;
+    // Admin signs the exact received versions for Doctor to review.
+    await expect(doctor.call('uvcLane', 'planPhase', {
+      title: 'Wrong role', targetDoseJm2: 400, durationS: 300, audience,
+    })).rejects.toThrow('only the lamp role configures treatment parameters');
+    const { planId } = await lamp.call<{ planId: string; idHash: string }>('uvcLane', 'planPhase', {
       planId: `${LANE}:plan:ward-round`,
       title: 'Ward round',
       targetDoseJm2: 400,
       durationS: 300,
       audience,
     });
-    const { cycleId } = await user.call<{ cycleId: string; idHash: string }>('uvcLane', 'startCycle', {
+    const { cycleId } = await lamp.call<{ cycleId: string; idHash: string }>('uvcLane', 'startCycle', {
       planId,
       cycleId: `${LANE}:cycle:ward-1`,
       audience,
     });
-    await user.call('uvcLane', 'setLightState', { on: true, reason: `cycle ${cycleId}`, audience });
-    await user.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 1000, audience });
-    await user.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 40, audience });
-    await user.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 1500, audience });
-    await user.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 44, audience });
+    await lamp.call('uvcLane', 'setLightState', { on: true, reason: `cycle ${cycleId}`, audience });
+    await lamp.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 1000, audience });
+    await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 40, audience });
+    await lamp.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 1500, audience });
+    await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 44, audience });
     // Emergency off before the planned close.
-    await user.call('uvcLane', 'setLightState', { on: false, reason: 'emergency off', audience });
-    const closed = await user.call<{
+    await lamp.call('uvcLane', 'setLightState', { on: false, reason: 'emergency off', audience });
+    const closed = await lamp.call<{
       idHash: string;
       energyReadings: number;
       joulesMilliTotal: number;
@@ -285,8 +384,8 @@ describe('lane worker mesh', () => {
     }>('uvcLane', 'closeCycle', { cycleId, reason: 'emergency off — phase complete', audience });
     expect(closed).toMatchObject({ energyReadings: 2, joulesMilliTotal: 2500, sensorReadings: 2 });
     // Only the admin signs; open cycles and double closes fail loudly.
-    await expect(user.call('uvcLane', 'signCycle', { cycleId, audience })).rejects.toThrow('only the admin role');
-    const { cycleId: openId } = await user.call<{ cycleId: string }>('uvcLane', 'startCycle', {
+    await expect(doctor.call('uvcLane', 'signCycle', { cycleId, audience })).rejects.toThrow('only the admin role');
+    const { cycleId: openId } = await lamp.call<{ cycleId: string }>('uvcLane', 'startCycle', {
       planId,
       audience,
     });
@@ -296,13 +395,21 @@ describe('lane worker mesh', () => {
       const read = await admin.call<{ cycle: { endedAt: number } | null }>('uvcLane', 'readCycle', { cycleId: openId });
       return read.cycle && read.cycle.endedAt === 0 ? true : null;
     }, 90_000);
-    await expect(admin.call('uvcLane', 'signCycle', { cycleId: openId, audience })).rejects.toThrow('open cycle');
-    await user.call('uvcLane', 'closeCycle', { cycleId: openId, reason: 'abandoned', audience });
-    await expect(user.call('uvcLane', 'closeCycle', { cycleId, reason: 'again', audience })).rejects.toThrow(
+    await expect(admin.call('uvcLane', 'signChanges', { cycleId: openId, audience })).rejects.toThrow('no received');
+    await lamp.call('uvcLane', 'closeCycle', { cycleId: openId, reason: 'abandoned', audience });
+    await expect(lamp.call('uvcLane', 'closeCycle', { cycleId, reason: 'again', audience })).rejects.toThrow(
       'already closed',
     );
-    const signed = await admin.call<{ idHash: string; records: number }>('uvcLane', 'signCycle', { cycleId, audience });
-    expect(signed.records).toBeGreaterThanOrEqual(3);
+    const pending = await poll('received cycle changes', async () => {
+      const read = await admin.call<{ changes: Array<{ hash: string }> }>('uvcLane', 'readChanges', { cycleId });
+      return read.changes.length === 4 ? read : null;
+    }, 90_000);
+    const signed = await admin.call<{ idHash: string; records: number; verified: boolean }>('uvcLane', 'signChanges', {
+      cycleId,
+      audience,
+      expectedHashes: pending.changes.map(change => change.hash),
+    });
+    expect(signed).toMatchObject({ records: 4, verified: true });
     // Cross-worker evidence: the admin reads the user's replicated cycle,
     // energy, readings, and signature; journals show the signed cycle.
     const evidence = await poll('signed cycle evidence', async () => {
@@ -320,17 +427,242 @@ describe('lane worker mesh', () => {
     expect(evidence.signature?.signer).toBe(persons.admin);
     const light = await admin.call<{ on: boolean; reason: string } | null>('uvcLane', 'readLightState');
     expect(light).toMatchObject({ on: false, reason: 'emergency off' });
-    const adminJournal = await poll('admin journal signature entry', async () => {
-      const tail = await admin.call<{ entries: { kind: string; summary: string }[] }>('uvcLane', 'tailJournal', {
-        stream: `${LANE}:admin`,
+    const adminJournal = await poll('admin journal attestation entry', async () => {
+      const tail = await admin.call<{ entries: { kind: string; summary: string; verified: boolean }[] }>('uvcLane', 'tailJournal', {
+        stream: `${LANE}:attestations:admin`,
       });
-      return tail.entries.some(entry => entry.kind === 'signature' && entry.summary.includes(cycleId)) ? tail : null;
+      return tail.entries.some(entry => entry.kind === 'attestation' && entry.verified && entry.summary.includes('2 energy records and 2 sensor readings')) ? tail : null;
     }, 90_000);
     expect(adminJournal.entries.length).toBeGreaterThanOrEqual(1);
-    const userJournal = await admin.call<{ entries: { kind: string; summary: string }[] }>('uvcLane', 'tailJournal', {
-      stream: `${LANE}:user`,
+    const doctorJournal = await poll('doctor receives verified shared attestation', async () => {
+      const tail = await doctor.call<{ entries: { kind: string; summary: string; verified: boolean }[] }>('uvcLane', 'tailJournal', {
+        stream: `${LANE}:attestations:admin`,
+      });
+      return tail.entries.some(entry => entry.kind === 'attestation' && entry.verified) ? tail : null;
+    }, 90_000);
+    expect(doctorJournal.entries.some(entry => entry.kind === 'attestation' && entry.verified)).toBe(true);
+  });
+
+  it('automatically attests exact later device and closed-cycle versions once', async () => {
+    const { admin, doctor, lamp, sensor } = clients();
+    const persons = host?.persons ?? {};
+    const audience = [persons.admin, persons.doctor, persons.lamp, persons.sensor, persons.user];
+    const attestationStream = `${LANE}:attestations:admin`;
+
+    await expect(
+      doctor.call('uvcLane', 'enableAutomaticAttestation', { audience }),
+    ).rejects.toThrow('only the admin role');
+
+    const controls: unknown[] = [];
+    const stopControls = admin.onControl(message => {
+      if ((message as { kind?: string })?.kind === 'automatic-attestation-changed') controls.push(message);
     });
-    const kinds = userJournal.entries.map(entry => entry.kind);
-    expect(kinds).toEqual(expect.arrayContaining(['phase', 'cycle', 'light']));
+    try {
+      const enabled = await admin.call<{ enabled: boolean; busy: boolean; error: string | null }>(
+        'uvcLane',
+        'enableAutomaticAttestation',
+        { audience },
+      );
+      expect(enabled).toMatchObject({ enabled: true, error: null });
+
+      // The standalone attestation from the preceding test is stale because
+      // later cycle-related lamp transitions also belong to this device scope.
+      // Enabling performs one catch-up pass over that observed scope.
+      const caughtUp = await poll('automatic standalone catch-up reaches doctor', async () => {
+        const read = await doctor.call<{
+          changes: Array<{ attested: boolean }>;
+          attestation: { hash: string; records: string[]; verified: boolean } | null;
+        }>('uvcLane', 'readChanges', {});
+        return read.attestation?.verified === true && read.changes.length > 0
+          && read.changes.every(change => change.attested) ? read : null;
+      }, 90_000);
+      const catchupHash = caughtUp.attestation?.hash;
+      expect(catchupHash).toBeTruthy();
+      await poll('automatic attestation reports idle', async () => {
+        const status = await admin.call<{ enabled: boolean; busy: boolean; error: string | null }>(
+          'uvcLane',
+          'readAutomaticAttestationStatus',
+        );
+        return status.enabled && !status.busy && status.error === null ? status : null;
+      }, 30_000);
+      expect(controls.length).toBeGreaterThan(0);
+
+      // Sensor and lamp changes each trigger a new exact standalone signature
+      // and are shared to the doctor without an explicit signChanges call.
+      const beforeSensorCount = caughtUp.attestation?.records.length ?? 0;
+      await sensor.call('uvcLane', 'setSensorState', { on: false, reason: 'automatic off', audience });
+      const sensorOff = await poll('automatic sensor-off attestation', async () => {
+        const read = await doctor.call<{
+          changes: Array<{ attested: boolean }>;
+          attestation: { hash: string; records: string[]; verified: boolean } | null;
+        }>('uvcLane', 'readChanges', {});
+        return read.attestation?.verified === true && read.attestation.hash !== catchupHash
+          && read.attestation.records.length === beforeSensorCount + 1
+          && read.changes.every(change => change.attested) ? read : null;
+      }, 90_000);
+      await sensor.call('uvcLane', 'setSensorState', { on: true, reason: 'automatic on', audience });
+      const sensorOn = await poll('automatic sensor-on attestation', async () => {
+        const read = await doctor.call<{
+          changes: Array<{ attested: boolean }>;
+          attestation: { hash: string; records: string[]; verified: boolean } | null;
+        }>('uvcLane', 'readChanges', {});
+        return read.attestation?.verified === true && read.attestation.hash !== sensorOff.attestation?.hash
+          && read.attestation.records.length === beforeSensorCount + 2
+          && read.changes.every(change => change.attested) ? read : null;
+      }, 90_000);
+      await lamp.call('uvcLane', 'setLightState', { on: true, reason: 'automatic lamp on', audience });
+      const lampOn = await poll('automatic lamp attestation', async () => {
+        const read = await doctor.call<{
+          changes: Array<{ attested: boolean }>;
+          attestation: { hash: string; records: string[]; verified: boolean } | null;
+        }>('uvcLane', 'readChanges', {});
+        return read.attestation?.verified === true && read.attestation.hash !== sensorOn.attestation?.hash
+          && read.attestation.records.length === beforeSensorCount + 3
+          && read.changes.every(change => change.attested) ? read : null;
+      }, 90_000);
+
+      // Energy and irradiance are signed automatically, then the close event
+      // forces a signature over the same records and the exact closed version.
+      const cycleId = `${LANE}:cycle:auto-attestation`;
+      await lamp.call('uvcLane', 'startCycle', {
+        planId: `${LANE}:plan:ward-round`,
+        cycleId,
+        audience,
+      });
+      await lamp.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 750, audience });
+      await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 37, audience });
+      await lamp.call('uvcLane', 'closeCycle', { cycleId, reason: 'automatic complete', audience });
+      const automaticCycle = await poll('closed cycle automatically attested to doctor', async () => {
+        const read = await doctor.call<{
+          cycle: { endedAt: number } | null;
+          signature: { records: string[]; verified: boolean } | null;
+          attestation: { hash: string; cycleVersion: string | null; records: string[]; verified: boolean } | null;
+        }>('uvcLane', 'readCycle', { cycleId });
+        return read.cycle && read.cycle.endedAt > 0 && read.signature?.verified === true
+          && read.attestation?.verified === true && read.attestation.cycleVersion !== null ? read : null;
+      }, 90_000);
+      expect(automaticCycle.signature?.records).toHaveLength(2);
+      expect(automaticCycle.attestation?.records).toHaveLength(2);
+
+      const settledJournal = await poll('automatic attestation status settles', async () => {
+        const [status, journal] = await Promise.all([
+          admin.call<{ enabled: boolean; busy: boolean; error: string | null }>('uvcLane', 'readAutomaticAttestationStatus'),
+          admin.call<{ entries: Array<{ kind: string; verified: boolean }> }>('uvcLane', 'tailJournal', {
+            stream: attestationStream,
+            limit: 100,
+          }),
+        ]);
+        return status.enabled && !status.busy && status.error === null ? journal : null;
+      }, 30_000);
+      const settledCount = settledJournal.entries.length;
+      const settledCycleHash = automaticCycle.attestation?.hash;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const [sameCycle, sameJournal] = await Promise.all([
+        doctor.call<{ attestation: { hash: string } | null }>('uvcLane', 'readCycle', { cycleId }),
+        admin.call<{ entries: unknown[] }>('uvcLane', 'tailJournal', { stream: attestationStream, limit: 100 }),
+      ]);
+      expect(sameCycle.attestation?.hash).toBe(settledCycleHash);
+      expect(sameJournal.entries).toHaveLength(settledCount);
+      expect(lampOn.attestation?.verified).toBe(true);
+    } finally {
+      stopControls();
+    }
+  });
+
+  it('switches the lamp from chat commands and ignores other text', async () => {
+    const { doctor, lamp } = clients();
+    const persons = host?.persons ?? {};
+    const audience = [persons.admin, persons.doctor, persons.lamp, persons.sensor];
+    type Message = { text: string; sender: string };
+
+    await expect(doctor.call('device', 'enable', { audience })).rejects.toThrow();
+    await lamp.call('device', 'enable', { audience });
+    await Promise.all([
+      doctor.call('chat', 'watchPeers', { peers: [persons.lamp] }),
+      lamp.call('chat', 'watchPeers', { peers: [persons.doctor] }),
+    ]);
+
+    const lampReplies = async (): Promise<string[]> => {
+      const { messages } = await doctor.call<{ messages: Message[] }>('chat', 'readChat', { peer: persons.lamp });
+      return messages.filter(message => message.sender === persons.lamp).map(message => message.text);
+    };
+    const command = async (text: string): Promise<string[]> => {
+      const before = (await lampReplies()).length;
+      await doctor.call('chat', 'sendChat', { peer: persons.lamp, text });
+      return poll(`lamp answers "${text}"`, async () => {
+        const replies = await lampReplies();
+        return replies.length > before ? replies.slice(before) : null;
+      }, 90_000);
+    };
+
+    expect(await command('off')).toEqual([expect.stringMatching(/^Lamp is off · since /)]);
+    await expect(lamp.call('uvcLane', 'readLightState')).resolves.toMatchObject({ on: false, reason: expect.stringMatching(/^Chat command from /) });
+    expect(await command('On')).toEqual([expect.stringMatching(/^Lamp is on · since /)]);
+    await expect(lamp.call('uvcLane', 'readLightState')).resolves.toMatchObject({ on: true });
+
+    // Non-commands get no answer: the next reply belongs to the status command alone.
+    await doctor.call('chat', 'sendChat', { peer: persons.lamp, text: 'please turn on' });
+    expect(await command('status')).toEqual([expect.stringMatching(/^Lamp is on · since /)]);
+  });
+
+  it('cleans the room from one doctor command: lamp cycle, sensor readings, both off', async () => {
+    const { doctor, lamp, sensor } = clients();
+    const persons = host?.persons ?? {};
+    const audience = [persons.admin, persons.doctor, persons.lamp, persons.sensor];
+    type Message = { text: string; sender: string };
+    await sensor.call('device', 'enable', { audience });
+
+    const lampReplies = async (): Promise<string[]> => {
+      const { messages } = await doctor.call<{ messages: Message[] }>('chat', 'readChat', { peer: persons.lamp });
+      return messages.filter(message => message.sender === persons.lamp).map(message => message.text);
+    };
+    const before = (await lampReplies()).length;
+    await doctor.call('chat', 'sendChat', { peer: persons.lamp, text: 'clean' });
+
+    const finished = await poll('lamp reports the finished cleaning', async () => {
+      const replies = (await lampReplies()).slice(before);
+      return replies.length ? replies : null;
+    }, 90_000);
+    expect(finished).toEqual([expect.stringMatching(/^Lamp cleaning finished · 10 s at 3 mW\/cm² · 30000 mJ in 10 energy records/)]);
+
+    const journal = await lamp.call<{ entries: Array<{ summary: string }> }>('uvcLane', 'tailJournal', { stream: `${LANE}:lamp`, limit: 100 });
+    const cycleId = journal.entries.map(entry => /^closed cleaning cycle (\S+) \(Demo room cleaning completed\)/.exec(entry.summary)?.[1]).find(Boolean);
+    expect(cycleId).toBeTruthy();
+
+    const cleaned = await poll('doctor sees the closed cycle with sensor readings', async () => {
+      const read = await doctor.call<{ cycle: { endedAt: number } | null; energyReadings: number; sensorReadings: number }>('uvcLane', 'readCycle', { cycleId });
+      if (read.cycle && read.cycle.endedAt !== 0 && read.energyReadings === 10 && read.sensorReadings > 0) return read;
+      const [sensorCycle, sensorState] = await Promise.all([
+        sensor.call<{ sensorReadings: number; cycle: unknown }>('uvcLane', 'readCycle', { cycleId }),
+        sensor.call('uvcLane', 'readSensorState'),
+      ]);
+      throw new Error(JSON.stringify({ doctor: { ended: read.cycle?.endedAt, energy: read.energyReadings, sensor: read.sensorReadings }, sensorSide: { readings: sensorCycle.sensorReadings, known: !!sensorCycle.cycle }, sensorState }));
+    }, 90_000);
+    expect(cleaned.sensorReadings).toBeGreaterThan(0);
+    await expect(lamp.call('uvcLane', 'readLightState')).resolves.toMatchObject({ on: false });
+    await poll('sensor switches itself off with the lamp', async () => {
+      const state = await sensor.call<{ on: boolean } | null>('uvcLane', 'readSensorState');
+      return state && !state.on ? state : null;
+    }, 30_000);
+
+    // The audit trail: Admin signs each lamp and sensor signal, one verified journal entry apiece.
+    const { admin } = clients();
+    const signals = await poll('admin journals signed lamp and sensor signals', async () => {
+      const tail = await admin.call<{ entries: Array<{ kind: string; summary: string; verified: boolean }> }>(
+        'uvcLane', 'tailJournal', { stream: `${LANE}:attestations:admin`, limit: 100 },
+      );
+      const signed = tail.entries.filter(entry => entry.kind === 'signal' && entry.verified).map(entry => entry.summary);
+      return ['Lamp on', 'Lamp off', 'Sensor on', 'Sensor off'].every(summary => signed.includes(summary)) ? signed : null;
+    }, 90_000);
+    expect(signals).toEqual(expect.arrayContaining(['Lamp on', 'Sensor on']));
+    // Doctor verifies the same signed signals once the admin's journal has replicated.
+    const doctorSignals = await poll('doctor verifies the signed signals', async () => {
+      const tail = await doctor.call<{ entries: Array<{ kind: string; summary: string; verified: boolean }> }>(
+        'uvcLane', 'tailJournal', { stream: `${LANE}:attestations:admin`, limit: 100 },
+      );
+      const signed = tail.entries.filter(entry => entry.kind === 'signal' && entry.verified).map(entry => entry.summary);
+      return signed.includes('Lamp on') && signed.includes('Sensor on') ? signed : null;
+    }, 90_000);
+    expect(doctorSignals).toEqual(expect.arrayContaining(['Lamp on', 'Sensor on']));
   });
 });

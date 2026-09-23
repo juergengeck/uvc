@@ -75,6 +75,8 @@ export interface LaneSeed {
   persons: Record<string, string>;
 }
 
+export type LaneStageListener = (message: string) => void;
+
 /**
  * Boot one worker per role and anchor each role in the lane. Resolves when
  * every role reported ready; callers seed roles independently afterwards.
@@ -83,17 +85,49 @@ export async function bootLane({
   lane,
   roles,
   spawn,
+  onStage,
+  adminPerson,
 }: {
   lane: string;
   roles: string[];
   spawn: (key: string) => SpawnedLaneWorker;
+  onStage?: LaneStageListener;
+  /** Required when booting a secondary-device lane without an admin worker. */
+  adminPerson?: string;
 }): Promise<LaneSeed> {
-  const host = await startLaneHost({ keys: roles, spawn });
+  onStage?.(`Booting ${roles.length} lane worker${roles.length === 1 ? '' : 's'}`);
+  const host = await startLaneHost({
+    keys: roles,
+    spawn: key => {
+      onStage?.(`Starting ${key}`);
+      return spawn(key);
+    },
+  });
   const clients = host.clients as unknown as Record<string, LaneClient>;
-  await Promise.all(
-    roles.map(role => clients[role].call('uvcLane', 'ensureRoleAnchor', { lane })),
-  );
-  return { host, clients, persons: { ...host.persons } };
+  try {
+    onStage?.('Lane workers ready; anchoring roles');
+    const pinnedAdmin = adminPerson ?? host.persons.admin;
+    if (typeof pinnedAdmin !== 'string' || pinnedAdmin === '') {
+      throw new Error('Lane boot needs the established admin Person identity.');
+    }
+    await Promise.all(roles.map(role => clients[role].call('uvcLane', 'configureLane', {
+      lane,
+      adminPerson: pinnedAdmin,
+    })));
+    await Promise.all(roles.map(async role => {
+      onStage?.(`Anchoring ${role}`);
+      await clients[role].call('uvcLane', 'ensureRoleAnchor', { lane });
+      onStage?.(`${role} ready`);
+    }));
+    return { host, clients, persons: { ...host.persons } };
+  } catch (error) {
+    try {
+      await host.stop();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Lane anchor setup and host cleanup failed.');
+    }
+    throw error;
+  }
 }
 
 /**
@@ -129,6 +163,18 @@ export async function invitePair({
   joiner: LaneClient;
   pairTimeoutMs?: number;
 }): Promise<void> {
+  type Identity = { person: string; instanceId: string };
+  type Connection = { remotePersonId: string | null; remoteInstanceId: string | null; isConnected: boolean };
+  const [inviterIdentity, joinerIdentity] = await Promise.all([
+    inviter.call<Identity>('uvcLane', 'whoAmI'),
+    joiner.call<Identity>('uvcLane', 'whoAmI'),
+  ]);
+  for (const [label, identity] of [['inviter', inviterIdentity], ['joiner', joinerIdentity]] as const) {
+    if (!identity || typeof identity.person !== 'string' || !identity.person.trim()
+      || typeof identity.instanceId !== 'string' || !identity.instanceId.trim()) {
+      throw new Error(`Lane pairing ${label} did not report a Person and Instance identity.`);
+    }
+  }
   const invite = await inviter.call<{ url: string; publicKey: string; token: string; pairingMode?: string }>(
     'connection',
     'createInvite',
@@ -143,12 +189,17 @@ export async function invitePair({
   await withOpRetry(
     'pairing',
     async () => {
-      const [aStatus, bStatus] = await Promise.all([
-        inviter.call<{ activeConnections: number }>('connection', 'getStatus'),
-        joiner.call<{ activeConnections: number }>('connection', 'getStatus'),
+      const [aConnections, bConnections] = await Promise.all([
+        inviter.call<Connection[]>('connection', 'listConnections'),
+        joiner.call<Connection[]>('connection', 'listConnections'),
       ]);
-      if (aStatus.activeConnections < 1 || bStatus.activeConnections < 1) {
-        throw new LaneNotReadyError('pairing link not live yet');
+      const hasPeer = (connections: Connection[], peer: Identity): boolean => connections.some(connection => (
+        connection.isConnected === true
+        && connection.remotePersonId === peer.person
+        && connection.remoteInstanceId === peer.instanceId
+      ));
+      if (!hasPeer(aConnections, joinerIdentity) || !hasPeer(bConnections, inviterIdentity)) {
+        throw new LaneNotReadyError('pairing link to the exact peer Person and Instance is not live yet');
       }
       return true;
     },
@@ -220,50 +271,56 @@ export async function snapshotRole({
   ]);
   const chatTail: unknown[] = [];
   for (const thread of threads) {
-    try {
-      const tail = await client.call<{ entries: unknown[] }>('uvcLane', 'tailLaneChat', { thread });
-      chatTail.push(...tail.entries);
-    } catch {
-      // A thread with no head yet is unknown, not broken — skip it.
-    }
+    const tail = await client.call<{ entries: unknown[] }>('uvcLane', 'tailLaneChat', { thread });
+    chatTail.push(...tail.entries);
   }
   let journalTail: unknown[] = [];
   if (journalStream !== undefined) {
-    try {
-      const tail = await client.call<{ entries: unknown[] }>('uvcLane', 'tailJournal', { stream: journalStream });
-      journalTail = tail.entries;
-    } catch {
-      // A journal with no head yet is unknown, not broken — skip it.
+    const tail = await client.call<{ entries: unknown[] }>('uvcLane', 'tailJournal', { stream: journalStream });
+    journalTail = tail.entries;
+    if (role === 'admin' || role === 'doctor') {
+      const roleSuffix = `:${role}`;
+      const lane = journalStream.endsWith(roleSuffix) ? journalStream.slice(0, -roleSuffix.length) : journalStream;
+      const attestations = await client.call<{ entries: unknown[] }>('uvcLane', 'tailJournal', {
+        stream: `${lane}:attestations:admin`,
+        // Each cycle second re-signs its scope; keep enough rows that signed signals stay in view.
+        limit: 100,
+      });
+      journalTail.push(...attestations.entries);
     }
   }
   const cycles: unknown[] = [];
   for (const cycleId of cycleIds ?? []) {
-    try {
-      const read = await client.call<{
-        cycle: { planId: string; endedAt: number } | null;
-        energyReadings: number;
-        sensorReadings: number;
-        signature: { signer: string; signerRole: string } | null;
-      }>('uvcLane', 'readCycle', { cycleId });
-      cycles.push({
-        cycleId,
-        planId: read.cycle?.planId ?? '',
-        ended: (read.cycle?.endedAt ?? 0) > 0,
-        energyReadings: read.energyReadings,
-        sensorReadings: read.sensorReadings,
-        signedBy: read.signature?.signer ?? null,
-        signerRole: read.signature?.signerRole ?? null,
-      });
-    } catch {
-      // An unreplicated cycle is unknown, not broken — skip it.
-    }
+    const read = await client.call<{
+      cycle: { planId: string; endedAt: number } | null;
+      energyReadings: number;
+      sensorReadings: number;
+      signature: { signer: string; signerRole: string; verified: boolean } | null;
+    }>('uvcLane', 'readCycle', { cycleId });
+    if (read.cycle === null) continue;
+    cycles.push({
+      cycleId,
+      planId: read.cycle.planId,
+      ended: read.cycle.endedAt > 0,
+      energyReadings: read.energyReadings,
+      sensorReadings: read.sensorReadings,
+      signedBy: read.signature?.verified === true ? read.signature.signer : null,
+      signerRole: read.signature?.verified === true ? read.signature.signerRole : null,
+    });
   }
-  let lightState: unknown = null;
-  try {
-    lightState = await client.call('uvcLane', 'readLightState');
-  } catch {
-    // Light state not yet replicated or unknown — skip it.
-  }
+  const changeScopes = await client.call<Array<{
+    changes: unknown[];
+    attestation: unknown | null;
+  }>>('uvcLane', 'listChanges', { cycleIds: cycleIds ?? [] });
+  const deviceChanges = changeScopes.flatMap(scope => Array.isArray(scope.changes) ? scope.changes : []);
+  const attestations = changeScopes
+    .map(scope => scope.attestation)
+    .filter((attestation): attestation is unknown => attestation !== null && attestation !== undefined);
+  const lightState = await client.call('uvcLane', 'readLightState');
+  const sensorState = await client.call('uvcLane', 'readSensorState');
+  const automaticAttestation = role === 'admin'
+    ? await client.call('uvcLane', 'readAutomaticAttestationStatus')
+    : null;
   return projectRoleSnapshot({
     role,
     person: who.person,
@@ -272,7 +329,11 @@ export async function snapshotRole({
     chatTail,
     journalTail,
     cycles,
+    deviceChanges,
+    attestations,
     lightState,
+    sensorState,
+    automaticAttestation,
   });
 }
 
@@ -280,69 +341,72 @@ export interface LaneMeshSeed {
   persons: Record<string, string>;
   invites: Record<string, { invitationUrl: string; token: string }>;
   log: string[];
+  failures: string[];
 }
 
 /**
  * Seed a booted lane: full-mesh IoP pairing across every role pair, one
- * welcome chat proving delivery, and a per-role IoM invite for phone
- * enrollment. Roles seed independently — collect per-pair failures into the
- * log and continue, so one bad pair never stops the mesh.
+ * welcome chat proving delivery. IoM invitations are minted only when the
+ * user requests one. Collect per-pair failures and continue, so one bad pair
+ * never stops the mesh.
  */
 export async function seedLaneMesh({
   seed,
   lane,
   roles,
-  relayUrl,
   welcomeThread,
   pairTimeoutMs = 120_000,
   arrivalTimeoutMs = 90_000,
+  onStage,
 }: {
   seed: LaneSeed;
   lane: string;
   roles: string[];
-  relayUrl: string;
   welcomeThread: string;
   pairTimeoutMs?: number;
   arrivalTimeoutMs?: number;
+  onStage?: LaneStageListener;
 }): Promise<LaneMeshSeed> {
   const log: string[] = [];
+  const failures: string[] = [];
+  const record = (message: string, failed = false): void => {
+    log.push(message);
+    if (failed) failures.push(message);
+    onStage?.(message);
+  };
   const persons = { ...seed.persons };
   const audience = roles.map(role => persons[role]).filter((person): person is string => typeof person === 'string');
   for (let i = 0; i < roles.length; i += 1) {
     for (let j = i + 1; j < roles.length; j += 1) {
       const [a, b] = [roles[i], roles[j]];
+      onStage?.(`Pairing ${a} <-> ${b}`);
       try {
         await invitePair({ inviter: seed.clients[a], joiner: seed.clients[b], pairTimeoutMs });
-        log.push(`paired ${a} <-> ${b}`);
+        record(`paired ${a} <-> ${b}`);
       } catch (error) {
-        log.push(`pair ${a} <-> ${b} failed: ${(error as Error)?.message ?? error}`);
+        record(`pair ${a} <-> ${b} failed: ${(error as Error)?.message ?? error}`, true);
       }
     }
   }
-  try {
-    await sendChatAndAwaitArrival({
-      from: seed.clients[roles[0]],
-      to: seed.clients[roles[1]],
-      thread: welcomeThread,
-      text: `lane ${lane} live`,
-      audience,
-      arrivalTimeoutMs,
-    });
-    log.push(`welcome chat delivered on ${welcomeThread}`);
-  } catch (error) {
-    log.push(`welcome chat failed: ${(error as Error)?.message ?? error}`);
-  }
-  const invites: LaneMeshSeed['invites'] = {};
-  for (const role of roles) {
+  if (roles.length > 1) {
+    onStage?.(`Sending welcome chat on ${welcomeThread}`);
     try {
-      const minted = await mintIoMInvite({ client: seed.clients[role], relayUrl });
-      invites[role] = { invitationUrl: minted.invitationUrl, token: minted.token };
-      log.push(`iom qr ready for ${role}`);
+      await sendChatAndAwaitArrival({
+        from: seed.clients[roles[0]],
+        to: seed.clients[roles[1]],
+        thread: welcomeThread,
+        text: `lane ${lane} live`,
+        audience,
+        arrivalTimeoutMs,
+      });
+      record(`welcome chat delivered on ${welcomeThread}`);
     } catch (error) {
-      log.push(`iom qr for ${role} failed: ${(error as Error)?.message ?? error}`);
+      record(`welcome chat failed: ${(error as Error)?.message ?? error}`, true);
     }
+  } else {
+    record('welcome chat skipped: at least two roles are required');
   }
-  return { persons, invites, log };
+  return { persons, invites: {}, log, failures };
 }
 
 /**
@@ -352,12 +416,8 @@ export async function seedLaneMesh({
  */
 export async function mintIoMInvite({
   client,
-  relayUrl,
 }: {
   client: LaneClient;
-  relayUrl: string;
 }): Promise<{ invitationUrl: string; token: string; person: string }> {
-  return client.call<{ invitationUrl: string; token: string; person: string }>('uvcLane', 'createIoMInvite', {
-    relayUrl,
-  });
+  return client.call<{ invitationUrl: string; token: string; person: string }>('uvcLane', 'createIoMInvite');
 }

@@ -1,5 +1,6 @@
 import {
   LaneNotReadyError,
+  bootLane,
   ensureExpectedIdentity,
   invitePair,
   mintIoMInvite,
@@ -9,6 +10,9 @@ import {
   withOpRetry,
 } from '../transport.ts';
 import type { LaneClient, LaneSeed } from '../transport.ts';
+import { startLaneHost } from '../hostSwitch.ts';
+
+jest.mock('../hostSwitch.ts', () => ({ startLaneHost: jest.fn() }));
 
 const stubClient = (impl: Record<string, (params?: Record<string, unknown>) => unknown>): LaneClient => ({
   call: (handler: string, method: string, params?: Record<string, unknown>) => {
@@ -70,28 +74,107 @@ describe('lane transport', () => {
     );
   });
 
-  it('pairs inviter and joiner, then waits for both sides live', async () => {
+  it('stops a booted host when a role anchor fails', async () => {
+    const failure = new Error('anchor storage failed');
+    const stop = jest.fn(async () => undefined);
+    (startLaneHost as jest.Mock).mockResolvedValueOnce({
+      clients: { admin: stubClient({
+        'uvcLane.configureLane': () => ({ ready: true }),
+        'uvcLane.ensureRoleAnchor': () => { throw failure; },
+      }) },
+      persons: { admin: 'admin-person' },
+      stop,
+    });
+    await expect(bootLane({ lane: 'test', roles: ['admin'], spawn: jest.fn() })).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports boot and role anchor progress', async () => {
+    const stages: string[] = [];
+    const stop = jest.fn();
+    const host = {
+      clients: { admin: stubClient({
+        'uvcLane.configureLane': () => ({ ready: true }),
+        'uvcLane.ensureRoleAnchor': () => ({ ready: true }),
+      }) },
+      persons: { admin: 'admin-person' },
+      stop,
+    };
+    (startLaneHost as jest.Mock).mockResolvedValueOnce(host);
+    const seed = await bootLane({ lane: 'test', roles: ['admin'], spawn: jest.fn(), onStage: stage => stages.push(stage) });
+    expect(seed.host).toBe(host);
+    expect(seed.persons).toEqual(host.persons);
+    expect(stages).toEqual(['Booting 1 lane worker', 'Lane workers ready; anchoring roles', 'Anchoring admin', 'admin ready']);
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it('pairs inviter and joiner, then waits for both exact peer instances to be live', async () => {
     const seen: Record<string, unknown>[] = [];
     const inviter = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'inviter-person', instanceId: 'inviter-instance' }),
       'connection.createInvite': params => {
         seen.push(params ?? {});
         return { url: 'lab://admin', publicKey: 'k', token: 't', pairingMode: 'primed' };
       },
-      'connection.getStatus': (() => {
+      'connection.listConnections': (() => {
         let calls = 0;
-        return () => ({ activeConnections: ++calls >= 2 ? 1 : 0 });
+        return () => [{ remotePersonId: 'joiner-person', remoteInstanceId: ++calls >= 2 ? 'joiner-instance' : 'other-instance', isConnected: true }];
       })(),
     });
     const joiner = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'joiner-person', instanceId: 'joiner-instance' }),
       'connection.connectWithInvite': params => {
         seen.push(params ?? {});
         return { person: 'joiner-person' };
       },
-      'connection.getStatus': () => ({ activeConnections: 1 }),
+      'connection.listConnections': () => [{ remotePersonId: 'inviter-person', remoteInstanceId: 'inviter-instance', isConnected: true }],
     });
     await invitePair({ inviter, joiner, pairTimeoutMs: 5_000 });
     expect(seen[0]).toEqual({ mode: 'primed' });
     expect(seen[1]).toEqual({ url: 'lab://admin', publicKey: 'k', token: 't', pairingMode: 'primed' });
+  });
+
+  it.each([
+    { remotePersonId: 'unrelated-person', remoteInstanceId: 'joiner-instance', isConnected: true },
+    { remotePersonId: 'joiner-person', remoteInstanceId: 'other-instance', isConnected: true },
+    { remotePersonId: 'joiner-person', remoteInstanceId: 'joiner-instance', isConnected: false },
+  ])('does not mistake unrelated or disconnected links for pairing readiness: %j', async connection => {
+    const inviter = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'inviter-person', instanceId: 'inviter-instance' }),
+      'connection.createInvite': () => ({ url: 'lab://admin', publicKey: 'k', token: 't' }),
+      'connection.listConnections': () => [connection],
+    });
+    const joiner = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'joiner-person', instanceId: 'joiner-instance' }),
+      'connection.connectWithInvite': () => true,
+      'connection.listConnections': () => [{ remotePersonId: 'inviter-person', remoteInstanceId: 'inviter-instance', isConnected: true }],
+    });
+    await expect(invitePair({ inviter, joiner, pairTimeoutMs: 0 })).rejects.toThrow('exact peer Person and Instance');
+  });
+
+  it('requires the joiner to observe the inviter too', async () => {
+    const inviter = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'a', instanceId: 'ai' }),
+      'connection.createInvite': () => ({ url: 'lab://admin', publicKey: 'k', token: 't' }),
+      'connection.listConnections': () => [{ remotePersonId: 'b', remoteInstanceId: 'bi', isConnected: true }],
+    });
+    const joiner = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'b', instanceId: 'bi' }),
+      'connection.connectWithInvite': () => true,
+      'connection.listConnections': () => [{ remotePersonId: 'other', remoteInstanceId: 'oi', isConnected: true }],
+    });
+    await expect(invitePair({ inviter, joiner, pairTimeoutMs: 0 })).rejects.toThrow('exact peer Person and Instance');
+  });
+
+  it('refuses to mint an invitation before both identities are known', async () => {
+    const mint = jest.fn();
+    const inviter = stubClient({
+      'uvcLane.whoAmI': () => ({ person: 'a', instanceId: 'ai' }),
+      'connection.createInvite': mint,
+    });
+    const joiner = stubClient({ 'uvcLane.whoAmI': () => ({ person: 'b', instanceId: '' }) });
+    await expect(invitePair({ inviter, joiner })).rejects.toThrow('joiner did not report a Person and Instance');
+    expect(mint).not.toHaveBeenCalled();
   });
 
   it('treats send-200 as insufficient and waits for arrival', async () => {
@@ -124,10 +207,10 @@ describe('lane transport', () => {
       'connection.listConnections': () => [{ remotePersonId: 'q', isConnected: true, isInternetOfMe: false }],
       'uvcLane.tailLaneChat': params => {
         if (params?.thread === 'known') return { entries: [{ seq: 0, sender: 'q', text: 'hi', sentAt: 1 }] };
-        throw new Error('unknown thread');
+        return { entries: [] };
       },
       'uvcLane.tailJournal': () => ({
-        entries: [{ idHash: 'h', seq: 0, kind: 'cycle', summary: 'started', recordedAt: 2 }],
+        entries: [{ idHash: 'h', seq: 0, kind: 'cycle', summary: 'started', recordedAt: 2, verified: false }],
       }),
       'uvcLane.readCycle': params => {
         if (params?.cycleId === 'c1') {
@@ -135,11 +218,18 @@ describe('lane transport', () => {
             cycle: { planId: 'p1', endedAt: 9 },
             energyReadings: 2,
             sensorReadings: 1,
-            signature: { signer: 'a', signerRole: 'admin' },
+            signature: { signer: 'a', signerRole: 'admin', verified: true },
           };
         }
-        throw new Error('unknown cycle');
+        return { cycle: null, energyReadings: 0, sensorReadings: 0, signature: null };
       },
+      'uvcLane.listChanges': () => ([{
+        scope: 'c1',
+        changes: [{ idHash: 'change-id', hash: 'change-hash', sourceRole: 'sensor', kind: 'reading', summary: 'reading', recordedAt: 3, cycleId: 'c1', attested: true }],
+        attestation: { scope: 'c1', cycleId: 'c1', idHash: 'att-id', hash: 'att-hash', signer: 'a', signerRole: 'admin', signedAt: 4, records: ['change-hash'], verified: true },
+      }]),
+      'uvcLane.readLightState': () => null,
+      'uvcLane.readSensorState': () => null,
     });
     const snapshot = await snapshotRole({
       client,
@@ -154,27 +244,52 @@ describe('lane transport', () => {
       instanceId: 'i',
       connections: [{ remotePersonId: 'q', remoteInstanceId: null, isConnected: true, isInternetOfMe: false }],
       chatTail: [{ seq: 0, sender: 'q', text: 'hi', sentAt: 1 }],
-      journalTail: [{ idHash: 'h', seq: 0, kind: 'cycle', summary: 'started', recordedAt: 2, signatures: [] }],
+      journalTail: [{ idHash: 'h', seq: 0, kind: 'cycle', summary: 'started', recordedAt: 2, signatures: [], verified: false }],
       cycles: [
         { cycleId: 'c1', planId: 'p1', ended: true, energyReadings: 2, sensorReadings: 1, signedBy: 'a', signerRole: 'admin' },
       ],
+      deviceChanges: [{ idHash: 'change-id', hash: 'change-hash', sourceRole: 'sensor', kind: 'reading', summary: 'reading', recordedAt: 3, cycleId: 'c1', attested: true }],
+      attestations: [{ scope: 'c1', cycleId: 'c1', idHash: 'att-id', hash: 'att-hash', signer: 'a', signerRole: 'admin', signedAt: 4, records: ['change-hash'], verified: true }],
       lightState: null,
+      sensorState: null,
+      automaticAttestation: null,
     });
   });
 
-  it('seeds a mesh independently: pairs, chat, and QRs with logged failures', async () => {
+  it.each(['tailLaneChat', 'tailJournal', 'readCycle', 'listChanges', 'readLightState', 'readSensorState', 'readAutomaticAttestationStatus'])(
+    'propagates %s failures instead of presenting an empty snapshot', async method => {
+      const failure = new Error(`${method} storage unavailable`);
+      const client = stubClient({
+        'uvcLane.whoAmI': () => ({ person: 'p', instanceId: 'i' }),
+        'connection.listConnections': () => [],
+        'uvcLane.tailLaneChat': () => ({ entries: [] }),
+        'uvcLane.tailJournal': () => ({ entries: [] }),
+        'uvcLane.readCycle': () => ({ cycle: null }),
+        'uvcLane.listChanges': () => [],
+        'uvcLane.readLightState': () => null,
+        'uvcLane.readSensorState': () => null,
+        'uvcLane.readAutomaticAttestationStatus': () => ({ enabled: true, busy: false, error: null }),
+        [`uvcLane.${method}`]: () => { throw failure; },
+      });
+      await expect(snapshotRole({ client, role: 'admin', threads: ['t'], journalStream: 'j', cycleIds: ['c'] })).rejects.toBe(failure);
+    },
+  );
+
+  it('seeds a mesh with explicit failures and progress, leaving IoM invites for user actions', async () => {
     const calls: string[] = [];
+    const stages: string[] = [];
     const meshClient = (role: string): LaneClient =>
       stubClient({
+        'uvcLane.whoAmI': () => ({ person: `${role}-person`, instanceId: `${role}-instance` }),
         'connection.createInvite': () => ({ url: `lab://${role}`, publicKey: 'k', token: `t-${role}`, pairingMode: 'primed' }),
         'connection.connectWithInvite': () => {
           calls.push(`accept-by-${role}`);
           return { person: `${role}-person` };
         },
-        'connection.getStatus': () => ({ activeConnections: role === 'user' ? 0 : 1 }),
+        'connection.listConnections': () => role === 'user' ? [] : [{ remotePersonId: 'user-person', remoteInstanceId: 'user-instance', isConnected: true }],
         'uvcLane.postLaneChat': () => ({ idHash: 'h', seq: 0 }),
         'uvcLane.tailLaneChat': () => ({ entries: [{ seq: 0, text: 'lane test live' }] }),
-        'uvcLane.createIoMInvite': () => ({ invitationUrl: `https://x/${role}`, token: `iom-${role}`, person: `${role}-person` }),
+        'uvcLane.createIoMInvite': () => { calls.push(`mint-${role}`); return {}; },
       });
     const seed = {
       host: { stop: async () => undefined },
@@ -185,34 +300,40 @@ describe('lane transport', () => {
       seed,
       lane: 'test',
       roles: ['admin', 'user'],
-      relayUrl: 'wss://relay/comm',
       welcomeThread: 'test:welcome',
-      pairTimeoutMs: 200,
+      pairTimeoutMs: 0,
       arrivalTimeoutMs: 5_000,
+      onStage: stage => stages.push(stage),
     });
     // The user side never reports live: the pair failure is logged, and the
-    // mesh continues into chat and QRs instead of stopping.
+    // mesh continues into chat instead of stopping or minting invitations.
     expect(mesh.log).toEqual([
       expect.stringMatching(/pair admin <-> user failed/),
       'welcome chat delivered on test:welcome',
-      'iom qr ready for admin',
-      'iom qr ready for user',
     ]);
-    expect(mesh.invites.admin.invitationUrl).toBe('https://x/admin');
+    expect(mesh.failures).toEqual([mesh.log[0]]);
+    expect(mesh.invites).toEqual({});
+    expect(stages).toEqual(['Pairing admin <-> user', mesh.log[0], 'Sending welcome chat on test:welcome', mesh.log[1]]);
     expect(mesh.persons).toEqual({ admin: 'admin-person', user: 'user-person' });
     expect(calls).toEqual(['accept-by-user']);
+  });
+
+  it('supports a one-role lane without pairing, delivery claims, or invitation minting', async () => {
+    const seed = { host: { stop: async () => undefined }, clients: { admin: stubClient({}) }, persons: { admin: 'p' } } as unknown as LaneSeed;
+    const mesh = await seedLaneMesh({ seed, lane: 'test', roles: ['admin'], welcomeThread: 'welcome' });
+    expect(mesh).toEqual({ persons: { admin: 'p' }, invites: {}, failures: [], log: ['welcome chat skipped: at least two roles are required'] });
   });
 
   it('mints IoM invites as QR payloads', async () => {
     const client = stubClient({
       'uvcLane.createIoMInvite': params => ({
-        invitationUrl: `https://x/invite#${String(params?.relayUrl)}`,
+        invitationUrl: `https://x/invite#${String(params)}`,
         token: 'tok',
         person: 'p',
       }),
     });
-    await expect(mintIoMInvite({ client, relayUrl: 'wss://relay/comm' })).resolves.toEqual({
-      invitationUrl: 'https://x/invite#wss://relay/comm',
+    await expect(mintIoMInvite({ client })).resolves.toEqual({
+      invitationUrl: 'https://x/invite#undefined',
       token: 'tok',
       person: 'p',
     });
