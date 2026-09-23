@@ -3,6 +3,7 @@ import type { MD3Theme } from 'react-native-paper';
 
 type AppTheme = MD3Theme & {
   colors: MD3Theme['colors'] & {
+    brandPrimary: string;
     border: string;
     divider: string;
     modalBackground: string;
@@ -20,13 +21,13 @@ type AppTheme = MD3Theme & {
  */
 export function createThemedStyles(theme: AppTheme) {
   // Common values
-  const borderRadius = 12;
+  const borderRadius = 8;
   const standardPadding = 16;
   const smallPadding = 8;
   const headingFont = Platform.select({
-    ios: 'Georgia',
-    android: 'serif',
-    default: 'Source Serif 4, Georgia, serif',
+    ios: 'System',
+    android: 'sans-serif',
+    default: 'Inter, system-ui, sans-serif',
   });
   
   return StyleSheet.create({
@@ -39,7 +40,7 @@ export function createThemedStyles(theme: AppTheme) {
     
     // Typography
     screenTitle: {
-      fontSize: 30,
+      fontSize: 28,
       fontFamily: headingFont,
       fontWeight: '600',
       paddingHorizontal: standardPadding,
@@ -50,7 +51,7 @@ export function createThemedStyles(theme: AppTheme) {
     },
     sectionHeader: {
       fontSize: 13,
-      fontWeight: '500',
+      fontWeight: '600',
       paddingHorizontal: standardPadding,
       paddingTop: 24,
       paddingBottom: 8,
@@ -62,7 +63,7 @@ export function createThemedStyles(theme: AppTheme) {
       textAlign: 'left',
     },
     itemTitle: {
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: '400',
       color: theme.colors.onSurface,
       textAlign: 'left',
@@ -146,7 +147,7 @@ export function createThemedStyles(theme: AppTheme) {
       marginBottom: 24,
     },
     inputLabel: {
-      fontSize: 17,
+      fontSize: 15,
       color: theme.colors.onSurfaceVariant,
       marginBottom: 8,
       textAlign: 'left',
@@ -157,7 +158,7 @@ export function createThemedStyles(theme: AppTheme) {
       paddingHorizontal: 0,
       paddingVertical: 8,
       paddingBottom: 10,
-      fontSize: 17,
+      fontSize: 16,
       color: theme.colors.onSurface,
       borderWidth: 0,
       borderBottomWidth: StyleSheet.hairlineWidth,
@@ -179,8 +180,8 @@ export function createThemedStyles(theme: AppTheme) {
       justifyContent: 'center',
     },
     buttonPrimaryText: {
-      color: '#ffffff',
-      fontSize: 17,
+      color: theme.colors.onPrimary,
+      fontSize: 16,
       fontWeight: '600',
     },
     buttonSecondary: {
@@ -192,8 +193,8 @@ export function createThemedStyles(theme: AppTheme) {
       justifyContent: 'center',
     },
     buttonSecondaryText: {
-      color: theme.colors.primary, // Use theme primary color (green)
-      fontSize: 17,
+      color: theme.colors.primary,
+      fontSize: 15,
       fontWeight: '400',
     },
     buttonLink: {
@@ -202,8 +203,8 @@ export function createThemedStyles(theme: AppTheme) {
       justifyContent: 'center',
     },
     buttonLinkText: {
-      color: theme.colors.primary, // Use theme primary color (green)
-      fontSize: 17,
+      color: theme.colors.primary,
+      fontSize: 15,
       fontWeight: '400',
     },
     
@@ -243,7 +244,7 @@ export function createThemedStyles(theme: AppTheme) {
       paddingVertical: 14,
     },
     collapsibleHeaderText: {
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: '600',
       color: theme.colors.onSurface,
       textAlign: 'left',
@@ -256,7 +257,7 @@ export function createThemedStyles(theme: AppTheme) {
     // Action buttons (for Start screen)
     actionButton: {
       borderWidth: 1,
-      borderColor: theme.colors.primary, // Use theme primary color (green)
+      borderColor: theme.colors.primary,
       borderRadius: borderRadius,
       paddingVertical: 12,
       marginVertical: 8,
@@ -264,8 +265,8 @@ export function createThemedStyles(theme: AppTheme) {
       justifyContent: 'center',
     },
     actionButtonText: {
-      color: theme.colors.primary, // Use theme primary color (green)
-      fontSize: 17,
+      color: theme.colors.primary,
+      fontSize: 15,
       fontWeight: '400',
     },
     
@@ -295,7 +296,7 @@ export function createThemedStyles(theme: AppTheme) {
     // Loading overlay
     loadingOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: theme.dark ? 'rgba(0, 0, 0, 0.28)' : 'rgba(36, 35, 31, 0.12)',
+      backgroundColor: theme.dark ? 'rgba(0, 0, 0, 0.28)' : 'rgba(36, 44, 53, 0.12)',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000,

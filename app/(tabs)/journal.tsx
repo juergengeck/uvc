@@ -241,15 +241,6 @@ export default function JournalScreen() {
         <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
           {tJournal('description')}
         </Text>
-        <Button
-          compact
-          icon="devices"
-          mode="outlined"
-          onPress={() => router.push('/(screens)/devices')}
-          style={styles.devicesButton}
-        >
-          {tJournal('devices')}
-        </Button>
         <View style={styles.treatmentActions}>
           {activeRun ? (
             <Button
@@ -258,6 +249,7 @@ export default function JournalScreen() {
               mode="contained"
               onPress={stopTreatment}
               buttonColor={theme.colors.error}
+              contentStyle={styles.actionButtonContent}
             >
               {tJournal('stop')}
             </Button>
@@ -271,6 +263,7 @@ export default function JournalScreen() {
                   loading={treatmentBusy}
                   mode="contained"
                   onPress={() => setRoomMenuVisible(true)}
+                  contentStyle={styles.actionButtonContent}
                 >
                   {tJournal('start')}
                 </Button>
@@ -338,13 +331,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 18,
   },
-  devicesButton: {
-    alignSelf: 'flex-start',
+  treatmentActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 5,
   },
-  treatmentActions: {
-    alignSelf: 'flex-start',
-    marginTop: 5,
+  actionButtonContent: {
+    minHeight: 44,
   },
   activeNotice: {
     alignItems: 'center',

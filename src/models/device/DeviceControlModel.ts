@@ -322,7 +322,7 @@ export class DeviceControlModel {
         }
         const source = event.remotePersonId;
         const tail = (this.consumeTails.get(source) ?? Promise.resolve())
-          .then(() => this.consumeImportedBatch(event.batch.imported, event.remotePersonId))
+          .then(() => this.consumeImportedBatch(event.batch.advancedFrontiers, event.remotePersonId))
           .catch(error => {
             console.error('[DeviceControlModel] Failed to project imported UVC trie root:', error);
           });

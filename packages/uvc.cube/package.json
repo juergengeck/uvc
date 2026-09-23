@@ -23,10 +23,12 @@
   "dependencies": {
     "@refinio/api": "file:../../../one/packages/refinio.api",
     "@refinio/connection.core": "file:../../../one/packages/connection.core",
+    "@refinio/memory.core": "file:../../../one/packages/memory.core",
     "@refinio/one.core": "file:../../../one/packages/one.core",
     "@refinio/one.models": "file:../../../one/packages/one.models",
     "@refinio/qa.core": "file:../../../one/packages/qa.core",
     "@refinio/settings.core": "file:../../../one/packages/settings.core",
+    "@refinio/settings.devices": "file:../../../one/packages/settings.devices",
     "@refinio/trie.core": "file:../../../one/packages/trie.core",
     "@refinio/uvc.core": "file:../../../one/packages/uvc.core",
     "@shadcn/react": "^0.2.1",

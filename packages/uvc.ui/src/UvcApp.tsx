@@ -6,13 +6,15 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  useRouter,
+  useRouterState,
+  redirect,
 } from '@tanstack/react-router';
 import {
   ChevronLeft,
   Menu,
   Moon,
   Sun,
+  Settings,
 } from 'lucide-react';
 import {
   createContext,
@@ -29,9 +31,8 @@ import { SettingsView } from './views/SettingsView.js';
 import { RoomsView } from './views/RoomsView.js';
 import { RolesView } from './views/RolesView.js';
 import { DataView } from './views/DataView.js';
-import { UvcNavigation, type SidebarState } from './components/UvcNavigation.js';
+import { UvcLogo, UvcMobileNavigation, UvcNavigation, UVC_NAV_ITEMS, type SidebarState } from './components/UvcNavigation.js';
 import { UvcExportButton } from './components/UvcExportButton.js';
-import { PrintPreviewOverlay } from './components/PrintPreviewOverlay.js';
 import type {
   UvcDevicesViewComponent,
   UvcDiscoveryRuntime,
@@ -67,8 +68,8 @@ export function useUvcApp(): UvcAppContextValue {
 function AppLayout() {
   const { brandLogoUrl, onOpenExport, theme, toggleTheme } = useUvcApp();
   const [sidebarState, setSidebarState] = useState<SidebarState>('expanded');
-  const router = useRouter();
-  const currentPath = router.state.location.pathname;
+  const currentPath = useRouterState({ select: state => state.location.pathname });
+  const pageTitle = currentPath === '/settings/data' ? 'Data & Memory' : UVC_NAV_ITEMS.find(item => item.to === currentPath)?.label ?? 'Settings';
 
   return (
     <div className="app-shell">
@@ -77,38 +78,41 @@ function AppLayout() {
         brandLogoUrl={brandLogoUrl}
         onOpenExport={onOpenExport}
         onSidebarStateChange={setSidebarState}
-        onToggleTheme={toggleTheme}
         sidebarState={sidebarState}
-        theme={theme}
       />
 
       <main className="content">
-        {/* Responsive Header Bar when sidebar is collapsed or on narrow viewports */}
         <header className="app-topbar">
           <div className="app-topbar__left">
-            {sidebarState === 'collapsed' && (
-              <button
-                className="action-button action-button--secondary action-button--icon"
-                onClick={() => setSidebarState('expanded')}
-                title="Open menu"
-                type="button"
-              >
-                <Menu aria-hidden="true" />
-              </button>
-            )}
-            {currentPath !== '/' && (
-              <Link
-                className="action-button action-button--ghost action-button--icon"
-                title="Back to Journal"
-                to="/"
-              >
-                <ChevronLeft aria-hidden="true" />
-              </Link>
-            )}
-            <UvcExportButton activeView={currentPath} compact onClick={onOpenExport} />
+            <Link to="/" className="app-mobile-brand" aria-label="UVC Journal">
+              <UvcLogo src={brandLogoUrl} />
+            </Link>
+            <div className="app-desktop-navigation">
+              {sidebarState === 'collapsed' && (
+                <button
+                  className="action-button action-button--secondary action-button--icon"
+                  onClick={() => setSidebarState('expanded')}
+                  title="Open menu"
+                  type="button"
+                >
+                  <Menu aria-hidden="true" />
+                </button>
+              )}
+              {currentPath !== '/' && (
+                <Link
+                  className="action-button action-button--ghost action-button--icon"
+                  title="Back to Journal"
+                  to="/"
+                >
+                  <ChevronLeft aria-hidden="true" />
+                </Link>
+              )}
+              <span className="app-topbar__title">{pageTitle}</span>
+            </div>
           </div>
 
-          <div className="app-topbar__right">
+          <div className="app-topbar__right app-desktop-actions">
+            <UvcExportButton activeView={currentPath} compact onClick={onOpenExport} />
             <button
               className="action-button action-button--ghost action-button--icon"
               onClick={toggleTheme}
@@ -118,33 +122,47 @@ function AppLayout() {
               {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
             </button>
           </div>
+          <Link to="/settings" className="app-mobile-settings" aria-label="Settings" title="Settings"
+            aria-current={currentPath === '/roles' || currentPath.startsWith('/settings/data') ? 'page' : undefined}
+            activeOptions={{ exact: true }}
+            activeProps={{ 'aria-current': 'page' }}>
+            <Settings aria-hidden="true" />
+          </Link>
         </header>
 
         <div className="app-main-content">
           <Outlet />
         </div>
       </main>
+      <UvcMobileNavigation />
     </div>
   );
 }
 
-function JournalRoute() {
+function JournalRoute({mode = 'journal'}: {mode?: 'calendar' | 'journal'}) {
   const { discoveryRuntime, platform } = useUvcApp();
   return (
     <JournalView
+      mode={mode}
       deviceCount={discoveryRuntime?.devices.length ?? 0}
       loadRecords={() => platform.listJournalRecords()}
     />
   );
 }
 
+function CalendarRoute() {
+  return <JournalRoute mode="calendar" />;
+}
+
 function SettingsRoute() {
-  const { discoveryRuntime, runtimeError, settingsSections } = useUvcApp();
+  const { discoveryRuntime, runtimeError, settingsSections, theme, toggleTheme } = useUvcApp();
   return (
     <SettingsView
       discoveryRuntime={discoveryRuntime}
       runtimeError={runtimeError}
       sections={settingsSections}
+      theme={theme}
+      onToggleTheme={toggleTheme}
     />
   );
 }
@@ -158,7 +176,8 @@ function RolesRoute() {
 }
 
 function DataRoute() {
-  return <DataView />;
+  const { platform } = useUvcApp();
+  return <DataView platform={platform} />;
 }
 
 function DevicesRoute() {
@@ -188,6 +207,10 @@ function DevicesRoute() {
         await refreshRuntime(true);
       }}
       onCreateInvitation={() => platform.createPairingInvitation()}
+      onSetConnectionEnabled={async (deviceId, enabled) => {
+        await platform.setPeerConnectionEnabled(deviceId, enabled);
+        await refreshRuntime(true);
+      }}
       onReadLight={readLight}
       onRefresh={() => refreshRuntime(true)}
       onSetLight={setLight}
@@ -204,6 +227,11 @@ const journalRoute = createRoute({
   path: '/',
   component: JournalRoute,
 });
+const calendarRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/calendar',
+  component: CalendarRoute,
+});
 const roomsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/rooms',
@@ -216,8 +244,13 @@ const rolesRoute = createRoute({
 });
 const dataRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/data',
+  path: '/settings/data',
   component: DataRoute,
+});
+const legacyDataRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/data',
+  beforeLoad: () => { throw redirect({ to: '/settings/data' }); },
 });
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -232,9 +265,11 @@ const devicesRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   journalRoute,
+  calendarRoute,
   roomsRoute,
   rolesRoute,
   dataRoute,
+  legacyDataRoute,
   settingsRoute,
   devicesRoute,
 ]);
@@ -263,12 +298,16 @@ export function UvcApp({ brandLogoUrl, DevicesView, platform }: UvcAppProps) {
   const [isRefreshingRuntime, setIsRefreshingRuntime] = useState(false);
   const [busyDeviceIds, setBusyDeviceIds] = useState<Set<string>>(new Set());
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<string>('dark');
-  const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
+  const [theme, setTheme] = useState<string>('light');
 
   const toggleTheme = useCallback(() => {
     setTheme(current => (current === 'dark' ? 'light' : 'dark'));
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.uvcTheme = theme;
+    return () => { delete document.documentElement.dataset.uvcTheme; };
+  }, [theme]);
 
   const refreshRuntime = useCallback(async (refresh = false) => {
     setRuntimeError(null);
@@ -333,7 +372,7 @@ export function UvcApp({ brandLogoUrl, DevicesView, platform }: UvcAppProps) {
     setupDevice,
     theme,
     toggleTheme,
-    onOpenExport: () => setPrintPreviewOpen(true),
+    onOpenExport: () => { void router.navigate({ to: '/settings/data' }); },
   }), [
     brandLogoUrl,
     busyDeviceIds,
@@ -352,11 +391,6 @@ export function UvcApp({ brandLogoUrl, DevicesView, platform }: UvcAppProps) {
   return (
     <UvcAppContext.Provider value={context}>
       <RouterProvider router={router} />
-      <PrintPreviewOverlay
-        activeView={window.location.hash || '/'}
-        onClose={() => setPrintPreviewOpen(false)}
-        open={printPreviewOpen}
-      />
     </UvcAppContext.Provider>
   );
 }

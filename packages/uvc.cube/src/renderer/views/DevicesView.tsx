@@ -6,8 +6,11 @@ import {
   CircleDot,
   Lightbulb,
   Link2,
+  Pause,
+  Play,
   Radio,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   ShieldQuestion,
   Wifi,
@@ -25,8 +28,13 @@ function normalizedTrustState(device: DiscoveryDeviceSnapshot): string {
   return (device.trustState ?? 'unknown').trim().toLowerCase();
 }
 
-function isTrusted(device: DiscoveryDeviceSnapshot): boolean {
-  return ['paired', 'trusted', 'claimed', 'owned', 'accepted', 'verified'].includes(normalizedTrustState(device));
+function isAuthorized(device: DiscoveryDeviceSnapshot): boolean {
+  return device.security?.authorization !== undefined
+    && device.security.authorization !== 'none';
+}
+
+function isIdentityVerified(device: DiscoveryDeviceSnapshot): boolean {
+  return device.security?.identityVerified === true;
 }
 
 function isCamera(device: DiscoveryDeviceSnapshot): boolean {
@@ -114,7 +122,7 @@ function Esp32LedToggle({
     const request = ++requestVersion.current;
     if (!available) {
       setBusy(false);
-      setError('LED control is unavailable while the ESP32 is offline.');
+      setError('LED control is unavailable while the ESP32 is offline or peer connections are paused.');
       return;
     }
     setBusy(true);
@@ -212,6 +220,7 @@ function DeviceCard({
   onPairDevice,
   onReadLight,
   onSetLight,
+  onSetConnectionEnabled,
   onSetupDevice,
 }: {
   busy: boolean;
@@ -221,16 +230,40 @@ function DeviceCard({
   onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
   onReadLight: (deviceId: string, kind: UvcLightDeviceKind) => Promise<UvcLightState>;
   onSetLight: (deviceId: string, kind: UvcLightDeviceKind, enabled: boolean) => Promise<UvcLightState>;
+  onSetConnectionEnabled: (deviceId: string, enabled: boolean) => Promise<void>;
   onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
 }) {
-  const trusted = isTrusted(device);
-  const connected = device.connected === true;
+  const [connectionBusy, setConnectionBusy] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const authorized = local || isAuthorized(device);
+  const identityVerified = local || isIdentityVerified(device);
+  const connected = device.security
+    ? device.security.connectionState === 'connected'
+    : device.connected === true;
   const camera = isCamera(device);
-  const setupAvailable = !trusted
+  const setupAvailable = !authorized
     && !device.ownerId
     && normalizedTrustState(device) === 'unprovisioned'
     && isHeadlessDevice(device);
-  const pairingAvailable = !trusted && Boolean(device.ownerId);
+  const pairingAvailable = !authorized && Boolean(device.ownerId);
+  const authorizationLabel = device.security?.authorization === 'signed-provisioning'
+    ? 'Provisioned'
+    : device.security?.authorization === 'paired'
+      ? 'Paired'
+      : null;
+
+  const toggleConnection = async () => {
+    if (!device.security || !identityVerified || connectionBusy) return;
+    setConnectionBusy(true);
+    setConnectionError(null);
+    try {
+      await onSetConnectionEnabled(device.id, !device.security.connectionEnabled);
+    } catch (error) {
+      setConnectionError(messageFromError(error));
+    } finally {
+      setConnectionBusy(false);
+    }
+  };
 
   return (
     <article className={`flow-device-card${!device.online ? ' flow-device-card--offline' : ''}`}>
@@ -254,9 +287,14 @@ function DeviceCard({
                 <CircleDot /> Connected
               </span>
             ) : null}
-            {trusted ? (
+            {authorizationLabel ? (
               <span className="device-state device-state--trusted">
-                <ShieldCheck /> Approved
+                <ShieldCheck /> {authorizationLabel}
+              </span>
+            ) : null}
+            {authorized && !identityVerified ? (
+              <span className="device-state device-state--offline">
+                <ShieldAlert /> Route identity unverified
               </span>
             ) : null}
           </div>
@@ -266,6 +304,62 @@ function DeviceCard({
           <span className="mono">{deviceEndpoint(device)}</span>
           <span>Seen {formatLastSeen(device.lastSeenAt)}</span>
         </div>
+
+        {device.security ? (
+          <>
+            <p className="pairing-flow__status">{device.security.explanation}</p>
+            <details className="pairing-flow__manager">
+              <summary>Connection &amp; trust details</summary>
+              <dl className="flow-device-card__meta">
+                <div>
+                  <dt>Reachability</dt>
+                  <dd>{device.online ? 'Online' : 'Offline'}</dd>
+                </div>
+                <div>
+                  <dt>Authorization</dt>
+                  <dd>{authorizationLabel ?? 'Not authorized'}</dd>
+                </div>
+                <div>
+                  <dt>Route identity</dt>
+                  <dd>{identityVerified ? 'Verified' : 'Not verified'}</dd>
+                </div>
+                <div>
+                  <dt>Connection policy</dt>
+                  <dd>{device.security.connectionEnabled ? 'Allowed for this Person' : 'Paused for this Person'}</dd>
+                </div>
+                <div>
+                  <dt>Connection state</dt>
+                  <dd>{device.security.connectionState}</dd>
+                </div>
+                {device.ownerId ? (
+                  <div>
+                    <dt>Person</dt>
+                    <dd className="mono">{device.ownerId}</dd>
+                  </div>
+                ) : null}
+                {device.instanceId ? (
+                  <div>
+                    <dt>Instance</dt>
+                    <dd className="mono">{device.instanceId}</dd>
+                  </div>
+                ) : null}
+                {device.publicKey ? (
+                  <div>
+                    <dt>Public key</dt>
+                    <dd className="mono">{device.publicKey}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              <div className="capability-list" aria-label="Connection routes">
+                {device.security.routes.length ? device.security.routes.map((route) => (
+                  <span className="mono" key={route.id}>
+                    {route.transport} · {route.active ? 'active' : 'idle'} · {route.enabled ? 'enabled' : 'disabled'} · {route.id}
+                  </span>
+                )) : <span>No route is currently materialized</span>}
+              </div>
+            </details>
+          </>
+        ) : null}
 
         {device.capabilities?.length ? (
           <div className="capability-list" aria-label="Capabilities">
@@ -277,9 +371,9 @@ function DeviceCard({
       </div>
 
       <div className="flow-device-card__actions">
-        {!local && trusted && isEsp32Device(device) ? (
+        {!local && authorized && identityVerified && isEsp32Device(device) ? (
           <Esp32LedToggle
-            available={device.online === true}
+            available={device.online === true && device.security?.connectionEnabled === true}
             deviceId={device.id}
             onReadLight={onReadLight}
             onSetLight={onSetLight}
@@ -307,14 +401,34 @@ function DeviceCard({
           >
             <Link2 /> {pairing ? 'Creating invite…' : `Pair ${deviceKindLabel(device)}`}
           </button>
-        ) : connected ? (
-          <span className="device-state device-state--trusted">
-            <ShieldCheck /> Authenticated
-          </span>
-        ) : trusted ? (
-          <span className="device-state device-state--offline">
-            <CircleDot /> Waiting for secure connection
-          </span>
+        ) : authorized ? (
+          <>
+            {identityVerified ? (
+              <span className="device-state device-state--trusted">
+                <ShieldCheck /> Identity verified
+              </span>
+            ) : (
+              <span className="device-state device-state--offline">
+                <ShieldAlert /> Pairing does not verify this route
+              </span>
+            )}
+            {identityVerified && device.security ? (
+              <button
+                className="action-button"
+                disabled={connectionBusy}
+                onClick={() => void toggleConnection()}
+                type="button"
+              >
+                {device.security.connectionEnabled ? <Pause /> : <Play />}
+                {connectionBusy
+                  ? 'Updating…'
+                  : device.security.connectionEnabled
+                    ? 'Pause peer connections'
+                    : 'Allow peer connections'}
+              </button>
+            ) : null}
+            {connectionError ? <span className="pairing-flow__status">{connectionError}</span> : null}
+          </>
         ) : (
           <span className="device-state">
             <Radio /> Discovered
@@ -334,6 +448,7 @@ function DeviceGroup({
   onPairDevice,
   onReadLight,
   onSetLight,
+  onSetConnectionEnabled,
   onSetupDevice,
   title,
 }: {
@@ -345,6 +460,7 @@ function DeviceGroup({
   onPairDevice: (device: DiscoveryDeviceSnapshot) => void;
   onReadLight: (deviceId: string, kind: UvcLightDeviceKind) => Promise<UvcLightState>;
   onSetLight: (deviceId: string, kind: UvcLightDeviceKind, enabled: boolean) => Promise<UvcLightState>;
+  onSetConnectionEnabled: (deviceId: string, enabled: boolean) => Promise<void>;
   onSetupDevice: (device: DiscoveryDeviceSnapshot) => void;
   title: string;
 }) {
@@ -369,6 +485,7 @@ function DeviceGroup({
               onPairDevice={onPairDevice}
               onReadLight={onReadLight}
               onSetLight={onSetLight}
+              onSetConnectionEnabled={onSetConnectionEnabled}
               onSetupDevice={onSetupDevice}
             />
           ))}
@@ -388,6 +505,7 @@ export function DevicesView({
   onReadLight,
   onRefresh,
   onSetLight,
+  onSetConnectionEnabled,
   onSetupDevice,
   runtime,
   runtimeError,
@@ -403,8 +521,8 @@ export function DevicesView({
   const [setupError, setSetupError] = useState<string | null>(null);
   const localInstances = runtime?.localInstances ?? [];
   const devices = runtime?.devices ?? [];
-  const discoveredDevices = devices.filter((device) => !isTrusted(device));
-  const approvedDevices = devices.filter(isTrusted);
+  const discoveredDevices = devices.filter((device) => !isAuthorized(device) || !isIdentityVerified(device));
+  const approvedDevices = devices.filter((device) => isAuthorized(device) && isIdentityVerified(device));
   const onlineCount = devices.filter((device) => device.online).length;
   const discoveryEnabled = runtime?.config.discovery?.enabled !== false;
   const discoveryHealthy = runtime?.status.healthy === true;
@@ -468,9 +586,8 @@ export function DevicesView({
     <div className="devices-view">
       <header className="devices-hero">
         <div>
-          <span className="eyebrow">Device workspace</span>
-          <h1>Your UVC devices</h1>
-          <p>Discover nearby hardware, approve it, and see when it becomes available to use.</p>
+          <h1>Devices</h1>
+          <p>Review reachability, authorization, verified identity, and live connection state.</p>
         </div>
         <div className="devices-hero__actions">
           <span className={`discovery-state discovery-state--${discoveryHealthy ? 'online' : 'offline'}`}>
@@ -510,6 +627,7 @@ export function DevicesView({
                   onPairDevice={() => undefined}
                   onReadLight={onReadLight}
                   onSetLight={onSetLight}
+                  onSetConnectionEnabled={onSetConnectionEnabled}
                   onSetupDevice={() => undefined}
                 />
               ))}
@@ -543,8 +661,8 @@ export function DevicesView({
         <section className="runtime-notice" role="status">
           <WifiOff aria-hidden="true" />
           <div>
-            <strong>No local UVC peers discovered</strong>
-            <p>No peers are currently visible through <span className="mono">{runtime?.discoverySource ?? 'local mDNS'}</span>.</p>
+            <strong>Device status unavailable</strong>
+            <p>{runtimeError}</p>
           </div>
           <Link className="device-link" to="/settings">Check connection settings <ChevronRight /></Link>
         </section>
@@ -569,8 +687,9 @@ export function DevicesView({
             onPairDevice={(device) => void createInvitation(device)}
             onReadLight={onReadLight}
             onSetLight={onSetLight}
+            onSetConnectionEnabled={onSetConnectionEnabled}
             onSetupDevice={openDeviceSetup}
-            title="Connected devices"
+            title="Connections & trust"
           />
         </div>
       ) : null}
@@ -645,6 +764,7 @@ export function DevicesView({
                   onPairDevice={(candidate) => void createInvitation(candidate)}
                   onReadLight={onReadLight}
                   onSetLight={onSetLight}
+                  onSetConnectionEnabled={onSetConnectionEnabled}
                   onSetupDevice={openDeviceSetup}
                 />
               ))}

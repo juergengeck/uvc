@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Searchbar, useTheme, IconButton } from 'react-native-paper';
+import { Button, Searchbar, useTheme, IconButton } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useInstance } from '@src/providers/app';
 import { HierarchicalDeviceList } from '@src/components/devices/HierarchicalDeviceList';
@@ -52,6 +52,16 @@ export default function DevicesScreen() {
             style={styles.addButton}
           />
         </View>
+        <Button
+          compact
+          icon="cctv"
+          mode="outlined"
+          onPress={() => router.push('/(screens)/devices/camera-feeds')}
+          style={styles.cameraFeedsButton}
+          contentStyle={styles.cameraFeedsButtonContent}
+        >
+          Camera feeds
+        </Button>
       </View>
 
       {/* Hierarchical Device List */}
@@ -87,6 +97,13 @@ const styles = StyleSheet.create({
   },
   addButton: {
     margin: 0,
+  },
+  cameraFeedsButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  cameraFeedsButtonContent: {
+    minHeight: 44,
   },
   contentContainer: {
     flex: 1,

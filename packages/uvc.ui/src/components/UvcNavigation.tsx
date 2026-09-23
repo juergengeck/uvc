@@ -1,17 +1,34 @@
-import React from 'react';
+import React, { useId } from 'react';
 import {
   CalendarDays,
+  Notebook,
   Radio,
   Building2,
   ShieldCheck,
-  Database,
   Settings,
   ChevronLeft,
-  Sun,
-  Moon,
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { UvcExportButton } from './UvcExportButton.js';
+
+const defaultLogoUrl = new URL('../assets/uvc-logo.png', import.meta.url).href;
+
+export function UvcLogo({ src }: { src?: string }) {
+  const filterId = `uvc-logo-${useId().replace(/:/g, '')}`;
+  return (
+    <>
+      <svg width="0" height="0" aria-hidden="true" style={{position: 'absolute'}}>
+        <defs><filter id={filterId} colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values={[228, 232, 236].flatMap((value, index) => {
+            const factor = (value - [43, 180, 66][index]) / 137;
+            return [factor, -factor, 0, 0, value / 255];
+          }).concat([0, 0, 0, 1, 0]).join(' ')} />
+        </filter></defs>
+      </svg>
+      <img alt="UVC" className="brand-logo" style={{ '--uvc-logo-filter': `url(#${filterId})` } as React.CSSProperties} src={src ?? defaultLogoUrl} />
+    </>
+  );
+}
 
 export type SidebarState = 'expanded' | 'icons' | 'collapsed';
 
@@ -24,11 +41,11 @@ export interface NavItem {
 }
 
 export const UVC_NAV_ITEMS: NavItem[] = [
-  { id: 'journal', to: '/', label: 'Journal', icon: CalendarDays },
+  { id: 'journal', to: '/', label: 'Journal', icon: Notebook },
+  { id: 'calendar', to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'devices', to: '/settings/devices', label: 'Devices', icon: Radio },
-  { id: 'rooms', to: '/rooms', label: 'Cleanrooms', icon: Building2 },
+  { id: 'rooms', to: '/rooms', label: 'Rooms', icon: Building2 },
   { id: 'roles', to: '/roles', label: 'Governance', icon: ShieldCheck },
-  { id: 'data', to: '/data', label: 'Data', icon: Database },
 ];
 
 export interface UvcNavigationProps {
@@ -37,8 +54,6 @@ export interface UvcNavigationProps {
   onSidebarStateChange: (state: SidebarState) => void;
   onOpenExport: () => void;
   brandLogoUrl?: string;
-  theme?: string;
-  onToggleTheme?: () => void;
   badges?: Record<string, number>;
 }
 
@@ -48,8 +63,6 @@ export function UvcNavigation({
   onSidebarStateChange,
   onOpenExport,
   brandLogoUrl,
-  theme,
-  onToggleTheme,
   badges,
 }: UvcNavigationProps) {
   if (sidebarState === 'collapsed') {
@@ -62,19 +75,11 @@ export function UvcNavigation({
     <aside className={`sidebar uvc-sidebar ${expanded ? 'uvc-sidebar--expanded' : 'uvc-sidebar--icons'}`}>
       <div className="brand-block">
         <div className="brand-header">
-          {brandLogoUrl ? (
-            <img alt="UVC.one" className="brand-logo" src={brandLogoUrl} />
-          ) : (
-            <div className="brand-badge-row">
-              <span className="brand-badge">254nm</span>
-              <h1>UVC</h1>
-            </div>
-          )}
-          {expanded && <span className="eyebrow">Cycle Record</span>}
+          <UvcLogo src={brandLogoUrl} />
         </div>
         {expanded && (
           <p className="brand-desc">
-            Document where, when, and with which resources UVC cycles were executed.
+            Cycle records
           </p>
         )}
         <div className="brand-actions">
@@ -111,8 +116,9 @@ export function UvcNavigation({
 
       <nav className="nav-list nav-list--settings" aria-label="Application">
         <Link
+          activeOptions={{ exact: true }}
           activeProps={{ className: 'nav-item nav-item--active' }}
-          className="nav-item"
+          className={`nav-item${activeView.startsWith('/settings/data') ? ' nav-item--active' : ''}`}
           title={expanded ? undefined : 'Settings'}
           to="/settings"
         >
@@ -141,18 +147,26 @@ export function UvcNavigation({
           </button>
         )}
 
-        {onToggleTheme && (
-          <button
-            className="nav-item nav-theme-btn"
-            onClick={onToggleTheme}
-            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            type="button"
-          >
-            {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-            {expanded && <span className="nav-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
-          </button>
-        )}
       </nav>
     </aside>
+  );
+}
+
+/** Mobile navigation is independent of the desktop sidebar's collapse state. */
+export function UvcMobileNavigation() {
+  return (
+    <nav className="uvc-mobile-nav" aria-label="Primary">
+      {UVC_NAV_ITEMS.filter(item => item.id !== 'roles').map(item => {
+        const Icon = item.icon;
+        return (
+          <Link key={item.id} to={item.to} className="uvc-mobile-nav__item"
+            activeOptions={{ exact: item.to === '/' }}
+            activeProps={{ className: 'uvc-mobile-nav__item--active', 'aria-current': 'page' }}>
+            <Icon aria-hidden="true" />
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

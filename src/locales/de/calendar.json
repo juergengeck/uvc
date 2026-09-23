@@ -1,7 +1,7 @@
 {
   "title": "UVC-Zykluskalender",
   "description": "UVC-Zyklen nach Datum und Ressource",
-  "recordCount_one": "{{count}} Eintrag",
-  "recordCount_other": "{{count}} Einträge",
+  "recordCount": "{{count}} Eintrag",
+  "recordCount_plural": "{{count}} Einträge",
   "noEntries": "Für dieses Datum sind keine Behandlungen dokumentiert"
 }

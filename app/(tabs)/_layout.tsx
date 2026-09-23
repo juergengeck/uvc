@@ -5,26 +5,29 @@ import { useTranslation } from 'react-i18next';
 import { useTheme, IconButton } from 'react-native-paper';
 import { Namespaces } from '@src/i18n/namespaces';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { UvcLogo } from '@src/components/brand/UvcLogo';
 import { getAuthenticator } from '@src/initialization';
 
-console.log('=== LOADING TABS LAYOUT ===');
+function HeaderBrand() {
+  const theme = useTheme();
+  return <UvcLogo dark={theme.dark} width={80} />;
+}
 
 export default function TabsLayout() {
   const { t } = useTranslation(Namespaces.NAVIGATION);
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   
-  // Get authenticator - it should already exist and be logged in
-  // since index.tsx only redirects here when logged_in
   const authenticator = getAuthenticator();
   
-  // This should never happen if routing is working correctly
-  if (!authenticator) {
-    console.error('[TabsLayout] No authenticator found - this should not happen');
-    return <Redirect href="/(auth)" />;
+  // Direct web links can enter a tab before login. Guard the navigator before
+  // mounting screens whose model hooks require unlocked user storage.
+  if (authenticator?.authState.currentState !== 'logged_in') {
+    return <Redirect href="/(auth)/login" />;
   }
   
-  // Once ready, render tabs without OneProvider (already wrapped in _layout.tsx)
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Tabs
@@ -35,40 +38,46 @@ export default function TabsLayout() {
             elevation: 0,
             shadowOpacity: 0,
             borderBottomWidth: 0,
-            height: 120, // Increase header height to accommodate larger title and padding
+            height: 56 + insets.top,
           },
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            fontSize: 34, // Large Apple-style title
-            color: theme.colors.onBackground,
-            textAlign: 'left', // Apple-style left alignment
-            marginLeft: 16, // Standard padding from theme
-            alignSelf: 'flex-start', // Force left alignment
-            marginTop: 8, // Add some top margin
-            paddingBottom: 16, // Add 16px padding below the title
-          },
-          headerTitleAlign: 'left', // Expo Router specific left alignment
+          headerTitle: HeaderBrand,
+          headerTitleAlign: 'left',
           headerShadowVisible: false,
           headerTitleContainerStyle: {
-            left: 0, // Align title container to the left
-            right: 60, // Leave space for the header buttons
+            left: 16,
+            right: 64,
           },
           headerRight: () => (
             <IconButton
-              icon="cog"
-              accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
+              icon="cog-outline"
+              accessibilityLabel={t('settings', { defaultValue: 'Settings' })}
               size={24}
               onPress={() => router.push('/(screens)/settings')}
               iconColor={theme.colors.primary}
-              style={{ marginRight: 8 }}
+              style={{ height: 48, margin: 0, marginRight: 4, width: 48 }}
             />
           ),
           tabBarStyle: {
             backgroundColor: theme.colors.background,
-            borderTopColor: theme.colors.outline,
+            borderTopColor: theme.colors.outlineVariant,
+            height: 64 + insets.bottom,
+            paddingBottom: insets.bottom,
+            paddingTop: 6,
           },
           tabBarActiveTintColor: theme.colors.primary,
-          tabBarInactiveTintColor: theme.colors.onSurface,
+          tabBarActiveBackgroundColor: theme.colors.primaryContainer,
+          tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+          tabBarLabelPosition: 'below-icon',
+          tabBarItemStyle: {
+            borderRadius: 8,
+            marginHorizontal: 4,
+            minHeight: 56,
+            overflow: 'hidden',
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '600',
+          },
         }}
       >
         <Tabs.Screen 
@@ -79,30 +88,6 @@ export default function TabsLayout() {
             tabBarLabel: 'Home',
             tabBarIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="home" size={size} color={color} />
-            ),
-            headerTitleContainerStyle: {
-              left: 0, // Align title container to the left
-              right: 100, // Leave space for both QR code and settings buttons
-            },
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <IconButton
-                  icon="qrcode"
-                  accessibilityLabel={t('navigation:network.title', { defaultValue: 'Connections' })}
-                  size={24}
-                  onPress={() => router.push('/(screens)/network/connection')}
-                  iconColor={theme.colors.primary}
-                  style={{ marginRight: 4 }}
-                />
-                <IconButton
-                  icon="cog"
-                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
-                  size={24}
-                  onPress={() => router.push('/(screens)/settings')}
-                  iconColor={theme.colors.primary}
-                  style={{ marginRight: 8 }}
-                />
-              </View>
             ),
           }}
         />
@@ -115,25 +100,6 @@ export default function TabsLayout() {
               <MaterialCommunityIcons name="message" size={size} color={color} />
             ),
             title: t('navigation:messages.title', { defaultValue: 'Messages' }),
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <IconButton
-                  icon="account-plus"
-                  accessibilityLabel={t('navigation:contacts.invite', { defaultValue: 'Invite contact' })}
-                  size={24}
-                  onPress={() => router.push('/(screens)/contacts/invite')}
-                  iconColor={theme.colors.primary}
-                />
-                <IconButton
-                  icon="cog"
-                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
-                  size={24}
-                  onPress={() => router.push('/(screens)/settings')}
-                  iconColor={theme.colors.primary}
-                  style={{ marginLeft: 8, marginRight: 8 }}
-                />
-              </View>
-            ),
           }}
         />
         <Tabs.Screen 
@@ -142,57 +108,27 @@ export default function TabsLayout() {
             title: t('navigation:journal.title', { defaultValue: 'UVC cycle journal' }),
             tabBarLabel: 'Journal',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="calendar-month" size={size} color={color} />
+              <MaterialCommunityIcons name="notebook-outline" size={size} color={color} />
             ),
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', marginRight: 8 }}>
-                <IconButton
-                  icon="calendar"
-                  accessibilityLabel={t('navigation:calendar.title', { defaultValue: 'Calendar' })}
-                  size={24}
-                  iconColor={theme.colors.primary}
-                  onPress={() => router.push('/(screens)/calendar')}
-                  style={{ margin: 0, marginRight: 8 }}
-                />
-                <IconButton
-                  icon="cog"
-                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
-                  size={24}
-                  iconColor={theme.colors.primary}
-                  onPress={() => router.push('/(screens)/settings')}
-                  style={{ margin: 0 }}
-                />
-              </View>
+          }}
+        />
+        <Tabs.Screen
+          name="calendar"
+          options={{
+            title: t('calendar', { defaultValue: 'Calendar' }),
+            tabBarLabel: t('calendar', { defaultValue: 'Calendar' }),
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="calendar-month-outline" size={size} color={color} />
             ),
           }}
         />
         <Tabs.Screen 
           name="contacts" 
           options={{
-            href: null,
             title: t('navigation:devices.title', { defaultValue: 'Devices' }),
             tabBarLabel: 'Devices',
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="devices" size={size} color={color} />
-            ),
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <IconButton
-                  icon="cctv"
-                  accessibilityLabel={t('navigation:devices.cameraFeeds', { defaultValue: 'Camera feeds' })}
-                  size={24}
-                  onPress={() => router.push('/(screens)/devices/camera-feeds')}
-                  iconColor={theme.colors.primary}
-                />
-                <IconButton
-                  icon="cog"
-                  accessibilityLabel={t('navigation:settings.title', { defaultValue: 'Settings' })}
-                  size={24}
-                  onPress={() => router.push('/(screens)/settings')}
-                  iconColor={theme.colors.primary}
-                  style={{ marginLeft: 4, marginRight: 8 }}
-                />
-              </View>
+              <MaterialCommunityIcons name="access-point" size={size} color={color} />
             ),
           }}
         />

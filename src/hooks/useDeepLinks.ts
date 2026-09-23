@@ -3,6 +3,7 @@ import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppModel } from '@src/providers/app/AppModelProvider';
 import { parseInvitationUrl } from '@src/utils/invitation-url-parser';
+import { isLabDeepLink } from '@src/utils/deepLinkRouting';
 import {
   parseUvcIntegrationControlUrl,
   runUvcIntegrationControlAction,
@@ -25,6 +26,7 @@ export function useDeepLinks() {
     }
 
     const handleUrl = async (url: string) => {
+      if (isLabDeepLink(url)) return;
       try {
         if (process.env.EXPO_PUBLIC_UVC_INTEGRATION === '1') {
           const action = parseUvcIntegrationControlUrl(

@@ -159,30 +159,6 @@ export default function ScreensLayout() {
                         }}
                     />
 
-                    <Stack.Screen
-                        name="calendar"
-                        options={{
-                            headerTitle: t('calendar:title'),
-                            headerLargeTitle: false,
-                            headerRight: () => (
-                                <View style={{ flexDirection: 'row' }}>
-                                    <IconButton
-                                        icon="home"
-                                        onPress={() => router.push('/(tabs)/')}
-                                        size={24}
-                                        style={{ margin: 0, marginRight: 8 }}
-                                    />
-                                    <IconButton
-                                        icon="notebook"
-                                        onPress={() => router.push('/(tabs)/journal')}
-                                        size={24}
-                                        style={{ margin: 0, marginRight: -8 }}
-                                    />
-                                </View>
-                            ),
-                        }}
-                    />
-                    
                     {/* Contact screens */}
                     <Stack.Screen
                         name="contacts/add-contact"

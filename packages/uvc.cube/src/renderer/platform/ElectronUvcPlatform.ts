@@ -1,13 +1,15 @@
 import type { SettingsSection } from '@refinio/settings.core';
 import type {
   UvcJournalRecord,
+  UvcMemory,
+  UvcMemorySummary,
   UvcDiscoveryRuntime,
   UvcLightDeviceKind,
   UvcLightState,
   UvcPlatform,
 } from '@uvc/uvc.ui';
 
-import type { ElectronApi } from '@shared/contracts';
+import type { ElectronApi, UvcPeerManagementSnapshot } from '@shared/contracts';
 
 interface UvcControlObservationProjection {
   status: 'observed' | 'failed';
@@ -45,12 +47,31 @@ export class ElectronUvcPlatform implements UvcPlatform {
     return this.api.invokePlan<UvcJournalRecord[]>('journal', 'listRecords');
   }
 
-  getDiscoveryRuntime(): Promise<UvcDiscoveryRuntime> {
-    return this.api.getDiscoveryRuntimeSnapshot();
+  listMemories(): Promise<UvcMemorySummary[]> {
+    return this.api.invokePlan<UvcMemorySummary[]>('memory', 'list');
   }
 
-  refreshDiscoveryRuntime(): Promise<UvcDiscoveryRuntime> {
-    return this.api.refreshDiscoveryRuntime();
+  getMemory(id: string): Promise<UvcMemory> {
+    return this.api.invokePlan<UvcMemory>('memory', 'get', { id });
+  }
+
+  async getDiscoveryRuntime(): Promise<UvcDiscoveryRuntime> {
+    return this.withPeerSecurity(await this.api.getDiscoveryRuntimeSnapshot());
+  }
+
+  private async withPeerSecurity(runtime: UvcDiscoveryRuntime): Promise<UvcDiscoveryRuntime> {
+    const peers = await this.api.invokePlan<UvcPeerManagementSnapshot[]>('peerManagement', 'list');
+    const securityByDevice = new Map(peers.map(peer => [peer.deviceId, peer.security]));
+    return { ...runtime, devices: runtime.devices.map(device => ({ ...device, security: securityByDevice.get(device.id) })) };
+  }
+
+  async setPeerConnectionEnabled(deviceId: string, enabled: boolean): Promise<UvcDiscoveryRuntime> {
+    await this.api.invokePlan('peerManagement', 'setConnectionEnabled', { deviceId, enabled });
+    return this.getDiscoveryRuntime();
+  }
+
+  async refreshDiscoveryRuntime(): Promise<UvcDiscoveryRuntime> {
+    return this.withPeerSecurity(await this.api.refreshDiscoveryRuntime());
   }
 
   subscribeDiscovery(listener: () => void): () => void {

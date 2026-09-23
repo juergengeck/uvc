@@ -95,19 +95,21 @@ export default class CommServerManager implements ITransport {
             traceObjectTypes: ['UvcStateTrieRoot'],
             importBatchContextObjectTypes: ['UvcStateTrieRoot'],
           },
-          priorityRootIdHashesFactory: async (
+          chumSyncOptionsFactory: async (
             localPersonId: SHA256IdHash<Person>,
             _localInstanceId: SHA256IdHash<Instance>,
             remotePersonId: SHA256IdHash<Person>,
             remoteInstanceId: SHA256IdHash<Instance>,
-          ) => [await calculateIdHashOfObj({
-            $type$: 'UvcStateTrieRoot',
-            id: makeUvcControlTrieRootId({
-              ownerPersonId: remotePersonId,
-              ownerInstanceId: remoteInstanceId,
-              audiencePersonId: localPersonId,
-            }),
-          })],
+          ) => ({
+            priorityRootIdHashes: [await calculateIdHashOfObj({
+              $type$: 'UvcStateTrieRoot',
+              id: makeUvcControlTrieRootId({
+                ownerPersonId: remotePersonId,
+                ownerInstanceId: remoteInstanceId,
+                audiencePersonId: localPersonId,
+              }),
+            })],
+          }),
           incomingConnectionConfigurations: [
             {
               type: 'commserver',

@@ -1,8 +1,8 @@
 /**
- * Role & Authority Management Screen (EN 17141 Compliance)
+ * Role & Responsibility Management Screen
  *
  * Provides cryptographic role inspection, authority verification,
- * and role certificate issuance for UVC facility administrators and clinicians.
+ * and role certificate issuance for UVC facility operators.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -41,9 +41,9 @@ import {
   hasRole,
   type RoleDescriptor,
 } from '@src/models/roles/role-utils';
-import type { Person, Profile } from '@refinio/one.core/lib/recipes.js';
+import type { Person } from '@refinio/one.core/lib/recipes.js';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
-import type { RoleCertificate } from '@src/recipes/RoleCertificate';
+import type { IRoleCertificate } from '@src/recipes/RoleCertificate';
 
 interface ContactRoleEntry {
   personId: string;
@@ -137,11 +137,7 @@ export default function RolesScreen() {
           userRoles.push(r);
         }
       }
-      // If no explicit role certificate exists yet, check if admin by default in dev/single-node
-      const adminStatus = userRoles.includes(UvcRole.ADMIN) || userRoles.length === 0;
-      if (userRoles.length === 0) {
-        userRoles.push('admin (default anchor)');
-      }
+      const adminStatus = userRoles.includes(UvcRole.ADMIN);
       setMyRoles(userRoles);
       setIsUserAdmin(adminStatus);
 
@@ -181,8 +177,8 @@ export default function RolesScreen() {
             'RoleCertificate'
           );
 
-          const roleList = certs.map(c => {
-            const cert = c.certificate as unknown as RoleCertificate;
+          const roleList = certs.filter(c => c.trusted).map(c => {
+            const cert = c.certificate as unknown as IRoleCertificate;
             return {
               role: cert.role,
               app: cert.app,
@@ -222,6 +218,10 @@ export default function RolesScreen() {
 
   const handleIssueRole = async () => {
     if (!models?.leuteModel) return;
+    if (!isUserAdmin) {
+      Alert.alert('Administrator role required', 'This identity cannot issue UVC role certificates.');
+      return;
+    }
     if (!targetPersonInput.trim()) {
       Alert.alert('Validation Error', 'Please specify a target Person ID or choose a contact.');
       return;
@@ -286,7 +286,7 @@ export default function RolesScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Roles & Authority',
+          title: 'Roles & responsibilities',
           headerBackVisible: true,
         }}
       />
@@ -347,7 +347,7 @@ export default function RolesScreen() {
                       color: isUserAdmin ? '#f87171' : '#60a5fa',
                     }}
                   >
-                    {isUserAdmin ? 'ROOT ANCHOR' : 'MEMBER'}
+                    {isUserAdmin ? 'ADMIN ROLE' : 'MEMBER'}
                   </Chip>
                 </View>
                 <Text
@@ -365,10 +365,14 @@ export default function RolesScreen() {
 
             <View style={styles.activeRolesContainer}>
               <Text variant="labelMedium" style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>
-                MY CERTIFIED ROLES (EN 17141)
+                MY TRUSTED ROLE CERTIFICATES
               </Text>
               <View style={styles.roleBadgesWrap}>
-                {myRoles.map(r => {
+                {myRoles.length === 0 ? (
+                  <Text variant="bodySmall" style={{color: theme.colors.onSurfaceVariant}}>
+                    No role certificate is assigned to this identity.
+                  </Text>
+                ) : myRoles.map(r => {
                   const desc = getRoleDesc(r);
                   return (
                     <Chip
@@ -484,25 +488,26 @@ export default function RolesScreen() {
                   <View style={styles.actionHeaderRow}>
                     <View>
                       <Text variant="titleMedium" style={{ fontWeight: '700', color: theme.colors.onSurface }}>
-                        Facility Authority Actions
+                        Role certificate actions
                       </Text>
                       <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                        Issue cryptographic RoleCertificates to peers and devices
+                        Sign a role certificate for a known peer or device identity
                       </Text>
                     </View>
                     <Button
                       mode="contained"
                       icon="certificate"
-                      buttonColor="#dc2626"
-                      textColor="#fff"
+                      buttonColor={theme.colors.primary}
+                      textColor={theme.colors.onPrimary}
                       onPress={() => {
                         setTargetPersonInput('');
                         setTargetPersonName('');
                         setIssueDialogOpen(true);
                       }}
+                      disabled={!isUserAdmin}
                       style={styles.grantButton}
                     >
-                      Issue Role
+                      Sign certificate
                     </Button>
                   </View>
 
@@ -544,12 +549,12 @@ export default function RolesScreen() {
                         { backgroundColor: theme.colors.surfaceVariant },
                       ]}
                     >
-                      <MaterialCommunityIcons name="check-decagram" size={24} color="#f59e0b" />
+                      <MaterialCommunityIcons name="account-key" size={24} color="#f59e0b" />
                       <Text variant="headlineSmall" style={{ fontWeight: '800', marginTop: 6, color: theme.colors.onSurface }}>
-                        EN 17141
+                        {myRoles.length}
                       </Text>
                       <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                        Compliance Level
+                        My Trusted Roles
                       </Text>
                     </Surface>
                   </View>
@@ -636,6 +641,7 @@ export default function RolesScreen() {
                             size={22}
                             iconColor={theme.colors.primary}
                             onPress={() => openGrantDialogForContact(contact)}
+                            disabled={!isUserAdmin}
                           />
                         </View>
 
@@ -689,7 +695,7 @@ export default function RolesScreen() {
               {activeTab === 'matrix' && (
                 <View style={styles.tabContent}>
                   <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
-                    EN 17141 cleanroom and healthcare disinfection privilege hierarchy:
+                    Operational permissions represented by each UVC role:
                   </Text>
                   {Object.values(UVC_ROLE_DESCRIPTORS).map(desc => (
                     <Card
@@ -742,7 +748,7 @@ export default function RolesScreen() {
             </Dialog.Title>
             <Dialog.Content>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
-                Signs a cryptographic RoleCertificate linking the target Person ID to an EN 17141 authority level.
+                Signs a cryptographic RoleCertificate linking the target Person ID to the selected UVC role.
               </Text>
 
               <TextInput

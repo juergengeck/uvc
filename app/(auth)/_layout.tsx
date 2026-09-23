@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 import { AuthProvider } from '@src/providers/app/AuthProvider';
 import { useTheme } from '@src/providers/app/AppTheme';
 import { getAuthenticator } from '@src/initialization';
@@ -22,6 +22,11 @@ export default function AuthLayout() {
   if (!authenticator) {
     console.log('[AuthLayout] No authenticator available');
     return null;
+  }
+
+  // OneProvider mounts this route again once the logged-in model is ready.
+  if (authenticator.authState.currentState === 'logged_in') {
+    return <Redirect href="/(tabs)/journal" />;
   }
   
   return (

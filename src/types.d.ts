@@ -15,21 +15,6 @@ declare module 'react-i18next' {
     };
 }
 
-declare module 'react-native-svg' {
-    export interface SvgProps {
-        width?: number | string;
-        height?: number | string;
-        fill?: string;
-        stroke?: string;
-    }
-    
-    export interface SvgXmlProps extends SvgProps {
-        xml: string;
-    }
-    
-    export const SvgXml: React.FC<SvgXmlProps>;
-}
-
 declare module '*.svg' {
     import type { SvgProps } from 'react-native-svg';
     const content: React.FC<SvgProps>;

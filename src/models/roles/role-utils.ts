@@ -3,10 +3,21 @@
  */
 
 import type { Person } from '@refinio/one.core/lib/recipes.js';
-import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
-import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
+import type { SHA256Hash, SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { RoleCertificate } from '@/utils/RoleCertificate';
 import type { CertificateData } from '@refinio/one.models/lib/models/Leute/TrustedKeysManager.js';
+
+type RoleCertificateData = CertificateData<RoleCertificate>;
+
+interface RoleCertificateSource {
+    trust: {
+        getCertificatesOfType(
+            data: SHA256Hash | SHA256IdHash,
+            type: 'RoleCertificate'
+        ): Promise<RoleCertificateData[]>;
+    };
+    me(): Promise<{identities(): Iterable<SHA256IdHash<Person>>}>;
+}
 
 /**
  * Available roles in the system
@@ -19,7 +30,7 @@ export enum Role {
 }
 
 /**
- * UVC Facility & Operational Roles (EN 17141 compliance & device architecture)
+ * UVC facility and operational roles
  */
 export enum UvcRole {
     ADMIN = 'admin',
@@ -46,7 +57,7 @@ export const UVC_ROLE_DESCRIPTORS: Record<string, RoleDescriptor> = {
     admin: {
         key: 'admin',
         title: 'Facility Administrator',
-        description: 'Root authority for key certification, role issuance, and EN 17141 compliance signing.',
+        description: 'Administrative role for key certification and role issuance.',
         badgeIcon: 'shield-crown',
         color: '#dc2626',
         authorityLevel: 'root'
@@ -86,7 +97,7 @@ export const UVC_ROLE_DESCRIPTORS: Record<string, RoleDescriptor> = {
     auditor: {
         key: 'auditor',
         title: 'Compliance Auditor',
-        description: 'Read-only verification of sealed EN 17141 cryptographic cycle journal chains.',
+        description: 'Read-only verification of sealed cryptographic cycle journal chains.',
         badgeIcon: 'clipboard-check',
         color: '#10b981',
         authorityLevel: 'observational'
@@ -121,7 +132,7 @@ export const UVC_ROLE_DESCRIPTORS: Record<string, RoleDescriptor> = {
  * Check if a person has a specific role
  */
 export async function hasRole(
-    leuteModel: LeuteModel,
+    leuteModel: RoleCertificateSource,
     personId: SHA256IdHash<Person>,
     role: Role | UvcRole | string,
     appName: string = 'uvc'
@@ -135,9 +146,10 @@ export async function hasRole(
 
         // Check for role certificate
         for (const certificateData of certificatesData) {
+            if (!certificateData.trusted) continue;
             const certificate = certificateData.certificate as RoleCertificate;
             if (
-                (!appName || certificate.app === appName || certificate.app === 'uvc' || certificate.app === 'vger' || certificate.app === 'flexibel') &&
+                (!appName || certificate.app === appName) &&
                 certificate.role === role &&
                 certificate.person === personId
             ) {
@@ -156,7 +168,7 @@ export async function hasRole(
  * Get all person IDs that have a specific role
  */
 export async function getPersonIdsForRole(
-    leuteModel: LeuteModel,
+    leuteModel: RoleCertificateSource,
     role: Role | UvcRole | string,
     appName: string = 'uvc'
 ): Promise<SHA256IdHash<Person>[]> {
@@ -180,7 +192,8 @@ export async function getPersonIdsForRole(
             .filter(cert => {
                 const certificate = cert.certificate;
                 return (
-                    (!appName || certificate.app === appName || certificate.app === 'uvc' || certificate.app === 'vger' || certificate.app === 'flexibel') &&
+                    cert.trusted &&
+                    (!appName || certificate.app === appName) &&
                     certificate.role === role
                 );
             })

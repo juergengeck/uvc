@@ -26,7 +26,7 @@ const DEFAULT_ROLES: RoleEntry[] = [
   },
   {
     role: 'Facility Operator',
-    holder: 'operator@cleanroom.local',
+    holder: 'operator@hospital.local',
     issuedAt: '2026-09-10',
     fingerprint: '19dca883ba450123...bb91',
     status: 'valid',
@@ -84,10 +84,9 @@ export function RolesView({
   return (
     <div className="roles-view" style={{ maxWidth: 1040, margin: '0 auto' }}>
       <header className="settings-hero">
-        <span className="eyebrow">Governance & Authority</span>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div>
-            <h1>Role Management (EN 17141)</h1>
+            <h1>Governance</h1>
             <p>Cryptographic identity and authority management. Authorize cycle signers, clinicians, and authenticated devices.</p>
           </div>
           <button
@@ -104,29 +103,15 @@ export function RolesView({
       <div className="stack" style={{ marginTop: 24, gap: 14 }}>
         {roles.map((entry, idx) => (
           <div key={idx} className="settings-card" style={{ padding: '16px 20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div
-                  className="settings-link-card__icon"
-                  style={{
-                    backgroundColor: entry.role.includes('Admin')
-                      ? 'rgba(234, 179, 8, 0.15)'
-                      : entry.role.includes('Clinician')
-                      ? 'rgba(59, 130, 246, 0.15)'
-                      : 'rgba(52, 199, 89, 0.15)',
-                    color: entry.role.includes('Admin')
-                      ? '#eab308'
-                      : entry.role.includes('Clinician')
-                      ? '#3b82f6'
-                      : '#34c759',
-                  }}
-                >
+                <div className="settings-link-card__icon">
                   <ShieldCheck aria-hidden="true" />
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{entry.role}</h3>
-                  <p style={{ margin: '2px 0 0', color: '#9cabc1', fontSize: '0.85rem' }}>
-                    Holder: <strong style={{ color: '#e7edf6' }}>{entry.holder}</strong>
+                  <p style={{ margin: '2px 0 0', color: 'var(--uvc-muted)', fontSize: '0.85rem' }}>
+                    Holder: <strong style={{ color: 'var(--uvc-text)' }}>{entry.holder}</strong>
                   </p>
                 </div>
               </div>
@@ -139,14 +124,14 @@ export function RolesView({
                     borderRadius: 6,
                     fontSize: '0.75rem',
                     fontWeight: 600,
-                    backgroundColor: 'rgba(52, 199, 89, 0.15)',
-                    color: '#34c759',
+                    backgroundColor: 'var(--uvc-surface-subtle)',
+                    color: 'var(--uvc-success)',
                     marginBottom: 4,
                   }}
                 >
                   ● VALID CERTIFICATE
                 </span>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--uvc-muted)' }}>
                   Fingerprint: <code>{entry.fingerprint}</code>
                 </div>
               </div>
@@ -170,7 +155,7 @@ export function RolesView({
             </div>
             <form onSubmit={handleIssue}>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: '#9cabc1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: 'var(--uvc-muted)' }}>
                   Target Person / Email
                 </label>
                 <input
@@ -184,7 +169,7 @@ export function RolesView({
                 />
               </div>
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: '#9cabc1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: 'var(--uvc-muted)' }}>
                   Role & Privileges
                 </label>
                 <select
@@ -194,7 +179,7 @@ export function RolesView({
                   value={selectedRole}
                 >
                   <option value="Clinician / Doctor">Clinician / Doctor (Plan & Execute Cycles)</option>
-                  <option value="Admin (Trust Anchor)">Admin (EN 17141 Certification & Key Ceremony)</option>
+                  <option value="Admin (Trust Anchor)">Admin (Trust Anchor)</option>
                   <option value="Facility Operator">Facility Operator (Execute & Maintenance)</option>
                   <option value="Auditor">Auditor (Read-Only Verification)</option>
                   <option value="UVC Lamp Fixture">UVC Lamp Fixture (254nm Emission Device)</option>

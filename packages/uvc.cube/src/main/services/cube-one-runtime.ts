@@ -10,7 +10,7 @@ import {createMessageBus} from '@refinio/one.core/lib/message-bus.js';
 import {calculateIdHashForStoredObj} from '@refinio/one.core/lib/microdata-to-id-hash.js';
 import {createCryptoApiFromDefaultKeys} from '@refinio/one.core/lib/keychain/keychain.js';
 import {ensurePublicSignKey, signatureVerify} from '@refinio/one.core/lib/crypto/sign.js';
-import type {Instance, Person} from '@refinio/one.core/lib/recipes.js';
+import type {Instance, Person, Recipe} from '@refinio/one.core/lib/recipes.js';
 import {SET_ACCESS_MODE} from '@refinio/one.core/lib/storage-base-common.js';
 import {getObject, storeUnversionedObject} from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import {
@@ -41,12 +41,14 @@ import MultiUser from '@refinio/one.models/lib/models/Authenticator/MultiUser.js
 import type {Invitation} from '@refinio/one.models/lib/misc/ConnectionEstablishment/PairingManager.js';
 import {isRegisteredInstanceKeyForPerson} from '@refinio/one.models/lib/misc/ConnectionEstablishment/RegisteredInstanceKey.js';
 import {exchangeConnectionGroupName} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangeConnectionGroupName.js';
-import {exchangeDirectChumReady} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangeDirectChumReady.js';
+import {startChumProtocol} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/Chum.js';
 import {exchangeInstanceIdObjects} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangeInstanceIds.js';
 import {verifyAndExchangePersonId} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/ExchangePersonIds.js';
 import {sync} from '@refinio/one.models/lib/misc/ConnectionEstablishment/protocols/Sync.js';
 import RecipesExperimental from '@refinio/one.models/lib/recipes/recipes-experimental.js';
 import RecipesStable from '@refinio/one.models/lib/recipes/recipes-stable.js';
+import {MemoryRecipe} from '@refinio/memory.core/recipes/MemoryRecipe.js';
+import {MemoryTrieRecipes} from '@refinio/memory.core/recipes/MemoryTrieRecipes.js';
 import {
   ReverseMapsExperimental,
   ReverseMapsForIdObjectsExperimental,
@@ -105,9 +107,10 @@ import type {
   CubeUvcJournalRecord,
   DiscoveryDeviceSnapshot,
   SettingsSnapshot,
+  UvcPeerManagementSnapshot,
 } from '@shared/contracts';
 import {DEFAULT_UVC_COMM_SERVER_URL} from '@shared/settings/registry';
-import {setDiscoveryDeviceConnection} from './peer-directory.js';
+import {notifyPeerDirectoryChanged, setDiscoveryDeviceConnection} from './peer-directory.js';
 
 const chumDiagnostics = createMessageBus('uvc-cube-chum-diagnostics');
 for (const source of ['chum-sync', 'chum-importer']) {
@@ -158,6 +161,37 @@ async function isCubeChumExportObject(
     throw new Error(`[UvcCube] UvcStateTrieRoot ${String(hash)} has no id`);
   }
   return rootId.id.startsWith('uvc:control:');
+}
+
+async function calculateUvcPriorityRootIdHashes(
+  localPersonId: SHA256IdHash<Person>,
+  remotePersonId: SHA256IdHash<Person>,
+  remoteInstanceId: SHA256IdHash<Instance>,
+): Promise<SHA256IdHash<UvcStateTrieRoot>[]> {
+  return await Promise.all([
+    calculateIdHashOfObj({
+      $type$: 'UvcStateTrieRoot',
+      id: makeUvcPhoneBookTrieRootId({
+        ownerPersonId: remotePersonId,
+        ownerInstanceId: remoteInstanceId,
+      }),
+    }),
+    calculateIdHashOfObj({
+      $type$: 'UvcStateTrieRoot',
+      id: makeUvcControlTrieRootId({
+        ownerPersonId: remotePersonId,
+        ownerInstanceId: remoteInstanceId,
+        audiencePersonId: localPersonId,
+      }),
+    }),
+    calculateIdHashOfObj({
+      $type$: 'UvcStateTrieRoot',
+      id: makeUvcJournalTrieRootId({
+        ownerPersonId: remotePersonId,
+        ownerInstanceId: remoteInstanceId,
+      }),
+    }),
+  ]) as SHA256IdHash<UvcStateTrieRoot>[];
 }
 
 export interface CubeOneIdentity {
@@ -220,11 +254,16 @@ export class CubeOneRuntime {
     certifiedAt: number;
   }>();
   private readonly controlPeerConnections = new Map<string, Promise<void>>();
+  private readonly controlPeerSockets = new Map<
+    SHA256IdHash<Person>,
+    ReturnType<typeof createConnectionFromQuicVC>
+  >();
   private readonly importedDiscoveryAt = new Map<string, number>();
   private readonly consumed = new Set<string>();
   private readonly importedDisinfectionRuns = new Map<string, UvcDisinfectionRun>();
   private disconnectImportListener?: () => void;
   private disconnectQuicCloseListener?: () => void;
+  private disconnectConnectionsListener?: () => void;
   /**
    * Preserve producer ordering without coupling independent peers. A command
    * imported from Expo can synchronously wait for an ESP-owned observation;
@@ -250,6 +289,8 @@ export class CubeOneRuntime {
         ...RecipesExperimental,
         ...ConnectionPhoneBookRecipes,
         ...UVC_RECIPES,
+        MemoryRecipe as Recipe,
+        ...MemoryTrieRecipes,
       ],
       reverseMaps: new Map([...ReverseMapsStable, ...ReverseMapsExperimental]) as never,
       reverseMapsForIdObjects: new Map([
@@ -283,38 +324,24 @@ export class CubeOneRuntime {
         traceObjectTypes: ['UvcStateTrieRoot'],
         importBatchContextObjectTypes: ['UvcStateTrieRoot'],
       },
-      priorityRootIdHashesFactory: async (
+      chumSyncOptionsFactory: async (
         localPersonId,
         _localInstanceId,
         remotePersonId,
         remoteInstanceId,
-      ) => await Promise.all([
-        calculateIdHashOfObj({
-          $type$: 'UvcStateTrieRoot',
-          id: makeUvcPhoneBookTrieRootId({
-            ownerPersonId: remotePersonId,
-            ownerInstanceId: remoteInstanceId,
-          }),
-        }),
-        calculateIdHashOfObj({
-          $type$: 'UvcStateTrieRoot',
-          id: makeUvcControlTrieRootId({
-            ownerPersonId: remotePersonId,
-            ownerInstanceId: remoteInstanceId,
-            audiencePersonId: localPersonId,
-          }),
-        }),
-        calculateIdHashOfObj({
-          $type$: 'UvcStateTrieRoot',
-          id: makeUvcJournalTrieRootId({
-            ownerPersonId: remotePersonId,
-            ownerInstanceId: remoteInstanceId,
-          }),
-        }),
-      ]),
+      ) => ({
+        priorityRootIdHashes: await calculateUvcPriorityRootIdHashes(
+          localPersonId,
+          remotePersonId,
+          remoteInstanceId,
+        ),
+      }),
     });
     await this.leuteModel.init();
     await this.connectionsModel.init();
+    this.disconnectConnectionsListener = this.connectionsModel.onConnectionsChange.listen(() => {
+      notifyPeerDirectoryChanged();
+    });
     for (const someone of await this.leuteModel.others()) {
       for (const personId of someone.identities()) {
         this.pairedPeople.add(personId);
@@ -507,7 +534,7 @@ export class CubeOneRuntime {
       }
       const source = event.remotePersonId;
       const tail = (this.consumeTails.get(source) ?? Promise.resolve())
-        .then(() => this.consumeImportedBatch(event.batch.imported, event.remotePersonId))
+        .then(() => this.consumeImportedBatch(event.batch.advancedFrontiers, event.remotePersonId))
         .catch(error => {
           console.error('[UvcCube] Failed to project imported UVC trie root:', error);
         });
@@ -596,6 +623,9 @@ export class CubeOneRuntime {
     if (
       device.ownerId
       && this.isPaired(device.ownerId)
+      && this.connectionsModel!.connectionsEnabledToPerson(
+        device.ownerId as SHA256IdHash<Person>,
+      )
       && normalizeHeadlessKind(device.type) === 'esp32'
     ) {
       // Discovery gives us the certified endpoint before the user can click.
@@ -637,6 +667,142 @@ export class CubeOneRuntime {
       throw new Error('[UvcCube] connections are not initialized');
     }
     await this.connectionsModel.pairing.connectUsingInvitation(invitation, this.ownerPersonId);
+  }
+
+  async peerManagementSnapshot(): Promise<UvcPeerManagementSnapshot[]> {
+    if (!this.connectionsModel || !this.leuteModel || !this.ownerPersonId) {
+      throw new Error('[UvcCube] connection management is not initialized');
+    }
+    const connectionInfos = this.connectionsModel.connectionsInfo();
+
+    return await Promise.all([...this.discoveredDevices.values()].map(async device => {
+      const provisionedEvidence = device.ownerId
+        ? this.provisionedDeviceEvidenceByPerson.get(device.ownerId)
+        : undefined;
+      const provisioned = Boolean(
+        provisionedEvidence
+        && provisionedEvidence.hardwareDeviceId === device.id
+        && provisionedEvidence.publicKey === device.publicKey,
+      );
+      const paired = Boolean(device.ownerId && this.pairedPeople.has(
+        device.ownerId as SHA256IdHash<Person>,
+      ));
+      const registeredPairingKey = Boolean(
+        !provisioned
+        && paired
+        && device.ownerId
+        && device.publicKey
+        && await isRegisteredInstanceKeyForPerson(
+          this.leuteModel!,
+          device.ownerId as SHA256IdHash<Person>,
+          device.publicKey as HexString,
+        ),
+      );
+      const identityVerified = provisioned || registeredPairingKey;
+      const authorization = provisioned
+        ? 'signed-provisioning' as const
+        : paired
+          ? 'paired' as const
+          : 'none' as const;
+      const matchingConnections = device.ownerId
+        ? connectionInfos.filter(info => (
+            info.protocolName === 'chum'
+            && info.remotePersonId === device.ownerId
+            && (!device.instanceId || info.remoteInstanceId === device.instanceId)
+            && (!device.publicKey || info.remotePublicKey === device.publicKey)
+          ))
+        : [];
+      const routes = matchingConnections.flatMap(info => info.routes.map(route => ({
+        id: route.name,
+        transport: route.transport,
+        active: route.active,
+        enabled: route.enabled,
+      })));
+      const connected = matchingConnections.some(info => info.isConnected);
+      const starting = matchingConnections.some(info => (
+        info.isTransportConnected
+        || info.lanePhase === 'transport-open'
+        || info.lanePhase === 'handoff-ready'
+        || info.lanePhase === 'startup-in-progress'
+      ));
+      const connectionState = connected
+        ? 'connected' as const
+        : starting
+          ? 'starting' as const
+          : 'disconnected' as const;
+      // This is the durable, per-Person connection policy. It remains truthful
+      // when an authorized peer is offline and consequently has no live route.
+      const connectionEnabled = device.ownerId
+        ? this.connectionsModel!.connectionsEnabledToPerson(
+            device.ownerId as SHA256IdHash<Person>,
+          )
+        : false;
+      const explanation = authorization === 'signed-provisioning'
+        ? 'Identity verified by the signed UVC provisioning certificate for this hardware key.'
+        : authorization === 'paired' && identityVerified
+          ? 'Pairing authorized this Person and the advertised key matches a registered Instance endpoint.'
+          : authorization === 'paired'
+            ? 'This Person is paired, but this advertised route key is not registered to that identity.'
+            : 'Discovery reports reachability only. Pairing or signed provisioning is required for authorization.';
+
+      return {
+        deviceId: device.id,
+        ...(device.ownerId ? {ownerId: device.ownerId} : {}),
+        ...(device.instanceId ? {instanceId: device.instanceId} : {}),
+        ...(device.publicKey ? {publicKey: device.publicKey} : {}),
+        security: {
+          authorization,
+          identityVerified,
+          connectionState,
+          connectionEnabled,
+          routes,
+          explanation,
+        },
+      };
+    }));
+  }
+
+  async setPeerConnectionEnabled(input: {
+    deviceId: string;
+    enabled: boolean;
+  }): Promise<UvcPeerManagementSnapshot> {
+    if (!this.connectionsModel || !this.ownerPersonId) {
+      throw new Error('[UvcCube] connection management is not initialized');
+    }
+    const current = (await this.peerManagementSnapshot()).find(
+      candidate => candidate.deviceId === input.deviceId,
+    );
+    if (!current?.ownerId) {
+      throw new Error(`[UvcCube] device ${input.deviceId} has no authenticated Person identity`);
+    }
+    if (!current.security.identityVerified || current.security.authorization === 'none') {
+      throw new Error(`[UvcCube] device ${input.deviceId} has no verified authorization`);
+    }
+    const remotePersonId = current.ownerId as SHA256IdHash<Person>;
+    if (input.enabled) {
+      await this.connectionsModel.enableConnectionsToPerson(remotePersonId, this.ownerPersonId);
+      const device = this.discoveredDevices.get(input.deviceId);
+      if (device?.online && normalizeHeadlessKind(device.type) === 'esp32') {
+        await this.ensureControlPeerConnection(remotePersonId);
+      }
+    } else {
+      await this.connectionsModel.disableConnectionsToPerson(remotePersonId, this.ownerPersonId);
+      this.controlPeerSockets.get(remotePersonId)?.close('UVC connection disabled by local operator');
+      this.disconnectQuicConnectionsToPerson(remotePersonId);
+      for (const device of this.discoveredDevices.values()) {
+        if (device.ownerId === remotePersonId) {
+          setDiscoveryDeviceConnection(device.id, false);
+        }
+      }
+    }
+    notifyPeerDirectoryChanged();
+    const updated = (await this.peerManagementSnapshot()).find(
+      candidate => candidate.deviceId === input.deviceId,
+    );
+    if (!updated) {
+      throw new Error(`[UvcCube] device ${input.deviceId} disappeared during connection update`);
+    }
+    return updated;
   }
 
   async readLight(input: {
@@ -943,8 +1109,16 @@ export class CubeOneRuntime {
     this.disconnectImportListener = undefined;
     this.disconnectQuicCloseListener?.();
     this.disconnectQuicCloseListener = undefined;
+    this.disconnectConnectionsListener?.();
+    this.disconnectConnectionsListener = undefined;
     this.controlPlan?.shutdown();
     this.controlPlan = undefined;
+    for (const connection of this.controlPeerSockets.values()) {
+      if (connection.state.currentState !== 'closed') {
+        connection.close('UVC Cube shutting down');
+      }
+    }
+    this.controlPeerSockets.clear();
     this.consumeTails.clear();
     this.provisioningClient?.stop();
     this.provisioningClient = undefined;
@@ -1093,6 +1267,7 @@ export class CubeOneRuntime {
     if (!device.address || !device.port || !device.publicKey) {
       throw new Error(`[UvcCube] control target ${targetDeviceId} has no authenticated route`);
     }
+    this.assertKnownPeerConnectionsEnabled(device);
 
     if (normalizeHeadlessKind(device.type) === 'esp32') {
       if (!device.ownerId) {
@@ -1123,6 +1298,9 @@ export class CubeOneRuntime {
       throw new Error('[UvcCube] Groov authority transport is not initialized');
     }
     const route = await this.connectProvisioningPeer(device);
+    // Pause may have been committed while the transport authenticated. Hold
+    // the policy boundary through the final authority dispatch.
+    this.assertKnownPeerConnectionsEnabled(device);
     const state: GroovAuthorityState = operation === 'read'
       ? await this.authorityClient.readState(route.deviceId, {
           ...(route.connectionId ? {connectionId: route.connectionId} : {}),
@@ -1159,6 +1337,11 @@ export class CubeOneRuntime {
       if (!registered) {
         return null;
       }
+      if (!this.connectionsModel?.connectionsEnabledToPerson(
+        device.ownerId as SHA256IdHash<Person>,
+      )) {
+        return null;
+      }
       return {
         personId: device.ownerId as SHA256IdHash<Person>,
         publicKey,
@@ -1183,12 +1366,17 @@ export class CubeOneRuntime {
     deviceId: string;
     connectionId?: string;
   }> {
+    // Ownerless bootstrap devices must remain reachable for their initial
+    // signed provisioning ceremony. Once a Person is known, every QUICVC
+    // caller shares the durable per-Person connection policy.
+    this.assertKnownPeerConnectionsEnabled(device);
     const manager = this.quicManager!;
     // Once QUICVC authenticates a peer it replaces the discovery/hardware id
     // with the credential's Instance id. Always address the established pipe
     // by that authenticated id; the hardware id is only valid during bootstrap.
     for (const candidateId of [device.instanceId, device.id]) {
       if (candidateId && manager.isConnected(candidateId)) {
+        this.assertKnownPeerConnectionsEnabled(device);
         return {deviceId: candidateId};
       }
     }
@@ -1225,10 +1413,13 @@ export class CubeOneRuntime {
         if (candidateId && manager.isConnected(candidateId)) {
           if (timeout) clearTimeout(timeout);
           unsubscribe();
+          this.assertKnownPeerConnectionsEnabled(device);
           return {deviceId: candidateId};
         }
       }
-      return await established;
+      const route = await established;
+      this.assertKnownPeerConnectionsEnabled(device);
+      return route;
     } catch (error) {
       if (timeout) clearTimeout(timeout);
       unsubscribe();
@@ -1236,9 +1427,33 @@ export class CubeOneRuntime {
     }
   }
 
+  private assertKnownPeerConnectionsEnabled(device: DiscoveryDeviceSnapshot): void {
+    if (!device.ownerId) return;
+    if (!this.connectionsModel) {
+      throw new Error('[UvcCube] connection policy is not initialized');
+    }
+    if (!this.connectionsModel.connectionsEnabledToPerson(
+      device.ownerId as SHA256IdHash<Person>,
+    )) {
+      throw new Error(`[UvcCube] connections to ${device.ownerId} are disabled by local policy`);
+    }
+  }
+
+  private disconnectQuicConnectionsToPerson(personId: SHA256IdHash<Person>): void {
+    if (!this.quicManager) return;
+    for (const [connectionId, connection] of [...this.quicManager.connections]) {
+      if (connection.peerPersonId === personId) {
+        this.quicManager.disconnect(connection.deviceId, connectionId);
+      }
+    }
+  }
+
   private async ensureControlPeerConnection(personId: SHA256IdHash<Person>): Promise<void> {
     if (!this.connectionsModel || !this.quicManager || !this.ownerPersonId || !this.ownerInstanceId || !this.identity) {
       throw new Error('[UvcCube] control transport is not initialized');
+    }
+    if (!this.connectionsModel.connectionsEnabledToPerson(personId)) {
+      throw new Error(`[UvcCube] connections to ${personId} are disabled by local policy`);
     }
     if (this.connectionsModel.hasActiveOrTrackedChumPeer(this.ownerPersonId, personId)) {
       const device = [...this.discoveredDevices.values()].find(candidate => candidate.ownerId === personId);
@@ -1280,101 +1495,176 @@ export class CubeOneRuntime {
       this.quicManager!,
       route.connectionId,
     );
-    const preflight = (async () => {
-      await exchangeConnectionGroupName(connection, 'chum');
-      await sync(connection, true);
-      const personInfo = await verifyAndExchangePersonId(
-        this.leuteModel!,
+    this.controlPeerSockets.set(personId, connection);
+    const disconnectSocketListener = connection.state.onEnterState(state => {
+      if (state !== 'closed') return;
+      disconnectSocketListener();
+      if (this.controlPeerSockets.get(personId) === connection) {
+        this.controlPeerSockets.delete(personId);
+      }
+    });
+    let preflightTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let startupTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const preflight = (async () => {
+        await exchangeConnectionGroupName(connection, 'chum');
+        await sync(connection, true);
+        const personInfo = await verifyAndExchangePersonId(
+          this.leuteModel!,
+          connection,
+          this.ownerPersonId!,
+          true,
+          personId,
+          // QUICVC already authenticated the exact person, Instance id,
+          // encryption key, and signing key from durable UVC provisioning. The
+          // legacy Person Keys cache may rotate independently across device
+          // restarts; still run its possession challenge, but do not let that
+          // cache override the stronger provisioned device identity.
+          true,
+        );
+        const instanceInfo = await exchangeInstanceIdObjects(connection, this.ownerInstanceId!);
+        return {personInfo, instanceInfo};
+      })();
+      const preflightTimeout = new Promise<never>((_resolve, reject) => {
+        preflightTimeoutHandle = setTimeout(() => reject(new Error(
+          `[UvcCube] timed out authenticating direct control sync with ${device.id}`,
+        )), 12_000);
+      });
+      const {personInfo, instanceInfo} = await Promise.race([preflight, preflightTimeout]);
+      if (preflightTimeoutHandle) clearTimeout(preflightTimeoutHandle);
+
+      if (personInfo.personId !== personId || instanceInfo.remoteInstanceId !== device.instanceId) {
+        throw new Error(`[UvcCube] direct control identity does not match the certified route for ${device.id}`);
+      }
+      if (!this.connectionsModel!.connectionsEnabledToPerson(personId)) {
+        throw new Error(`[UvcCube] connections to ${personId} were disabled during startup`);
+      }
+
+      const routeId = 'uvc-control-quicvc';
+      const localPublicKey = this.identity!.publicKey as HexString;
+      const remotePublicKey = device.publicKey as HexString;
+      this.connectionsModel!.registerExternalChumConnection(
         connection,
         this.ownerPersonId!,
-        true,
-        personId,
-        // QUICVC already authenticated the exact person, Instance id,
-        // encryption key, and signing key from durable UVC provisioning. The
-        // legacy Person Keys cache may rotate independently across device
-        // restarts; still run its possession challenge, but do not let that
-        // cache override the stronger provisioned device identity.
-        true,
+        this.ownerInstanceId!,
+        personInfo.personId,
+        instanceInfo.remoteInstanceId,
+        localPublicKey,
+        remotePublicKey,
+        routeId,
+        'handoff-ready',
       );
-      const instanceInfo = await exchangeInstanceIdObjects(connection, this.ownerInstanceId!);
-      return {personInfo, instanceInfo};
-    })();
-    const preflightTimeout = new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error(
-        `[UvcCube] timed out authenticating direct control sync with ${device.id}`,
-      )), 12_000);
-    });
-    const {personInfo, instanceInfo} = await Promise.race([preflight, preflightTimeout]);
-    if (personInfo.personId !== personId || instanceInfo.remoteInstanceId !== device.instanceId) {
-      connection.close(`Direct control identity does not match ${device.id}`);
-      throw new Error(`[UvcCube] direct control identity does not match the certified route for ${device.id}`);
-    }
-    // VGER retires any competing relay lane before both peers cross this
-    // barrier. Starting CHUM data before acknowledging it makes the responder
-    // parse the first CHUM frame as a connection-establishment command.
-    await exchangeDirectChumReady(connection);
+      this.connectionsModel!.setTrackedChumConnectionPhase(
+        connection,
+        routeId,
+        'startup-in-progress',
+      );
 
-    // A relay CHUM may already be active by the time discovery selects the
-    // certified QUICVC route. Retire it at the authenticated direct-handover
-    // barrier so ConnectionsModel does not reject the dedicated control lane
-    // as a duplicate peer.
-    await this.connectionsModel!.disableTransientRelayRouteByPublicKey(
-      device.publicKey as HexString,
-      this.ownerPersonId!,
-      'chum',
-    );
-    this.connectionsModel!.closeRoutedConnectionsByPublicKeys(
-      this.identity!.publicKey as HexString,
-      device.publicKey as HexString,
-      'chum',
-    );
-
-    let sessionError: unknown;
-    void this.connectionsModel!.startExternalChumConnection(
-      connection,
-      this.ownerPersonId!,
-      this.ownerInstanceId!,
-      personInfo.personId,
-      instanceInfo.remoteInstanceId,
-      true,
-      'chum',
-      this.identity!.publicKey as HexString,
-      device.publicKey as HexString,
-      'uvc-control-quicvc',
-      {
-        objectFilter: isCubeChumExportObject,
-        importFilter: async (_hash, type) => isUvcChumSyncType(type),
-        chumSyncOptions: {
+      let startupReady = false;
+      let resolveStartupReady: (() => void) | undefined;
+      const startupReadyPromise = new Promise<void>(resolve => {
+        resolveStartupReady = resolve;
+      });
+      const priorityRootIdHashes = await calculateUvcPriorityRootIdHashes(
+        this.ownerPersonId!,
+        personInfo.personId,
+        instanceInfo.remoteInstanceId,
+      );
+      const chumRun = startChumProtocol(
+        connection,
+        this.ownerPersonId!,
+        this.ownerInstanceId!,
+        personInfo.personId,
+        instanceInfo.remoteInstanceId,
+        true,
+        'chum',
+        this.connectionsModel!.onProtocolStart,
+        false,
+        false,
+        isCubeChumExportObject,
+        async (_hash, type) => isUvcChumSyncType(type),
+        {
           priorityWakeupObjectTypes: ['UvcStateTrieRoot'],
+          priorityRootIdHashes,
           connectedAfterProtocolReady: true,
           connectedAfterPriorityObjectTypes: ['UvcStateTrieRoot'],
           traceObjectTypes: ['UvcStateTrieRoot'],
           importBatchContextObjectTypes: ['UvcStateTrieRoot'],
         },
-      },
-    ).catch(error => {
-      sessionError = error;
-    });
+        () => {
+          startupReady = true;
+          this.connectionsModel!.markTrackedChumConnectionConnected(connection, routeId);
+          resolveStartupReady?.();
+        },
+      );
+      const protocolEndedBeforeReady = chumRun.then(() => {
+        if (!startupReady) {
+          throw new Error(`[UvcCube] direct control sync ended before readiness for ${device.id}`);
+        }
+      });
+      const startupTimeout = new Promise<never>((_resolve, reject) => {
+        startupTimeoutHandle = setTimeout(() => reject(new Error(
+          `[UvcCube] timed out starting direct control sync with ${device.id}`,
+        )), 10_000);
+      });
+      await Promise.race([startupReadyPromise, protocolEndedBeforeReady, startupTimeout]);
+      if (startupTimeoutHandle) clearTimeout(startupTimeoutHandle);
+      if (!this.connectionsModel!.connectionsEnabledToPerson(personId)) {
+        throw new Error(`[UvcCube] connections to ${personId} were disabled during startup`);
+      }
 
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-      if (sessionError) {
-        throw sessionError;
+      const protocolEndedAfterReady = chumRun.then(
+        () => {
+          throw new Error(`[UvcCube] direct control sync ended during relay handoff for ${device.id}`);
+        },
+        error => {
+          throw error;
+        },
+      );
+      void chumRun.then(
+        () => {
+          setDiscoveryDeviceConnection(device.id, false);
+          console.error(`[UvcCube] Direct QUICVC CHUM control lane ended for ${device.id}`);
+        },
+        error => {
+          setDiscoveryDeviceConnection(device.id, false);
+          console.error(`[UvcCube] Direct QUICVC CHUM control lane ended for ${device.id}:`, error);
+        },
+      );
+      await Promise.race([
+        this.retireOutgoingRelayRoutes(localPublicKey, remotePublicKey),
+        protocolEndedAfterReady,
+      ]);
+      console.log(`[UvcCube] Direct QUICVC CHUM control lane ready for ${device.id}`);
+      setDiscoveryDeviceConnection(device.id, true);
+    } catch (error) {
+      if (preflightTimeoutHandle) clearTimeout(preflightTimeoutHandle);
+      if (startupTimeoutHandle) clearTimeout(startupTimeoutHandle);
+      if (connection.state.currentState !== 'closed') {
+        connection.close(error instanceof Error ? error.message : String(error));
       }
-      const ready = this.connectionsModel!.connectionsInfo().some(info => (
-        info.remotePersonId === personId
-        && info.protocolName === 'chum'
-        && info.isConnected
-      ));
-      if (ready) {
-        console.log(`[UvcCube] Direct QUICVC CHUM control lane ready for ${device.id}`);
-        setDiscoveryDeviceConnection(device.id, true);
-        return;
-      }
-      await new Promise(resolve => setTimeout(resolve, 50));
+      throw error;
     }
-    connection.close(`Timed out starting UVC control CHUM for ${device.id}`);
-    throw new Error(`[UvcCube] timed out starting direct control sync with ${device.id}`);
+  }
+
+  private async retireOutgoingRelayRoutes(
+    localPublicKey: HexString,
+    remotePublicKey: HexString,
+  ): Promise<void> {
+    for (const connectionInfo of this.connectionsModel!.connectionsInfo()) {
+      if (
+        connectionInfo.protocolName !== 'chum'
+        || connectionInfo.localPublicKey !== localPublicKey
+        || connectionInfo.remotePublicKey !== remotePublicKey
+      ) {
+        continue;
+      }
+      for (const route of connectionInfo.routes) {
+        if (route.enabled !== false && route.name.startsWith('OutgoingWebsocketRoute:')) {
+          await route.enable(false);
+        }
+      }
+    }
   }
 
   private async getControlTrie(

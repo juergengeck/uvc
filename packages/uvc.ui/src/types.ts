@@ -59,6 +59,21 @@ export interface UvcDevice {
   lastSeenAt?: string;
   trustState?: string;
   capabilities?: string[];
+  security?: UvcPeerSecurity;
+}
+
+export interface UvcPeerSecurity {
+  authorization: 'local-owner' | 'paired' | 'signed-provisioning' | 'none';
+  identityVerified: boolean;
+  connectionState: 'connected' | 'starting' | 'disconnected';
+  connectionEnabled: boolean;
+  routes: Array<{
+    id: string;
+    transport: string;
+    active: boolean;
+    enabled: boolean;
+  }>;
+  explanation: string;
 }
 
 export type UvcLightDeviceKind = 'groov' | 'esp32';
@@ -90,7 +105,29 @@ export interface UvcDiscoveryRuntime {
   fetchedAt: string;
 }
 
+export interface UvcMemorySummary {
+  id: string;
+  title: string;
+  summary?: string;
+  timestamp: number;
+  factsCount: number;
+  entitiesCount: number;
+}
+
+export interface UvcMemory {
+  id: string;
+  title: string;
+  summary?: string;
+  prose: string;
+  author: string;
+  facts: Array<{ statement: string; confidence: number; sourceRef?: string }>;
+  entities: Array<{ name: string; type: string; description?: string }>;
+  sourceSubjects: string[];
+}
+
 export interface UvcPlatform {
+  listMemories(): Promise<UvcMemorySummary[]>;
+  getMemory(id: string): Promise<UvcMemory>;
   getSettingsSections(): Promise<SettingsSection[]>;
   listJournalRecords(): Promise<UvcJournalRecord[]>;
   getDiscoveryRuntime(): Promise<UvcDiscoveryRuntime>;
@@ -101,6 +138,7 @@ export interface UvcPlatform {
   setLight(deviceId: string, kind: UvcLightDeviceKind, enabled: boolean): Promise<UvcLightState>;
   createPairingInvitation(): Promise<unknown>;
   acceptPairingInvitation(invitation: unknown): Promise<void>;
+  setPeerConnectionEnabled(deviceId: string, enabled: boolean): Promise<UvcDiscoveryRuntime>;
 }
 
 export interface UvcDevicesViewProps {
@@ -112,6 +150,7 @@ export interface UvcDevicesViewProps {
   onRefresh(): Promise<void>;
   onSetLight(deviceId: string, kind: UvcLightDeviceKind, enabled: boolean): Promise<UvcLightState>;
   onSetupDevice(deviceId: string, assignedInstanceName: string): Promise<void>;
+  onSetConnectionEnabled(deviceId: string, enabled: boolean): Promise<void>;
   runtime: UvcDiscoveryRuntime | null;
   runtimeError: string | null;
 }

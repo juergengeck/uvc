@@ -1,74 +1,89 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-# UVC Browser Deploy Script
+# Publish the current Expo app alongside the existing public UVC website.
 # Usage: ./deploy.sh [--build-only]
-#
-# Builds and deploys to Cloudflare Pages
-# Use --build-only to skip deployment
-
 BUILD_ONLY=false
-if [ "$1" == "--build-only" ]; then
-    BUILD_ONLY=true
-fi
-
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+case "${1:-}" in
+  --build-only) BUILD_ONLY=true ;;
+  '') ;;
+  *) echo "Usage: $0 [--build-only]" >&2; exit 2 ;;
+esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="dist"
-
-echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   UVC Browser Deploy Script             ║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
-echo ""
-
-# Step 1: Build web export
-echo -e "${BLUE}[1/2]${NC} Building UVC for web..."
+WEBSITE_DIR="${UVC_WEBSITE_DIR:-$SCRIPT_DIR/../one.uvc/html}"
+DEPLOY_DIR="$SCRIPT_DIR/.expo/pages-deploy"
+[[ -f "$WEBSITE_DIR/index.html" && -f "$WEBSITE_DIR/_headers" ]] || {
+  echo "Missing public website at $WEBSITE_DIR (set UVC_WEBSITE_DIR)." >&2
+  exit 1
+}
 cd "$SCRIPT_DIR"
-if npx expo export --platform web; then
-    echo -e "${GREEN}✓ Build successful${NC}"
-else
-    echo -e "${RED}✗ Build failed${NC}"
-    exit 1
-fi
 
-# Verify build
-if [ ! -f "$BUILD_DIR/index.html" ]; then
-    echo -e "${RED}✗ Build verification failed: index.html not found${NC}"
-    exit 1
-fi
-echo ""
+npm run build:lane-worker
+# A cached worker must never be paired with an app using a newer worker API.
+export EXPO_PUBLIC_LANE_WORKER_VERSION="$(shasum -a 256 public/lane.worker.js | cut -d ' ' -f 1)"
+npx expo export --platform web
+[[ -s dist/index.html && -s dist/lane.worker.js ]] || {
+  echo "App HTML or lab worker is missing from the export." >&2
+  exit 1
+}
 
-if [ "$BUILD_ONLY" = true ]; then
-    echo -e "${GREEN}✓ Build complete (--build-only)${NC}"
-    echo -e "${BLUE}📁 Output:${NC} $BUILD_DIR/"
-    exit 0
-fi
+# This directory contains only generated deployment files.
+rm -rf "$DEPLOY_DIR"
+mkdir -p "$DEPLOY_DIR"
+rsync -a --exclude='.*' "$WEBSITE_DIR/" "$DEPLOY_DIR/"
+rsync -a --exclude=index.html --exclude=favicon.ico --exclude='*.map' dist/ "$DEPLOY_DIR/"
+cp dist/index.html "$DEPLOY_DIR/mobile.html"
+cp dist/favicon.ico "$DEPLOY_DIR/app-icon.ico"
 
-# Step 2: Deploy to Cloudflare Pages
-echo -e "${BLUE}[2/2]${NC} Deploying to Cloudflare Pages..."
-if command -v npx &> /dev/null; then
-    if npx wrangler pages deploy dist --project-name=uvc-one --commit-dirty=true --no-bundle; then
-        echo -e "${GREEN}✓ Deployed to Cloudflare Pages${NC}"
-    else
-        echo -e "${RED}✗ Cloudflare deployment failed${NC}"
-        echo -e "${YELLOW}  Make sure you're logged in: npx wrangler login${NC}"
-        exit 1
-    fi
-else
-    echo -e "${RED}✗ npx not found${NC}"
-    exit 1
-fi
-echo ""
+python3 - "$DEPLOY_DIR" <<'PY'
+from pathlib import Path
+import hashlib
+import re
+import sys
+root = Path(sys.argv[1])
+html = root / 'mobile.html'
+text = html.read_text().replace('href="/favicon.ico"', 'href="/app-icon.ico"')
+# A CDN can cache the website fallback at a new script URL during rollout.
+# Version entry scripts by their actual deployed bytes to bypass that response.
+def version_script(match):
+    url = match.group(2)
+    revision = hashlib.sha256((root / url.lstrip('/')).read_bytes()).hexdigest()
+    return f'{match.group(1)}{url}?v={revision}{match.group(3)}'
+text = re.sub(r'(<script\b[^>]*\bsrc=")(/_expo/static/[^"?]+)(")', version_script, text)
+html.write_text(text)
+headers = root / '_headers'
+text = headers.read_text()
+# The existing ONE endpoints remain allowed; IoM pairing uses the Glue relay.
+text = text.replace("connect-src 'self' ", "connect-src 'self' https://api.glue.one wss://api.glue.one ")
+text += "\n/_expo/static/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/lane.worker.js\n  Cache-Control: public, max-age=0, must-revalidate\n"
+headers.write_text(text)
+# Explicit app routes keep website pages and asset URLs out of the SPA rewrite.
+# Target the extensionless HTML URL to avoid Pages' .html canonical redirects.
+routes = set()
+for source in Path('app').rglob('*.tsx'):
+    if source.stem.startswith(('_', '+')):
+        continue
+    parts = [part for part in source.relative_to('app').with_suffix('').parts
+             if not part.startswith('(')]
+    if parts and parts[-1] == 'index':
+        parts.pop()
+    if not parts:
+        continue
+    parts = ['*' if part.startswith('[...') else ':' + part[1:-1]
+             if part.startswith('[') else part for part in parts]
+    routes.add('/' + '/'.join(parts))
+redirects = ['/app /journal 302', '/app/ /journal 302', '/app/* /:splat 302']
+for route in sorted(routes, key=lambda route: ('*' in route, ':' in route, route)):
+    redirects.append(f'{route} /mobile 200')
+    if '*' not in route:
+        redirects.append(f'{route}/ /mobile 200')
+(root / '_redirects').write_text('\n'.join(redirects) + '\n')
+PY
 
-echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║     ✓ Deploy Completed!                ║${NC}"
-echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "${BLUE}📁 Build output:${NC} dist/"
-echo -e "${BLUE}☁️  Live at:${NC} https://uvc-one.pages.dev"
-echo ""
+printf 'Deployment assembled: %s\n' "$DEPLOY_DIR"
+if [[ "$BUILD_ONLY" == true ]]; then
+  exit 0
+fi
+npx wrangler pages deploy "$DEPLOY_DIR" --project-name=uvc-one --branch=main --commit-dirty=true --no-bundle
+printf 'Deployed: https://uvc.one/app/ and https://uvc.one/lab\n'

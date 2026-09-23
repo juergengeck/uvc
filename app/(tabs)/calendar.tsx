@@ -1,8 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Chip, IconButton, Text, useTheme } from 'react-native-paper';
+import { Chip, Text, useTheme } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { Calendar, type DateData } from 'react-native-calendars';
 import type { MarkedDates } from 'react-native-calendars/src/types';
@@ -20,7 +19,6 @@ export default function CalendarScreen() {
   const { t } = useTranslation('calendar');
   const { t: tJournal } = useTranslation('journal');
   const theme = useTheme();
-  const router = useRouter();
 
   const [records, setRecords] = useState<UvcJournalRecord[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(Date.now()));
@@ -82,8 +80,6 @@ export default function CalendarScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen options={{ headerShown: false }} />
-
       <View style={[styles.customHeader, { backgroundColor: theme.colors.background }]}>
         <View style={styles.titleBlock}>
           <Text style={[styles.customTitle, { color: theme.colors.onBackground }]}>
@@ -93,22 +89,7 @@ export default function CalendarScreen() {
             {t('description')}
           </Text>
         </View>
-        <View style={styles.headerRight}>
-          <IconButton
-            icon="cog"
-            size={24}
-            iconColor={theme.colors.primary}
-            onPress={() => router.push('/(screens)/settings')}
-            style={{ margin: 0, marginRight: 8 }}
-          />
-          <IconButton
-            icon="notebook"
-            size={24}
-            iconColor={theme.colors.primary}
-            onPress={() => router.push('/(tabs)/journal')}
-            style={{ margin: 0 }}
-          />
-        </View>
+
       </View>
 
       <View style={styles.content}>
@@ -204,7 +185,6 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 32,
   },
   content: {
     flex: 1,
@@ -213,10 +193,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 120,
     paddingBottom: 14,
     paddingHorizontal: 16,
-    paddingTop: 42,
+    paddingTop: 16,
   },
   titleBlock: {
     flex: 1,
@@ -225,11 +204,6 @@ const styles = StyleSheet.create({
   customTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    marginRight: -8,
-    marginTop: 6,
   },
   entriesContainer: {
     flex: 1,

@@ -120,6 +120,10 @@ class CubePeerDirectory {
     return () => this.changeListeners.delete(listener);
   }
 
+  notifyChanged(): void {
+    this.emitChanged();
+  }
+
   start(
     identity?: CubeOneIdentity,
     onDiscovery?: (device: DiscoveryDeviceSnapshot) => Promise<void>,
@@ -351,6 +355,10 @@ export function stopPeerDirectory(): void {
 
 export function onPeerDirectoryChanged(listener: () => void): () => void {
   return peerDirectory.onChanged(listener);
+}
+
+export function notifyPeerDirectoryChanged(): void {
+  peerDirectory.notifyChanged();
 }
 
 export function setDiscoveryDeviceConnection(deviceId: string, connected: boolean): void {

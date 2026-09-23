@@ -74,6 +74,33 @@ export interface DiscoveryDeviceSnapshot {
   lastSeenAt?: string;
   trustState?: string;
   capabilities?: string[];
+  security?: UvcPeerSecuritySnapshot;
+}
+
+export type UvcPeerAuthorization = 'local-owner' | 'paired' | 'signed-provisioning' | 'none';
+
+export interface UvcPeerRouteSnapshot {
+  id: string;
+  transport: string;
+  active: boolean;
+  enabled: boolean;
+}
+
+export interface UvcPeerSecuritySnapshot {
+  authorization: UvcPeerAuthorization;
+  identityVerified: boolean;
+  connectionState: 'connected' | 'starting' | 'disconnected';
+  connectionEnabled: boolean;
+  routes: UvcPeerRouteSnapshot[];
+  explanation: string;
+}
+
+export interface UvcPeerManagementSnapshot {
+  deviceId: string;
+  ownerId?: string;
+  instanceId?: string;
+  publicKey?: string;
+  security: UvcPeerSecuritySnapshot;
 }
 
 export interface CubeUvcCycleRecord {

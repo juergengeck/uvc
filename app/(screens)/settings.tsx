@@ -27,14 +27,12 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform, NativeModules } from 'react-native';
-import { Text, IconButton, List, Switch, Portal, Dialog, TextInput, HelperText, Button, useTheme } from 'react-native-paper';
+import { View, ScrollView, Alert, NativeModules } from 'react-native';
+import { Text, IconButton, List, Portal, Dialog, TextInput, HelperText, Button } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
-import { useInstance } from '@src/providers/app/useInstance';
 import { useTranslation } from 'react-i18next';
 import { useTheme as useAppTheme } from '@src/providers/app/AppTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createThemedStyles } from '@src/constants/ThemeStyles';
 import { logout, deleteAllAppData } from '@src/initialization';
 
 // Components
@@ -158,7 +156,21 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView style={[themedStyles.screenContainer, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+    <>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <IconButton
+              icon={isDarkMode ? 'weather-sunny' : 'weather-night'}
+              accessibilityLabel={isDarkMode ? 'Use light theme' : 'Use dark theme'}
+              disabled={isLoading}
+              onPress={() => void toggleTheme()}
+              iconColor={theme.colors.primary}
+            />
+          ),
+        }}
+      />
+      <SafeAreaView style={[themedStyles.screenContainer, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
       <ScrollView 
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingBottom: 32 }}
@@ -175,9 +187,9 @@ export default function SettingsScreen() {
         </Text>
         <View style={themedStyles.settingsSection}>
           <List.Item
-            title={t('settings.resources.devices.title', { defaultValue: 'Devices' })}
+            title={t('settings.resources.devices.title', { defaultValue: 'Devices & rooms' })}
             description={t('settings.resources.devices.description', {
-              defaultValue: 'Lamps, sensors, rooms, and device assignments',
+              defaultValue: 'Physical rooms, lamps, sensors, and device assignments',
             })}
             onPress={() => router.push('/(screens)/devices')}
             left={props => <List.Icon {...props} icon="devices" />}
@@ -191,33 +203,13 @@ export default function SettingsScreen() {
         </Text>
         <View style={themedStyles.settingsSection}>
           <List.Item
-            title={t('settings.roles.title', { defaultValue: 'Role Management' })}
+            title={t('settings.roles.title', { defaultValue: 'Roles & responsibilities' })}
             description={t('settings.roles.description', {
-              defaultValue: 'EN 17141 authority, credentials, and role certificates',
+              defaultValue: 'Operational permissions and cryptographic role grants',
             })}
             onPress={() => router.push('/(screens)/roles')}
             left={props => <List.Icon {...props} icon="shield-account" />}
             right={props => <List.Icon {...props} icon="chevron-right" />}
-          />
-        </View>
-
-        {/* Appearance Settings */}
-        <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
-          {t('settings.appearance.title').toUpperCase()}
-        </Text>
-        <View style={themedStyles.settingsSection}>
-          <List.Item
-            title={t('settings.appearance.darkMode.title')}
-            description={t('settings.appearance.darkMode.description')}
-            style={themedStyles.settingsItem}
-            right={() => (
-              <Switch
-                value={isDarkMode}
-                onValueChange={toggleTheme}
-                disabled={isLoading}
-                color={theme.colors.primary}
-              />
-            )}
           />
         </View>
 
@@ -230,20 +222,6 @@ export default function SettingsScreen() {
             selectedLanguage={language}
             onLanguageChange={setLanguage}
             isLoading={isLoading}
-          />
-        </View>
-
-        {/* Contacts Settings */}
-        <Text variant="bodySmall" style={themedStyles.settingsSectionTitle}>
-          {t('contacts:settings.title').toUpperCase()}
-        </Text>
-        <View style={themedStyles.settingsSection}>
-          <List.Item
-            title={t('contacts:settings.syncContacts', { defaultValue: 'Device Contact Sync' })}
-            description={t('contacts:settings.syncDescription', { defaultValue: 'Sync contacts from your device' })}
-            onPress={() => {/* TODO: Implement contact sync settings */}}
-            left={props => <List.Icon {...props} icon="sync" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
           />
         </View>
 
@@ -281,17 +259,10 @@ export default function SettingsScreen() {
         </Text>
         <View style={themedStyles.settingsSection}>
           <List.Item
-            title={t('settings.dataManagement.export.title', { defaultValue: 'Export Data' })}
-            description={t('settings.dataManagement.export.description', { defaultValue: 'Back up UVC devices, rooms, and settings' })}
-            onPress={() => router.push({ pathname: '/(screens)/data-management', params: { action: 'export' } })}
-            left={props => <List.Icon {...props} icon="database-export" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
-          />
-          <List.Item
-            title={t('settings.dataManagement.import.title', { defaultValue: 'Import Data' })}
-            description={t('settings.dataManagement.import.description', { defaultValue: 'Restore UVC devices, rooms, and settings' })}
-            onPress={() => router.push({ pathname: '/(screens)/data-management', params: { action: 'import' } })}
-            left={props => <List.Icon {...props} icon="database-import" />}
+            title={t('settings.dataManagement.title', { defaultValue: 'Data management' })}
+            description="Export an Excel workbook or import organizations and facility rooms from a prior UVC JSON backup"
+            onPress={() => router.push('/(screens)/data-management')}
+            left={props => <List.Icon {...props} icon="database-outline" />}
             right={props => <List.Icon {...props} icon="chevron-right" />}
           />
         </View>
@@ -358,6 +329,7 @@ export default function SettingsScreen() {
           </Dialog>
         </Portal>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }

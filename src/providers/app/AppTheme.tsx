@@ -28,11 +28,6 @@ const fontFamilies = {
     android: 'sans-serif',
     default: 'Inter, system-ui, sans-serif',
   }),
-  serif: Platform.select({
-    ios: 'Georgia',
-    android: 'serif',
-    default: 'Source Serif 4, Georgia, serif',
-  }),
   mono: Platform.select({
     ios: 'Menlo',
     android: 'monospace',
@@ -42,13 +37,13 @@ const fontFamilies = {
 
 const typographyOverrides = configureFonts({
   config: {
-    displayLarge: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
-    displayMedium: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
-    displaySmall: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
-    headlineLarge: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
-    headlineMedium: { fontFamily: fontFamilies.serif, fontWeight: '500', letterSpacing: 0 },
-    headlineSmall: { fontFamily: fontFamilies.serif, fontWeight: '600', letterSpacing: 0 },
-    titleLarge: { fontFamily: fontFamilies.serif, fontWeight: '600', letterSpacing: 0 },
+    displayLarge: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: -0.5 },
+    displayMedium: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: -0.25 },
+    displaySmall: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    headlineLarge: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    headlineMedium: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    headlineSmall: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
+    titleLarge: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
     titleMedium: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
     titleSmall: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
     labelLarge: { fontFamily: fontFamilies.sans, fontWeight: '600', letterSpacing: 0 },
@@ -85,10 +80,10 @@ function createCustomTheme(isDark: boolean) {
       onBackground: colors.onBackground,
       surface: colors.surface,
       surfaceVariant: colors.surfaceVariant,
-      surfaceDisabled: isDark ? 'rgba(240, 233, 223, 0.12)' : 'rgba(36, 35, 31, 0.12)',
+      surfaceDisabled: isDark ? 'rgba(228, 232, 236, 0.12)' : 'rgba(36, 44, 53, 0.12)',
       onSurface: colors.onSurface,
       onSurfaceVariant: colors.onSurfaceVariant,
-      onSurfaceDisabled: isDark ? 'rgba(240, 233, 223, 0.38)' : 'rgba(36, 35, 31, 0.38)',
+      onSurfaceDisabled: isDark ? 'rgba(228, 232, 236, 0.38)' : 'rgba(36, 44, 53, 0.38)',
       error: colors.error,
       errorContainer: colors.errorContainer,
       onError: colors.onError,
@@ -96,7 +91,7 @@ function createCustomTheme(isDark: boolean) {
       notification: colors.notification,
       outline: colors.outline,
       outlineVariant: colors.outlineVariant,
-      shadow: isDark ? '#000000' : '#24231f',
+      shadow: isDark ? '#000000' : '#242c35',
       scrim: colors.scrim,
       backdrop: colors.backdrop,
       elevation: {
@@ -130,7 +125,7 @@ function createCustomTheme(isDark: boolean) {
       ...baseTheme.fonts,
       ...typographyOverrides,
     },
-    roundness: 12,
+    roundness: 8,
   };
 }
 

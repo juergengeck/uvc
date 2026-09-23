@@ -1,7 +1,7 @@
 {
   "title": "Calendrier des cycles UVC",
   "description": "Cycles UVC par date et ressource",
-  "recordCount_one": "{{count}} enregistrement",
-  "recordCount_other": "{{count}} enregistrements",
+  "recordCount": "{{count}} enregistrement",
+  "recordCount_plural": "{{count}} enregistrements",
   "noEntries": "Aucun traitement enregistré pour cette date"
 }

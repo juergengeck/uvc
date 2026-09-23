@@ -1,11 +1,8 @@
-import { Link } from '@tanstack/react-router';
 import {
-  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
-  List,
   Lightbulb,
   MapPin,
   Radio,
@@ -124,11 +121,12 @@ function JournalEntryCard({ entry }: { entry: UvcJournalEntry }) {
 export function JournalView({
   deviceCount,
   loadRecords,
+  mode = 'journal',
 }: {
   deviceCount: number;
+  mode?: 'calendar' | 'journal';
   loadRecords(): Promise<UvcJournalRecord[]>;
 }) {
-  const [mode, setMode] = useState<'calendar' | 'journal'>('calendar');
   const [month, setMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [records, setRecords] = useState<UvcJournalRecord[]>([]);
@@ -167,18 +165,14 @@ export function JournalView({
     <div className="journal-view">
       <header className="journal-hero">
         <div>
-          <span className="eyebrow">UVC cycle journal</span>
-          <h1>Where and when rooms were treated</h1>
-          <p>Room treatments and the lamps, sensors, and evidence used for each run.</p>
+          <h1>{mode === 'calendar' ? 'Calendar' : 'Journal'}</h1>
+          <p>Room treatments and their supporting records.</p>
         </div>
         <div className="journal-actions">
           <button className="action-button" disabled={loading} onClick={() => void refresh()} type="button">
             <RefreshCw className={loading ? 'spin' : ''} /> Refresh
           </button>
-          <div className="view-switcher" aria-label="Journal view">
-            <button aria-pressed={mode === 'calendar'} onClick={() => setMode('calendar')} type="button"><CalendarDays /> Calendar</button>
-            <button aria-pressed={mode === 'journal'} onClick={() => setMode('journal')} type="button"><List /> Journal</button>
-          </div>
+
         </div>
       </header>
 
@@ -228,7 +222,6 @@ export function JournalView({
           <h2>Lamps and sensors</h2>
           <p>{deviceCount} discovered {deviceCount === 1 ? 'device' : 'devices'}</p>
         </div>
-        <Link className="action-button" to="/settings/devices"><Radio /> Settings · Devices <ChevronRight /></Link>
       </section>
     </div>
   );

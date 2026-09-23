@@ -3,10 +3,11 @@ import { View } from 'react-native';
 import { List, ActivityIndicator, useTheme } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { useTheme as useAppTheme } from '@src/providers/app/AppTheme';
+import type {UvcSupportedLanguage} from '@src/settings/uvcSettingsSections';
 
 interface LanguageSelectorProps {
-  selectedLanguage: string;
-  onLanguageChange: (language: string) => void;
+  selectedLanguage: UvcSupportedLanguage;
+  onLanguageChange: (language: UvcSupportedLanguage) => void;
   isLoading?: boolean;
   error?: string | null;
 }
@@ -38,7 +39,11 @@ export function LanguageSelector({
     fr: t('settings.language.fr')
   });
 
-  const languages = [
+  const languages: ReadonlyArray<{
+    code: UvcSupportedLanguage;
+    name: string;
+    icon: string;
+  }> = [
     { code: 'en', name: t('settings.language.en'), icon: '🇬🇧' },
     { code: 'de', name: t('settings.language.de'), icon: '🇩🇪' },
     { code: 'fr', name: t('settings.language.fr'), icon: '🇫🇷' }
@@ -83,4 +88,4 @@ export function LanguageSelector({
       ))}
     </>
   );
-} 
+}

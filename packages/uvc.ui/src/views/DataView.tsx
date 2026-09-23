@@ -1,162 +1,106 @@
-import React, { useState } from 'react';
-import {
-  CheckCircle2,
-  Database,
-  Download,
-  FileSpreadsheet,
-  Upload,
-} from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { ArrowLeft, BookOpen, Download, RefreshCw, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { downloadDataWorkbook } from '../data-export.js';
+import type { UvcMemory, UvcMemorySummary, UvcPlatform } from '../types.js';
 
-export function DataView({
-  onExport,
-  onImport,
-}: {
-  onExport?: (format: 'json' | 'csv') => void;
-  onImport?: (file: File) => Promise<{ success: boolean; message: string }>;
-}) {
-  const [importMessage, setImportMessage] = useState<string | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+export function DataView({ platform }: { platform: UvcPlatform }) {
+  const [memories, setMemories] = useState<UvcMemorySummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<UvcMemory | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const detailRequest = useRef(0);
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try { setMemories(await platform.listMemories()); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setLoading(false); }
+  }, [platform]);
+  useEffect(() => { void reload(); return () => { detailRequest.current++; }; }, [reload]);
 
-  const handleExportJson = () => {
-    if (onExport) {
-      onExport('json');
-      return;
-    }
-    const backup = {
-      app: 'uvc',
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      standard: 'EN 17141:2020',
-      data: {
-        devices: [
-          { id: 'lamp-1', name: '254nm Quartz Tube Fixture', type: 'lamp', status: 'ready' },
-          { id: 'sensor-1', name: 'NIST Industrial Radiometer', type: 'sensor', status: 'ready' },
-        ],
-        rooms: [
-          { id: 'room-101', name: 'Room 101 · Patient Suite', targetDoseJm2: 250 },
-          { id: 'or-4', name: 'OR 4 · Surgical Suite', targetDoseJm2: 400 },
-        ],
-        disinfectionRuns: [
-          {
-            cycleId: 'cycle-completed-1',
-            room: 'OR 4',
-            doseJm2: 400,
-            status: 'CERTIFIED',
-            certifiedBy: 'admin@hospital.local',
-          },
-        ],
-      },
-    };
-
-    const jsonStr = JSON.stringify(backup, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `uvc-data-backup-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const openMemory = async (id: string) => {
+    const request = ++detailRequest.current;
+    setDetailLoading(true);
+    setSelected(null);
+    setError(null);
+    try {
+      const memory = await platform.getMemory(id);
+      if (request === detailRequest.current) setSelected(memory);
+    } catch (cause) {
+      if (request === detailRequest.current) setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { if (request === detailRequest.current) setDetailLoading(false); }
   };
 
-  const handleFileInput = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setImportMessage(null);
-    setImportError(null);
-
-    if (onImport) {
-      const res = await onImport(file);
-      if (res.success) setImportMessage(res.message);
-      else setImportError(res.message);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const text = e.target?.result as string;
-        const parsed = JSON.parse(text);
-        setImportMessage(`Backup verified successfully: ${parsed.app || 'uvc'} data ready to restore.`);
-      } catch (err) {
-        setImportError(`Invalid backup file: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    };
-    reader.readAsText(file);
+  const exportData = async () => {
+    setExporting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const [records, runtime, entries] = await Promise.all([
+        platform.listJournalRecords(), platform.getDiscoveryRuntime(), platform.listMemories(),
+      ]);
+      const memoryDocuments: UvcMemory[] = [];
+      // Read sequentially to avoid overwhelming the local object store for large libraries.
+      for (const entry of entries) memoryDocuments.push(await platform.getMemory(entry.id));
+      downloadDataWorkbook({ exportedAt: new Date().toISOString(), records, devices: runtime.devices, memories: memoryDocuments });
+      setStatus('Excel workbook prepared.');
+    } catch (cause) { setError(`Export failed: ${cause instanceof Error ? cause.message : String(cause)}`); }
+    finally { setExporting(false); }
   };
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filtered = memories.filter(memory => `${memory.title} ${memory.summary ?? ''}`.toLocaleLowerCase().includes(normalizedQuery));
 
   return (
-    <div className="data-view" style={{ maxWidth: 1040, margin: '0 auto' }}>
+    <div className="settings-home data-view">
       <header className="settings-hero">
-        <span className="eyebrow">Data Management</span>
-        <h1>Data Export & Import</h1>
-        <p>Manage durable backup files for UVC devices, controlled environment room configurations, and EN 17141 disinfection run records.</p>
+        <Link className="data-back" to="/settings"><ArrowLeft aria-hidden="true" /> Settings</Link>
+        <h1>Data &amp; Memory</h1>
+        <p>Export your records and browse the memories saved to this identity.</p>
       </header>
-
-      <div className="stack" style={{ marginTop: 24, gap: 16 }}>
-        {/* Export Card */}
-        <div className="settings-card" style={{ padding: 24 }}>
-          <div style={{ display: 'flex', gap: 16 }}>
-            <div className="settings-link-card__icon" style={{ width: 44, height: 44 }}>
-              <Download aria-hidden="true" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <h3 style={{ margin: '0 0 6px' }}>Export Data</h3>
-              <p style={{ margin: '0 0 16px', color: '#9cabc1', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                Back up your entire UVC environment—including registered emitters, radiometers, room profiles, and cryptographic journal records—to a portable JSON archive.
-              </p>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button
-                  className="action-button action-button--primary"
-                  onClick={handleExportJson}
-                  type="button"
-                >
-                  <Download aria-hidden="true" />
-                  Download JSON Backup
-                </button>
-              </div>
-            </div>
-          </div>
+      <section className="settings-card" aria-labelledby="data-export-heading">
+        <div className="settings-card__header">
+          <div><h2 id="data-export-heading">Export data</h2><p>An Excel workbook with separate sheets for the journal, devices, and memories.</p></div>
+          <button className="action-button action-button--primary" type="button" disabled={exporting} onClick={() => void exportData()}>
+            <Download aria-hidden="true" />{exporting ? 'Preparing workbook…' : 'Export Excel (.xlsx)'}
+          </button>
         </div>
-
-        {/* Import Card */}
-        <div className="settings-card" style={{ padding: 24 }}>
-          <div style={{ display: 'flex', gap: 16 }}>
-            <div className="settings-link-card__icon" style={{ width: 44, height: 44 }}>
-              <Upload aria-hidden="true" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <h3 style={{ margin: '0 0 6px' }}>Import Data</h3>
-              <p style={{ margin: '0 0 16px', color: '#9cabc1', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                Restore UVC devices, room configurations, and historical records from a previously exported backup archive.
-              </p>
-              <label className="action-button action-button--secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Upload aria-hidden="true" />
-                Select Backup File (JSON)
-                <input
-                  accept="application/json"
-                  onChange={handleFileInput}
-                  style={{ display: 'none' }}
-                  type="file"
-                />
-              </label>
-
-              {importMessage && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, color: '#34c759' }}>
-                  <CheckCircle2 aria-hidden="true" style={{ width: 18, height: 18 }} />
-                  <span style={{ fontSize: '0.9rem' }}>{importMessage}</span>
-                </div>
-              )}
-              {importError && (
-                <p style={{ color: '#ef4444', marginTop: 12, fontSize: '0.9rem' }}>
-                  {importError}
-                </p>
-              )}
-            </div>
-          </div>
+        <p className="data-help">Includes records available to this instance. Passwords and private keys are excluded.</p>
+        {status && <p role="status">{status}</p>}
+      </section>
+      {error && <div className="error-block" role="alert">{error}</div>}
+      <section className="settings-group" aria-labelledby="memory-heading">
+        <div className="settings-group__header">
+          <div><h2 id="memory-heading">Memory</h2><p>Saved knowledge, summaries, and their source references.</p></div>
+          <button className="action-button action-button--secondary" type="button" disabled={loading} onClick={() => void reload()}>
+            <RefreshCw aria-hidden="true" />{loading ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
-      </div>
+        <label className="memory-search"><Search aria-hidden="true" /><input className="field-input" aria-label="Search memories" placeholder="Search memories" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <div className="memory-layout">
+          <div className="memory-list" aria-busy={loading}>
+            {loading ? <p className="data-empty" role="status">Loading memories…</p> : filtered.length ? filtered.map(memory => (
+              <button className={`memory-item ${selected?.id === memory.id ? 'memory-item--selected' : ''}`} key={memory.id} onClick={() => void openMemory(memory.id)} type="button">
+                <BookOpen aria-hidden="true" /><span><strong>{memory.title}</strong>{memory.summary && <span>{memory.summary}</span>}<small>{new Date(memory.timestamp).toLocaleDateString()} · {memory.factsCount} facts · {memory.entitiesCount} entities</small></span>
+              </button>
+            )) : <div className="data-empty"><BookOpen aria-hidden="true" /><h3>{query ? 'No matching memories' : 'No memories yet'}</h3><p>{query ? 'Try another title or summary.' : 'Memories saved to this identity will appear here.'}</p></div>}
+          </div>
+          {(selected || detailLoading) && <article className="settings-card memory-detail" aria-busy={detailLoading}>
+            {detailLoading ? <p role="status">Opening memory…</p> : selected && <>
+              <div className="settings-card__header"><h3>{selected.title}</h3><button className="action-button action-button--ghost" aria-label="Close memory" type="button" onClick={() => { detailRequest.current++; setSelected(null); }}><X aria-hidden="true" /></button></div>
+              {selected.summary && <p>{selected.summary}</p>}
+              <div className="memory-prose">{selected.prose}</div>
+              {selected.facts.length > 0 && <><h4>Facts</h4><ul>{selected.facts.map((fact, index) => <li key={index}>{fact.statement}</li>)}</ul></>}
+              {selected.entities.length > 0 && <><h4>Entities</h4><ul>{selected.entities.map((entity, index) => <li key={index}>{entity.name} · {entity.type}</li>)}</ul></>}
+              <details><summary>Source details</summary><dl><dt>Author</dt><dd>{selected.author}</dd><dt>Memory ID</dt><dd>{selected.id}</dd></dl>{selected.sourceSubjects.length ? <ul>{selected.sourceSubjects.map(id => <li key={id}>{id}</li>)}</ul> : <p>No source subjects recorded.</p>}</details>
+            </>}
+          </article>}
+        </div>
+      </section>
     </div>
   );
 }

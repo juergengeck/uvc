@@ -3,6 +3,7 @@ import {getChumSyncDiagnostics} from '@refinio/one.core/lib/chum-sync.js';
 import {SettingsPlan, registerSettingsPlan} from '@refinio/settings.core';
 
 import {cubeOneRuntime} from '../services/cube-one-runtime.js';
+import {listMemories, getMemory} from '../services/cube-memory-service.js';
 import {createUvcTestRunnerOperation} from '../services/test-runner-dashboard.js';
 import {getCubeSettingsService} from '../services/cube-settings.js';
 import {
@@ -71,6 +72,11 @@ export function registerUvcPlans(): OperationRegistry {
     listDisinfectionRuns: async () => cubeOneRuntime.disinfectionRecords(),
     listRecords: async () => cubeOneRuntime.journalRecords(),
   }, {category: 'journal'});
+  registry.register('memory', { list: listMemories, get: getMemory }, {category: 'data'});
+  registry.register('peerManagement', {
+    list: async () => cubeOneRuntime.peerManagementSnapshot(),
+    setConnectionEnabled: async (input: {deviceId: string; enabled: boolean}) => cubeOneRuntime.setPeerConnectionEnabled(input),
+  }, {category: 'connection'});
   registry.register('chumDiagnostics', {
     get: async (input?: {traceLimit?: number}) => getChumSyncDiagnostics({
       traceLimit: input?.traceLimit,

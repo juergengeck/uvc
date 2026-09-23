@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, Plus, Radio, ShieldCheck, Sparkles } from 'lucide-react';
+import { Building2, Plus } from 'lucide-react';
 
 export interface RoomItem {
   roomId: string;
@@ -20,14 +20,14 @@ const DEFAULT_ROOMS: RoomItem[] = [
   {
     roomId: 'room-or-4',
     name: 'OR 4 · Surgical Suite',
-    roomKind: 'Operating Room (ISO 7)',
+    roomKind: 'Operating Room',
     targetDoseJm2: 400,
     assignedDevices: ['Groov RIO Overhead Tube #1', 'Groov RIO Overhead Tube #2', 'Industrial NIST Radiometer'],
   },
   {
     roomId: 'room-clean-b',
-    name: 'Cleanroom B · Decontamination',
-    roomKind: 'Cleanroom (ISO 5)',
+    name: 'Room B',
+    roomKind: 'Patient Room',
     targetDoseJm2: 500,
     assignedDevices: ['Quartz 254nm Mobile Tower', 'Precision NIST Radiometer'],
   },
@@ -58,11 +58,10 @@ export function RoomsView() {
   return (
     <div className="rooms-view" style={{ maxWidth: 1040, margin: '0 auto' }}>
       <header className="settings-hero">
-        <span className="eyebrow">Facility & Cleanrooms</span>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div>
-            <h1>Controlled Environments</h1>
-            <p>Define decontamination rooms, target biocontamination doses, and assigned UVC resources.</p>
+            <h1>Rooms</h1>
+            <p>Manage rooms, UVC treatment targets, and assigned devices.</p>
           </div>
           <button
             className="action-button action-button--primary"
@@ -75,7 +74,7 @@ export function RoomsView() {
         </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, marginTop: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16, marginTop: 24 }}>
         {rooms.map(r => (
           <div key={r.roomId} className="settings-card" style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -84,22 +83,22 @@ export function RoomsView() {
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{r.name}</h3>
-                <span style={{ fontSize: '0.8rem', color: '#9cabc1' }}>{r.roomKind}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--uvc-muted)' }}>{r.roomKind}</span>
               </div>
             </div>
 
-            <div style={{ margin: '14px 0', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+            <div style={{ margin: '14px 0', padding: '10px 12px', background: 'var(--uvc-surface-subtle)', borderRadius: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 4 }}>
-                <span style={{ color: '#9cabc1' }}>EN 17141 Target Dose:</span>
-                <strong style={{ color: '#34c759' }}>{r.targetDoseJm2} J/m²</strong>
+                <span style={{ color: 'var(--uvc-muted)' }}>Target Dose:</span>
+                <strong>{r.targetDoseJm2} J/m²</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                <span style={{ color: '#9cabc1' }}>Spectrum:</span>
+                <span style={{ color: 'var(--uvc-muted)' }}>Spectrum:</span>
                 <span>254nm Germicidal</span>
               </div>
             </div>
 
-            <div style={{ fontSize: '0.82rem', color: '#9cabc1' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--uvc-muted)' }}>
               <strong>Assigned Resources:</strong>
               {r.assignedDevices.length > 0 ? (
                 <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
@@ -119,7 +118,7 @@ export function RoomsView() {
         <div className="modal-backdrop">
           <div className="modal-sheet" style={{ maxWidth: 440 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0 }}>Add Controlled Environment</h3>
+              <h3 style={{ margin: 0 }}>Add Room</h3>
               <button
                 className="action-button action-button--secondary action-button--icon"
                 onClick={() => setShowAddModal(false)}
@@ -130,7 +129,7 @@ export function RoomsView() {
             </div>
             <form onSubmit={handleAddRoom}>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: '#9cabc1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: 'var(--uvc-muted)' }}>
                   Room Name / Identifier
                 </label>
                 <input
@@ -143,8 +142,8 @@ export function RoomsView() {
                 />
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: '#9cabc1' }}>
-                  Classification
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: 'var(--uvc-muted)' }}>
+                  Room Type
                 </label>
                 <select
                   className="field-input"
@@ -152,15 +151,15 @@ export function RoomsView() {
                   style={{ width: '100%' }}
                   value={newRoomKind}
                 >
-                  <option value="Operating Room (ISO 7)">Operating Room (ISO 7)</option>
-                  <option value="Cleanroom (ISO 5)">Cleanroom (ISO 5)</option>
+                  <option value="Operating Room">Operating Room</option>
+                  <option value="Patient Room">Patient Room</option>
                   <option value="Treatment Room">Treatment Room</option>
                   <option value="Isolation Ward">Isolation Ward</option>
-                  <option value="Laboratory (BSL-2)">Laboratory (BSL-2)</option>
+                  <option value="Laboratory">Laboratory</option>
                 </select>
               </div>
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: '#9cabc1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4, color: 'var(--uvc-muted)' }}>
                   Target Disinfection Dose (J/m²)
                 </label>
                 <input
@@ -182,7 +181,7 @@ export function RoomsView() {
                   Cancel
                 </button>
                 <button className="action-button action-button--primary" type="submit">
-                  Save Environment
+                  Save Room
                 </button>
               </div>
             </form>
