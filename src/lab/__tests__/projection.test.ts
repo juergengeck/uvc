@@ -72,6 +72,7 @@ describe('lane snapshot projection', () => {
       attestations: [],
       lightState: null,
       sensorState: null,
+      treatment: null,
       automaticAttestation: null,
     });
   });
@@ -79,7 +80,7 @@ describe('lane snapshot projection', () => {
   it('renders partial readiness as nulls and empties, never throws', () => {
     expect(
       projectRoleSnapshot({ role: 'light', person: null, instanceId: undefined, connections: null, chatTail: null, journalTail: null }),
-    ).toEqual({ role: 'light', person: null, instanceId: null, connections: [], chatTail: [], journalTail: [], cycles: [], deviceChanges: [], attestations: [], lightState: null, sensorState: null, automaticAttestation: null });
+    ).toEqual({ role: 'light', person: null, instanceId: null, connections: [], chatTail: [], journalTail: [], cycles: [], deviceChanges: [], attestations: [], lightState: null, sensorState: null, treatment: null, automaticAttestation: null });
   });
 
   it('projects cycle states and drops entries without a cycle id', () => {

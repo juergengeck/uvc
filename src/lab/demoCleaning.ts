@@ -1,20 +1,12 @@
 /**
  * Simulated hardware for the lab's demo room cleaning.
  *
- * The lamp runs one fixed cycle on command; the sensor measures whenever the
- * lamp is lit during an open cycle. Durations here model the device's physical
+ * The lamp runs its active treatment on command; the sensor measures the
+ * treatment's irradiance whenever the lamp is lit during an open cycle. Durations here model the device's physical
  * run time — they are the simulation clock, not waits for data to settle.
  */
 
-/** 3 mW/cm² = 30 W/m², so 10 s deliver the 300 J/m² target dose. Readings are whole mW/cm². */
-export const DEMO_CLEANING = {
-  title: 'Demo room cleaning',
-  durationS: 10,
-  irradianceMwCm2: 3,
-  targetDoseJm2: 300,
-  /** Lamp UV output per second of the cycle: 3 W → 3000 mJ. */
-  energyPerSecondMilli: 3000,
-} as const;
+import { DEFAULT_TREATMENT, treatment, type Treatment, type TreatmentParameters } from './treatment.ts';
 
 const TICK_MS = 1000;
 
@@ -44,7 +36,9 @@ export function createSimulationClock() {
 }
 
 export interface LampCleaningOps {
-  planPhase(input: { title: string; targetDoseJm2: number; durationS: number; audience: string[] }): Promise<{ planId: string }>;
+  /** The lamp's active treatment, or null before one was saved. */
+  readTreatment(): Promise<(Treatment & { planId: string }) | null>;
+  planPhase(input: TreatmentParameters & { audience: string[] }): Promise<{ planId: string }>;
   startCycle(input: { planId: string; audience: string[] }): Promise<{ cycleId: string }>;
   setLightState(input: { on: boolean; reason: string; audience: string[] }): Promise<unknown>;
   recordEnergy(input: { cycleId: string; joulesMilli: number; audience: string[] }): Promise<unknown>;
@@ -55,34 +49,42 @@ export interface LampCleaningOps {
   }>;
 }
 
-/** Runs the demo cycle on the lamp worker; returns the closing summary. */
+/**
+ * Runs one cycle of the lamp's active treatment; a lamp without a saved
+ * treatment first records its factory treatment so every cycle references a
+ * stored plan. Returns the treatment and the closing summary.
+ */
 export async function runLampCleaning(
   ops: LampCleaningOps,
   audience: string[],
   sleep: Sleep,
-): Promise<{ cycleId: string; energyReadings: number; joulesMilliTotal: number; sensorReadings: number }> {
-  const { title, targetDoseJm2, durationS, energyPerSecondMilli } = DEMO_CLEANING;
-  const { planId } = await ops.planPhase({ title, targetDoseJm2, durationS, audience });
+): Promise<{ treatment: Treatment; cycleId: string; energyReadings: number; joulesMilliTotal: number; sensorReadings: number }> {
+  const saved = await ops.readTreatment();
+  const active = saved ?? { planId: (await ops.planPhase({ ...DEFAULT_TREATMENT, audience })).planId, ...treatment(DEFAULT_TREATMENT) };
+  const { planId, title, durationS, lampPowerMw } = active;
   const { cycleId } = await ops.startCycle({ planId, audience });
   await ops.setLightState({ on: true, reason: `${title} started`, audience });
   try {
     for (let second = 0; second < durationS; second += 1) {
       await sleep(TICK_MS);
-      await ops.recordEnergy({ cycleId, joulesMilli: energyPerSecondMilli, audience });
+      await ops.recordEnergy({ cycleId, joulesMilli: lampPowerMw, audience });
     }
   } finally {
     await ops.setLightState({ on: false, reason: `${title} finished`, audience });
   }
   const closed = await ops.closeCycle({ cycleId, reason: `${title} completed`, audience });
-  return { cycleId, ...closed };
+  const { planId: _planId, ...ran } = active;
+  return { treatment: ran, cycleId, ...closed };
 }
 
 export interface SensorFollowerOps {
   lane: string;
   readLightState(): Promise<{ on: boolean } | null>;
   readCycleEnded(cycleId: string): Promise<boolean | null>;
+  /** Irradiance of the cycle's treatment in µW/cm², or null until the plan arrives. */
+  readCycleIrradiance(cycleId: string): Promise<number | null>;
   setSensorState(input: { on: boolean; reason: string; audience: string[] }): Promise<unknown>;
-  recordReading(input: { cycleId: string; irradianceMwCm2: number; audience: string[] }): Promise<unknown>;
+  recordReading(input: { cycleId: string; irradianceUwCm2: number; audience: string[] }): Promise<unknown>;
 }
 
 /**
@@ -94,24 +96,29 @@ export interface SensorFollowerOps {
 export function createSensorFollower(ops: SensorFollowerOps, audience: () => string[] | null, sleep: Sleep) {
   const cycles: string[] = [];
   let measuring: { cycleId: string; stop: boolean; done: Promise<void> } | null = null;
+  type Target = { cycleId: string; irradianceUwCm2: number };
   let pending = Promise.resolve();
   let stopped = false;
 
-  async function target(): Promise<string | null> {
+  async function target(): Promise<Target | null> {
     if (!(await ops.readLightState())?.on) return null;
     for (let index = cycles.length - 1; index >= 0; index -= 1) {
-      if ((await ops.readCycleEnded(cycles[index])) === false) return cycles[index];
+      const cycleId = cycles[index];
+      if ((await ops.readCycleEnded(cycleId)) !== false) continue;
+      // The cycle's plan may arrive after the cycle; its arrival re-checks.
+      const irradianceUwCm2 = await ops.readCycleIrradiance(cycleId);
+      return irradianceUwCm2 === null ? null : { cycleId, irradianceUwCm2 };
     }
     return null;
   }
 
-  async function measure(cycleId: string, recipients: string[], run: { stop: boolean }): Promise<void> {
+  async function measure({ cycleId, irradianceUwCm2 }: Target, recipients: string[], run: { stop: boolean }): Promise<void> {
     await ops.setSensorState({ on: true, reason: `Measuring cleaning cycle ${cycleId}`, audience: recipients });
     try {
       while (!run.stop) {
         await sleep(TICK_MS);
         if (run.stop) break;
-        await ops.recordReading({ cycleId, irradianceMwCm2: DEMO_CLEANING.irradianceMwCm2, audience: recipients });
+        await ops.recordReading({ cycleId, irradianceUwCm2, audience: recipients });
       }
     } finally {
       await ops.setSensorState({ on: false, reason: `Lamp off for cycle ${cycleId}`, audience: recipients });
@@ -122,13 +129,13 @@ export function createSensorFollower(ops: SensorFollowerOps, audience: () => str
     const recipients = audience();
     if (!recipients || stopped) return;
     const next = await target();
-    if (measuring && measuring.cycleId !== next) {
+    if (measuring && measuring.cycleId !== next?.cycleId) {
       measuring.stop = true;
       await measuring.done;
       measuring = null;
     }
     if (!measuring && next && !stopped) {
-      const run = { cycleId: next, stop: false, done: Promise.resolve() };
+      const run = { cycleId: next.cycleId, stop: false, done: Promise.resolve() };
       run.done = measure(next, recipients, run).catch(error => console.error('UVC lab: sensor measurement failed.', error));
       measuring = run;
     }
@@ -144,7 +151,7 @@ export function createSensorFollower(ops: SensorFollowerOps, audience: () => str
     observe(type: string, obj: Record<string, unknown>): Promise<void> {
       if (type === 'UvcLaneCycle' && typeof obj.cycleId === 'string') {
         if (!cycles.includes(obj.cycleId)) cycles.push(obj.cycleId);
-      } else if (!(type === 'UvcLaneLightState' && obj.stateId === `${ops.lane}:light`)) {
+      } else if (type !== 'UvcLanePhase' && !(type === 'UvcLaneLightState' && obj.stateId === `${ops.lane}:light`)) {
         return pending;
       }
       return queue();

@@ -1,12 +1,14 @@
-import { createSensorFollower, createSimulationClock, DEMO_CLEANING, runLampCleaning } from '../demoCleaning.ts';
+import { createSensorFollower, createSimulationClock, runLampCleaning } from '../demoCleaning.ts';
+import { DEFAULT_TREATMENT } from '../treatment.ts';
 
 const AUDIENCE = ['a'.repeat(64)];
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 describe('demo lamp cleaning', () => {
-  it('runs one lit cycle with an energy record per second, then switches off and closes', async () => {
+  it('records the factory treatment on first run, then runs one lit cycle metered per second', async () => {
     const calls: string[] = [];
     const ops = {
+      readTreatment: jest.fn(async () => null),
       planPhase: jest.fn(async () => { calls.push('plan'); return { planId: 'plan' }; }),
       startCycle: jest.fn(async () => { calls.push('start'); return { cycleId: 'cycle' }; }),
       setLightState: jest.fn(async ({ on }: { on: boolean }) => { calls.push(on ? 'light on' : 'light off'); }),
@@ -17,13 +19,34 @@ describe('demo lamp cleaning', () => {
 
     const done = await runLampCleaning(ops, AUDIENCE, async ms => { sleeps.push(ms); });
 
-    expect(ops.planPhase).toHaveBeenCalledWith({
-      title: DEMO_CLEANING.title, targetDoseJm2: 300, durationS: 10, audience: AUDIENCE,
-    });
+    expect(ops.planPhase).toHaveBeenCalledWith({ ...DEFAULT_TREATMENT, audience: AUDIENCE });
     expect(calls).toEqual(['plan', 'start', 'light on', ...Array(10).fill('energy'), 'light off', 'close']);
     expect(ops.recordEnergy).toHaveBeenCalledWith({ cycleId: 'cycle', joulesMilli: 3000, audience: AUDIENCE });
     expect(sleeps).toEqual(Array(10).fill(1000));
-    expect(done).toEqual({ cycleId: 'cycle', energyReadings: 10, joulesMilliTotal: 30_000, sensorReadings: 9 });
+    expect(done).toEqual({
+      treatment: { ...DEFAULT_TREATMENT, durationS: 10 },
+      cycleId: 'cycle', energyReadings: 10, joulesMilliTotal: 30_000, sensorReadings: 9,
+    });
+  });
+
+  it('runs the saved treatment without planning a new one', async () => {
+    const saved = { planId: 'ward', title: 'Ward', wavelengthNm: 222, irradianceUwCm2: 500, targetDoseJm2: 20, lampPowerMw: 800, durationS: 4 };
+    const planPhase = jest.fn();
+    const startCycle = jest.fn(async () => ({ cycleId: 'cycle' }));
+    const recordEnergy = jest.fn(async () => undefined);
+    const done = await runLampCleaning({
+      readTreatment: async () => saved,
+      planPhase,
+      startCycle,
+      setLightState: async () => undefined,
+      recordEnergy,
+      closeCycle: async () => ({ energyReadings: 4, joulesMilliTotal: 3200, sensorReadings: 3 }),
+    }, AUDIENCE, async () => undefined);
+
+    expect(planPhase).not.toHaveBeenCalled();
+    expect(startCycle).toHaveBeenCalledWith({ planId: 'ward', audience: AUDIENCE });
+    expect(recordEnergy.mock.calls.map(([input]) => (input as { joulesMilli: number }).joulesMilli)).toEqual([800, 800, 800, 800]);
+    expect(done.treatment.title).toBe('Ward');
   });
 
   it('switches the lamp off and leaves the cycle open when the device stops mid-cycle', async () => {
@@ -31,6 +54,7 @@ describe('demo lamp cleaning', () => {
     const setLightState = jest.fn(async () => undefined);
     const closeCycle = jest.fn();
     const running = runLampCleaning({
+      readTreatment: async () => null,
       planPhase: async () => ({ planId: 'plan' }),
       startCycle: async () => ({ cycleId: 'cycle' }),
       setLightState,
@@ -56,8 +80,9 @@ describe('sensor follower', () => {
       lane: 'lab',
       readLightState: async () => ({ on: lampOn }),
       readCycleEnded: async cycleId => ended.get(cycleId) ?? null,
+      readCycleIrradiance: async () => 250,
       setSensorState: async ({ on }) => { events.push(on ? 'sensor on' : 'sensor off'); },
-      recordReading: async ({ cycleId, irradianceMwCm2 }) => { events.push(`${cycleId} ${irradianceMwCm2}`); },
+      recordReading: async ({ cycleId, irradianceUwCm2 }) => { events.push(`${cycleId} ${irradianceUwCm2}`); },
     }, () => AUDIENCE, () => new Promise(resolve => ticks.push(resolve)));
     const tick = async () => { ticks.shift()?.(); await settle(); };
     return {
@@ -80,7 +105,7 @@ describe('sensor follower', () => {
     await tick();
     await off;
 
-    expect(events).toEqual(['sensor on', 'c1 3', 'c1 3', 'sensor off']);
+    expect(events).toEqual(['sensor on', 'c1 250', 'c1 250', 'sensor off']);
   });
 
   it('stops measuring when the cycle closes, and ignores other versions', async () => {
@@ -95,6 +120,6 @@ describe('sensor follower', () => {
     await tick();
     await closed;
 
-    expect(events).toEqual(['sensor on', 'c1 3', 'sensor off']);
+    expect(events).toEqual(['sensor on', 'c1 250', 'sensor off']);
   });
 });

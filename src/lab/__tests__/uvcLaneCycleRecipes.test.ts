@@ -54,13 +54,20 @@ describe('UVC lane cycle recipes', () => {
 
   it('creates phase, cycle, and light state records', () => {
     expect(
-      createUvcLanePhase({ planId: 'p1', title: 'Ward round', targetDoseJm2: 400, durationS: 300, createdBy: PERSON, createdAt: 10 }),
+      createUvcLanePhase({
+        planId: 'p1', title: 'Ward round', wavelengthNm: 254, irradianceUwCm2: 200, targetDoseJm2: 400, lampPowerMw: 1500,
+        createdBy: PERSON, createdAt: 10,
+      }),
     ).toEqual({
       $type$: 'UvcLanePhase',
       planId: 'p1',
       title: 'Ward round',
+      wavelengthNm: 254,
+      irradianceUwCm2: 200,
       targetDoseJm2: 400,
-      durationS: 300,
+      lampPowerMw: 1500,
+      // 400 J/m² at 2 W/m².
+      durationS: 200,
       createdBy: PERSON,
       createdAt: 10,
     });
@@ -104,8 +111,8 @@ describe('UVC lane cycle recipes', () => {
       prev: '',
     });
     expect(
-      createUvcLaneReading({ stream: 'c1:sensor', seq: 0, irradianceMwCm2: 42, recordedBy: PERSON, recordedAt: 14, prev: 'h' }),
-    ).toMatchObject({ $type$: 'UvcLaneReading', seq: 0, irradianceMwCm2: 42, prev: 'h' });
+      createUvcLaneReading({ stream: 'c1:sensor', seq: 0, irradianceUwCm2: 42, recordedBy: PERSON, recordedAt: 14, prev: 'h' }),
+    ).toMatchObject({ $type$: 'UvcLaneReading', seq: 0, irradianceUwCm2: 42, prev: 'h' });
     expect(
       createUvcLaneLightChange({ stream: 'lane:light-changes', seq: 0, on: false, reason: 'off', updatedBy: PERSON, recordedAt: 14 }),
     ).toMatchObject({ $type$: 'UvcLaneLightChange', seq: 0, on: 0, reason: 'off', prev: '' });

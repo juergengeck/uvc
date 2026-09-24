@@ -11,6 +11,8 @@
  * Runtime-import-free and side-effect-free so jest loads this exact module.
  */
 
+import type { Treatment } from './treatment.ts';
+
 export interface LaneConnectionView {
   remotePersonId: string | null;
   remoteInstanceId: string | null;
@@ -82,6 +84,8 @@ export interface RoleSnapshot {
   attestations: ChangeAttestationView[];
   lightState: { on: boolean; reason?: string } | null;
   sensorState: { on: boolean; reason?: string } | null;
+  /** The lamp's active treatment as it reached this worker. */
+  treatment: (Treatment & { planId: string }) | null;
   automaticAttestation: { enabled: boolean; busy: boolean; error: string | null } | null;
 }
 
@@ -229,6 +233,18 @@ export function projectAttestations(raw: unknown[]): ChangeAttestationView[] {
   return attestations.sort((a, b) => a.signedAt - b.signedAt);
 }
 
+/** Normalize the active treatment; incomplete shapes read as none. */
+export function projectTreatment(raw: unknown): (Treatment & { planId: string }) | null {
+  if (!isRecord(raw)) return null;
+  const planId = text(raw.planId);
+  const title = text(raw.title);
+  const fields = ['wavelengthNm', 'irradianceUwCm2', 'targetDoseJm2', 'lampPowerMw', 'durationS'] as const;
+  const values = fields.map(field => number(raw[field]));
+  if (planId === null || title === null || values.some(value => value === null)) return null;
+  const [wavelengthNm, irradianceUwCm2, targetDoseJm2, lampPowerMw, durationS] = values as number[];
+  return { planId, title, wavelengthNm, irradianceUwCm2, targetDoseJm2, lampPowerMw, durationS };
+}
+
 export function projectRoleSnapshot(input: {
   role: string;
   person: unknown;
@@ -241,6 +257,7 @@ export function projectRoleSnapshot(input: {
   attestations?: unknown;
   lightState?: unknown;
   sensorState?: unknown;
+  treatment?: unknown;
   automaticAttestation?: unknown;
 }): RoleSnapshot {
   return {
@@ -259,6 +276,7 @@ export function projectRoleSnapshot(input: {
     sensorState: isRecord(input.sensorState)
       ? { on: boolean(input.sensorState.on), reason: text(input.sensorState.reason) ?? undefined }
       : null,
+    treatment: projectTreatment(input.treatment),
     automaticAttestation: isRecord(input.automaticAttestation)
       ? { enabled: boolean(input.automaticAttestation.enabled), busy: boolean(input.automaticAttestation.busy), error: text(input.automaticAttestation.error) }
       : null,

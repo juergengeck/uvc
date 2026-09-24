@@ -13,7 +13,7 @@ import type { RoleSnapshot } from '../src/lab/projection';
 import type { FeedRow } from '../src/lab/portIpc';
 import { LaneChat } from '../src/lab/LaneChat';
 import { CLEAN_COMMAND, DEVICE_CHAT_COMMANDS } from '../src/lab/deviceChatCommands';
-import { DEMO_CLEANING } from '../src/lab/demoCleaning';
+import { DEFAULT_TREATMENT, UVC_WAVELENGTHS_NM, describeTreatment, mwCm2, treatment, type Treatment } from '../src/lab/treatment';
 import { roomCleaningStatus } from '../src/lab/laneViewModel';
 import { labThemeIsDark, nextLabThemeMode, parseLabThemeMode, type LabThemeMode } from '../src/lab/theme';
 
@@ -52,7 +52,33 @@ const short = (value?: string | null) => value ? `${value.slice(0, 8)}…${value
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 type Row = { time: string; role: string; text: string };
 type Column = { snapshot?: RoleSnapshot; error?: string; snapshotError?: string; busy?: boolean; invite?: string; inviteError?: string; inviteBusy?: boolean; inviteNotice?: string };
-type Plan = { planId: string; title: string };
+/** Treatment form fields as typed, in display units (mW/cm², J/m², W). */
+type TreatmentForm = { title: string; wavelengthNm: number; irradiance: string; dose: string; power: string };
+const DEFAULT_FORM: TreatmentForm = {
+  title: DEFAULT_TREATMENT.title,
+  wavelengthNm: DEFAULT_TREATMENT.wavelengthNm,
+  irradiance: String(mwCm2(DEFAULT_TREATMENT.irradianceUwCm2)),
+  dose: String(DEFAULT_TREATMENT.targetDoseJm2),
+  power: String(DEFAULT_TREATMENT.lampPowerMw / 1000),
+};
+const FACTORY_TREATMENT = treatment(DEFAULT_TREATMENT);
+/** A positive display value as a whole number of stored units (`factor` units per display unit). */
+function scaled(value: string, label: string, factor: number, resolution: string): number {
+  const number = Number(value);
+  if (!value.trim() || !Number.isFinite(number) || number <= 0) throw new Error(`${label} must be greater than zero.`);
+  const units = Math.round(number * factor);
+  if (units <= 0 || Math.abs(units - number * factor) > 1e-6) throw new Error(`${label} is recorded in steps of ${resolution}.`);
+  return units;
+}
+function parseTreatment(form: TreatmentForm): Treatment {
+  return treatment({
+    title: form.title,
+    wavelengthNm: form.wavelengthNm,
+    irradianceUwCm2: scaled(form.irradiance, 'Irradiance', 1000, '0.001 mW/cm²'),
+    targetDoseJm2: scaled(form.dose, 'Target dose', 1, '1 J/m²'),
+    lampPowerMw: scaled(form.power, 'Lamp output', 1000, '0.001 W'),
+  });
+}
 
 export default function LabLane() {
   const systemTheme = useColorScheme();
@@ -90,12 +116,10 @@ export default function LabLane() {
   const activityRef = useRef<ScrollView>(null);
   const followActivityRef = useRef(true);
   const activityOffsetRef = useRef(0);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [title, setTitle] = useState<string>(DEMO_CLEANING.title);
-  const [dose, setDose] = useState(String(DEMO_CLEANING.targetDoseJm2));
-  const [duration, setDuration] = useState(String(DEMO_CLEANING.durationS));
-  const [energy, setEnergy] = useState(String(DEMO_CLEANING.energyPerSecondMilli));
-  const [irradiance, setIrradiance] = useState(String(DEMO_CLEANING.irradianceMwCm2));
+  const [form, setForm] = useState<TreatmentForm>(DEFAULT_FORM);
+  const formField = (key: 'title' | 'irradiance' | 'dose' | 'power') => (value: string) => setForm(previous => ({ ...previous, [key]: value }));
+  const [energy, setEnergy] = useState(String(DEFAULT_TREATMENT.lampPowerMw));
+  const [irradiance, setIrradiance] = useState(String(mwCm2(DEFAULT_TREATMENT.irradianceUwCm2)));
   const [selectedCycle, setSelectedCycle] = useState('');
   const [cycleIds, setCycleIds] = useState<string[]>([]);
   const [join, setJoin] = useState<{ role: Role; url: string } | null>(null);
@@ -185,7 +209,6 @@ export default function LabLane() {
     setJoined(false);
     setJoin(null);
     setColumns({});
-    setPlans([]);
     setCycleIds([]);
     setSelectedCycle('');
     setPages({});
@@ -194,11 +217,9 @@ export default function LabLane() {
     setLogs([]);
     setShowLog(false);
     setDataErrors({});
-    setTitle('');
-    setDose('');
-    setDuration('');
-    setEnergy('');
-    setIrradiance('');
+    setForm(DEFAULT_FORM);
+    setEnergy(String(DEFAULT_TREATMENT.lampPowerMw));
+    setIrradiance(String(mwCm2(DEFAULT_TREATMENT.irradianceUwCm2)));
     let cancelled = false;
     let running: LaneSeed | undefined;
     const unsubscribers: (() => void)[] = [];
@@ -256,10 +277,6 @@ export default function LabLane() {
           unsubscribers.push(running.host.clients[role].onFeed((row: FeedRow) => {
             if (cancelled) return;
             if (row.type === 'UvcLaneCycle' && typeof row.obj?.cycleId === 'string') rememberCycle(row.obj.cycleId);
-            if (row.type === 'UvcLanePhase' && typeof row.obj?.planId === 'string') {
-              const plan = { planId: row.obj.planId, title: String(row.obj.title || row.obj.planId) };
-              setPlans(previous => previous.some(p => p.planId === plan.planId) ? previous : [...previous, plan]);
-            }
             log(LABELS[role], `${row.kind || row.type}: ${row.id}`);
             schedule(role);
           }));
@@ -442,7 +459,7 @@ export default function LabLane() {
           const cycle = snap?.cycles.find(row => row.cycleId === selectedCycle);
           const roomStatus = roomCleaningStatus(snap?.cycles ?? [], cycleIds, !snap || !!column.snapshotError);
           const disabled = !ready || !!column.busy || (!!join && !joined);
-          const plan = plans[plans.length - 1];
+          const active = snap?.treatment ?? null;
           const changes = snap?.deviceChanges ?? [];
           const pendingChanges = changes.some(change => !change.attested);
           const peerPersons = [...new Set([
@@ -488,23 +505,36 @@ export default function LabLane() {
                 {note(roomStatus.detail)}
               </View>
               {button('Clean room', () => { void run(role, async seed => { await sendLampCommand(seed, CLEAN_COMMAND); }); }, disabled || !!snap?.cycles.some(row => !row.ended), true)}
-              {note(`Demo cycle: lamp on for ${DEMO_CLEANING.durationS} s at ${DEMO_CLEANING.irradianceMwCm2} mW/cm² (${DEMO_CLEANING.targetDoseJm2} J/m²), ${DEMO_CLEANING.energyPerSecondMilli / 1000} J per second. The sensor measures while the lamp is on.`)}
+              {note(active
+                ? `Treatment “${active.title}”: ${describeTreatment(active)}. The sensor measures while the lamp is on.`
+                : `No treatment saved on the lamp; Clean room runs its factory treatment: ${describeTreatment(FACTORY_TREATMENT)}.`)}
               {heading('Lamp control')}
               {indicator('lightbulb', 'Lamp', lightOn, 'As last recorded by the lamp')}
               <View style={s.row}>{DEVICE_SWITCHES.map(command => <React.Fragment key={command}>{button(`Lamp ${command}`, () => { void run(role, async seed => { await sendLampCommand(seed, command); }); }, disabled, command === 'on')}</React.Fragment>)}</View>
               {note('The lamp switches itself and answers in your chat with Lamp.')}
             </>}
-            {role === 'lamp' && <>
-              {heading('Treatment parameters')}
-              {field('Phase title', title, setTitle)}<View style={s.row}>{field('Target dose (J/m²)', dose, setDose, true)}{field('Duration (seconds)', duration, setDuration, true)}</View>
-              {button('Save phase', () => { void run(role, async seed => {
-                if (!title.trim()) throw new Error('Enter a phase title.');
-                const result = await call(seed, role, 'planPhase', { title: title.trim(), targetDoseJm2: positive(dose, 'Target dose'), durationS: positive(duration, 'Duration') }) as { planId: string };
-                setPlans(previous => previous.some(p => p.planId === result.planId) ? previous : [...previous, { planId: result.planId, title: title.trim() }]);
-              }); }, disabled)}
-              {note(plan ? `Latest phase: ${plan.title}` : 'No phase saved in this session.')}
-              {button('Start cycle', () => { void run(role, async seed => { const result = await call(seed, role, 'startCycle', { planId: plan!.planId }) as { cycleId: string }; rememberCycle(result.cycleId); setSelectedCycle(result.cycleId); }); }, disabled || !plan, true)}
-            </>}
+            {role === 'lamp' && (() => {
+              let preview: Treatment | null = null;
+              let invalid = '';
+              try { preview = parseTreatment(form); } catch (error) { invalid = message(error); }
+              return <>
+                {heading('Treatment parameters')}
+                {note(active ? `Active: ${active.title} · ${describeTreatment(active)}` : 'No treatment saved. Clean room records the factory treatment below on its first run.')}
+                {field('Treatment title', form.title, formField('title'))}
+                <View style={s.field}>
+                  <Text style={[s.caption, { color: c.textSecondary }]}>Wavelength</Text>
+                  <View style={s.row}>{UVC_WAVELENGTHS_NM.map(nm => <React.Fragment key={nm}>{button(`${nm} nm`, () => setForm(previous => ({ ...previous, wavelengthNm: nm })), false, form.wavelengthNm === nm)}</React.Fragment>)}</View>
+                  <Text style={[s.caption, { color: c.textSecondary }]}>222 nm far-UVC excimer · 254 nm low-pressure mercury · 265/275 nm UV-C LED</Text>
+                </View>
+                <View style={s.row}>{field('Irradiance at target (mW/cm²)', form.irradiance, formField('irradiance'), true)}{field('Target dose (J/m²)', form.dose, formField('dose'), true)}</View>
+                {field('Lamp UV-C output (W)', form.power, formField('power'), true)}
+                {preview
+                  ? note(`Exposure time ${preview.durationS} s: ${preview.targetDoseJm2} J/m² (${preview.targetDoseJm2 / 10} mJ/cm²) ÷ ${mwCm2(preview.irradianceUwCm2) * 10} W/m². The lamp meters ${preview.lampPowerMw} mJ per second.`)
+                  : <Text accessibilityRole="alert" style={[s.body, { color: c.error }]}>{invalid}</Text>}
+                {button('Save treatment', () => { void run(role, async seed => { await call(seed, role, 'planPhase', { ...parseTreatment(form) }); }); }, disabled || !preview)}
+                {button('Start cycle', () => { void run(role, async seed => { const result = await call(seed, role, 'startCycle', { planId: active!.planId }) as { cycleId: string }; rememberCycle(result.cycleId); setSelectedCycle(result.cycleId); }); }, disabled || !active, true)}
+              </>;
+            })()}
             {role !== 'doctor' && <>
             {heading('Cycle recording')}
             {cycleIds.length ? <View style={s.row}>{cycleIds.map((id, index) => <React.Fragment key={id}>{button(`Cycle ${index + 1}`, () => setSelectedCycle(id), false, selectedCycle === id)}</React.Fragment>)}</View> : note('No cycles created in this session.')}
@@ -518,7 +548,7 @@ export default function LabLane() {
             {role === 'sensor' && <>
               {!snap?.sensorState?.on && note('Turn the simulated sensor on before recording readings.')}
               {field('Simulated irradiance (mW/cm²)', irradiance, setIrradiance, true)}
-              {button('Record reading', () => { void run(role, async seed => { await call(seed, role, 'recordReading', { cycleId: selectedCycle, irradianceMwCm2: positive(irradiance, 'Irradiance') }); }); }, disabled || !snap?.sensorState?.on || !cycle || cycle.ended)}
+              {button('Record reading', () => { void run(role, async seed => { await call(seed, role, 'recordReading', { cycleId: selectedCycle, irradianceUwCm2: scaled(irradiance, 'Irradiance', 1000, '0.001 mW/cm²') }); }); }, disabled || !snap?.sensorState?.on || !cycle || cycle.ended)}
             </>}
             </>}
             {((!settings && role === 'admin') || (settings && role === 'doctor')) && <>

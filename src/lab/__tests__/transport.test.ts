@@ -230,6 +230,9 @@ describe('lane transport', () => {
       }]),
       'uvcLane.readLightState': () => null,
       'uvcLane.readSensorState': () => null,
+      'uvcLane.readTreatment': () => ({
+        planId: 'p1', title: 'Ward', wavelengthNm: 254, irradianceUwCm2: 200, targetDoseJm2: 400, lampPowerMw: 1500, durationS: 200,
+      }),
     });
     const snapshot = await snapshotRole({
       client,
@@ -252,11 +255,12 @@ describe('lane transport', () => {
       attestations: [{ scope: 'c1', cycleId: 'c1', idHash: 'att-id', hash: 'att-hash', signer: 'a', signerRole: 'admin', signedAt: 4, records: ['change-hash'], verified: true }],
       lightState: null,
       sensorState: null,
+      treatment: { planId: 'p1', title: 'Ward', wavelengthNm: 254, irradianceUwCm2: 200, targetDoseJm2: 400, lampPowerMw: 1500, durationS: 200 },
       automaticAttestation: null,
     });
   });
 
-  it.each(['tailLaneChat', 'tailJournal', 'readCycle', 'listChanges', 'readLightState', 'readSensorState', 'readAutomaticAttestationStatus'])(
+  it.each(['tailLaneChat', 'tailJournal', 'readCycle', 'listChanges', 'readLightState', 'readSensorState', 'readTreatment', 'readAutomaticAttestationStatus'])(
     'propagates %s failures instead of presenting an empty snapshot', async method => {
       const failure = new Error(`${method} storage unavailable`);
       const client = stubClient({
@@ -268,6 +272,7 @@ describe('lane transport', () => {
         'uvcLane.listChanges': () => [],
         'uvcLane.readLightState': () => null,
         'uvcLane.readSensorState': () => null,
+        'uvcLane.readTreatment': () => null,
         'uvcLane.readAutomaticAttestationStatus': () => ({ enabled: true, busy: false, error: null }),
         [`uvcLane.${method}`]: () => { throw failure; },
       });

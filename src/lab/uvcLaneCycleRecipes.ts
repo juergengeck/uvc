@@ -23,6 +23,7 @@
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
 import { laneName, personHash, timestamp } from './uvcLabRecipes.ts';
+import { treatment, type TreatmentParameters } from './treatment.ts';
 
 export const UVC_LANE_CYCLE_TYPES = [
   'UvcLanePhase',
@@ -80,7 +81,10 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
     rule: [
       idText('planId'),
       text('title'),
+      integer('wavelengthNm'),
+      integer('irradianceUwCm2'),
       integer('targetDoseJm2'),
+      integer('lampPowerMw'),
       integer('durationS'),
       person('createdBy'),
       integer('createdAt'),
@@ -152,7 +156,7 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
     rule: [
       idText('stream'),
       integer('seq', true),
-      integer('irradianceMwCm2'),
+      integer('irradianceUwCm2'),
       person('recordedBy'),
       integer('recordedAt'),
       text('prev'),
@@ -207,7 +211,12 @@ export interface UvcLanePhase {
   $type$: 'UvcLanePhase';
   planId: string;
   title: string;
+  wavelengthNm: number;
+  /** Irradiance at the treated surface in µW/cm². */
+  irradianceUwCm2: number;
   targetDoseJm2: number;
+  lampPowerMw: number;
+  /** Derived from dose and irradiance; see `treatment()`. */
   durationS: number;
   createdBy: string;
   createdAt: number;
@@ -270,7 +279,8 @@ export interface UvcLaneEnergy extends UvcLaneStreamEntry {
 
 export interface UvcLaneReading extends UvcLaneStreamEntry {
   $type$: 'UvcLaneReading';
-  irradianceMwCm2: number;
+  /** Measured irradiance in µW/cm². */
+  irradianceUwCm2: number;
   recordedBy: string;
 }
 
@@ -332,20 +342,21 @@ function idHashList(values: unknown, field: string): string[] {
   return values as string[];
 }
 
-export function createUvcLanePhase(input: {
+export function createUvcLanePhase(input: TreatmentParameters & {
   planId: string;
-  title: string;
-  targetDoseJm2: number;
-  durationS: number;
   createdBy: SHA256IdHash<Person> | string;
   createdAt: number;
 }): UvcLanePhase {
+  const phase = treatment(input);
   return {
     $type$: 'UvcLanePhase',
     planId: laneName(input.planId, 'planId'),
-    title: laneName(input.title, 'title'),
-    targetDoseJm2: timestamp(input.targetDoseJm2, 'targetDoseJm2'),
-    durationS: timestamp(input.durationS, 'durationS'),
+    title: laneName(phase.title, 'title'),
+    wavelengthNm: phase.wavelengthNm,
+    irradianceUwCm2: phase.irradianceUwCm2,
+    targetDoseJm2: phase.targetDoseJm2,
+    lampPowerMw: phase.lampPowerMw,
+    durationS: phase.durationS,
     createdBy: personHash(input.createdBy, 'createdBy'),
     createdAt: timestamp(input.createdAt, 'createdAt'),
   };
@@ -476,7 +487,7 @@ export function createUvcLaneEnergy(input: {
 export function createUvcLaneReading(input: {
   stream: string;
   seq: number;
-  irradianceMwCm2: number;
+  irradianceUwCm2: number;
   recordedBy: SHA256IdHash<Person> | string;
   recordedAt: number;
   prev?: string;
@@ -487,7 +498,7 @@ export function createUvcLaneReading(input: {
     $type$: 'UvcLaneReading',
     stream: laneName(input.stream, 'stream'),
     seq: timestamp(input.seq, 'seq'),
-    irradianceMwCm2: timestamp(input.irradianceMwCm2, 'irradianceMwCm2'),
+    irradianceUwCm2: timestamp(input.irradianceUwCm2, 'irradianceUwCm2'),
     recordedBy: personHash(input.recordedBy, 'recordedBy'),
     recordedAt: timestamp(input.recordedAt, 'recordedAt'),
     prev,

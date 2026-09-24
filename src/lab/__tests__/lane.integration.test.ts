@@ -284,7 +284,7 @@ describe('lane worker mesh', () => {
     // readings remain rejected on the producer while it is inactive.
     await expect(sensor.call('uvcLane', 'readSensorState')).resolves.toBeNull();
     await expect(
-      sensor.call('uvcLane', 'recordReading', { cycleId: `${LANE}:inactive`, irradianceMwCm2: 1, audience }),
+      sensor.call('uvcLane', 'recordReading', { cycleId: `${LANE}:inactive`, irradianceUwCm2: 1, audience }),
     ).rejects.toThrow('sensor must be active');
     await expect(
       lamp.call('uvcLane', 'setSensorState', { on: true, reason: 'wrong role', audience }),
@@ -308,7 +308,7 @@ describe('lane worker mesh', () => {
       }, 90_000);
       expect(offState).toMatchObject({ on: false, reason: 'preflight off' });
       await expect(
-        sensor.call('uvcLane', 'recordReading', { cycleId: `${LANE}:inactive`, irradianceMwCm2: 1, audience }),
+        sensor.call('uvcLane', 'recordReading', { cycleId: `${LANE}:inactive`, irradianceUwCm2: 1, audience }),
       ).rejects.toThrow('sensor must be active');
       await sensor.call('uvcLane', 'setSensorState', { on: true, reason: 'measurement ready', audience });
       await poll('sensor activation feed reaches admin', async () => (
@@ -355,13 +355,15 @@ describe('lane worker mesh', () => {
     // The lamp configures, starts, meters and closes; the sensor records;
     // Admin signs the exact received versions for Doctor to review.
     await expect(doctor.call('uvcLane', 'planPhase', {
-      title: 'Wrong role', targetDoseJm2: 400, durationS: 300, audience,
+      title: 'Wrong role', wavelengthNm: 254, irradianceUwCm2: 200, targetDoseJm2: 400, lampPowerMw: 1500, audience,
     })).rejects.toThrow('only the lamp role configures treatment parameters');
     const { planId } = await lamp.call<{ planId: string; idHash: string }>('uvcLane', 'planPhase', {
       planId: `${LANE}:plan:ward-round`,
       title: 'Ward round',
+      wavelengthNm: 254,
+      irradianceUwCm2: 200,
       targetDoseJm2: 400,
-      durationS: 300,
+      lampPowerMw: 1500,
       audience,
     });
     const { cycleId } = await lamp.call<{ cycleId: string; idHash: string }>('uvcLane', 'startCycle', {
@@ -371,9 +373,9 @@ describe('lane worker mesh', () => {
     });
     await lamp.call('uvcLane', 'setLightState', { on: true, reason: `cycle ${cycleId}`, audience });
     await lamp.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 1000, audience });
-    await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 40, audience });
+    await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceUwCm2: 40, audience });
     await lamp.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 1500, audience });
-    await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 44, audience });
+    await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceUwCm2: 44, audience });
     // Emergency off before the planned close.
     await lamp.call('uvcLane', 'setLightState', { on: false, reason: 'emergency off', audience });
     const closed = await lamp.call<{
@@ -530,7 +532,7 @@ describe('lane worker mesh', () => {
         audience,
       });
       await lamp.call('uvcLane', 'recordEnergy', { cycleId, joulesMilli: 750, audience });
-      await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceMwCm2: 37, audience });
+      await sensor.call('uvcLane', 'recordReading', { cycleId, irradianceUwCm2: 37, audience });
       await lamp.call('uvcLane', 'closeCycle', { cycleId, reason: 'automatic complete', audience });
       const automaticCycle = await poll('closed cycle automatically attested to doctor', async () => {
         const read = await doctor.call<{
@@ -616,6 +618,14 @@ describe('lane worker mesh', () => {
       const { messages } = await doctor.call<{ messages: Message[] }>('chat', 'readChat', { peer: persons.lamp });
       return messages.filter(message => message.sender === persons.lamp).map(message => message.text);
     };
+    // 50 W/m² deliver 500 J/m² in 10 s; the lamp runs the treatment it saved last.
+    await lamp.call('uvcLane', 'planPhase', {
+      title: 'Quick room cleaning', wavelengthNm: 222, irradianceUwCm2: 5000, targetDoseJm2: 500, lampPowerMw: 2000, audience,
+    });
+    await poll('doctor receives the lamp treatment', async () => {
+      const active = await doctor.call<{ title: string } | null>('uvcLane', 'readTreatment');
+      return active?.title === 'Quick room cleaning' ? active : null;
+    }, 90_000);
     const before = (await lampReplies()).length;
     await doctor.call('chat', 'sendChat', { peer: persons.lamp, text: 'clean' });
 
@@ -623,10 +633,10 @@ describe('lane worker mesh', () => {
       const replies = (await lampReplies()).slice(before);
       return replies.length ? replies : null;
     }, 90_000);
-    expect(finished).toEqual([expect.stringMatching(/^Lamp cleaning finished · 10 s at 3 mW\/cm² · 30000 mJ in 10 energy records/)]);
+    expect(finished).toEqual([expect.stringMatching(/^Lamp cleaning finished · Quick room cleaning · 222 nm · 5 mW\/cm² at target · 500 J\/m² in 10 s · lamp 2 W UV-C · 20000 mJ in 10 energy records/)]);
 
     const journal = await lamp.call<{ entries: Array<{ summary: string }> }>('uvcLane', 'tailJournal', { stream: `${LANE}:lamp`, limit: 100 });
-    const cycleId = journal.entries.map(entry => /^closed cleaning cycle (\S+) \(Demo room cleaning completed\)/.exec(entry.summary)?.[1]).find(Boolean);
+    const cycleId = journal.entries.map(entry => /^closed cleaning cycle (\S+) \(Quick room cleaning completed\)/.exec(entry.summary)?.[1]).find(Boolean);
     expect(cycleId).toBeTruthy();
 
     const cleaned = await poll('doctor sees the closed cycle with sensor readings', async () => {

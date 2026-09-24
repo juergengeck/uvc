@@ -87,7 +87,8 @@ import type {
 } from './uvcLaneCycleRecipes.ts';
 import { createLaneIpcMain, postFeed } from './portIpc.ts';
 import { createDeviceChatCommands } from './deviceChatCommands.ts';
-import { createSensorFollower, createSimulationClock, DEMO_CLEANING, runLampCleaning } from './demoCleaning.ts';
+import { createSensorFollower, createSimulationClock, runLampCleaning } from './demoCleaning.ts';
+import { describeTreatment, mwCm2, type Treatment, type TreatmentParameters } from './treatment.ts';
 import type { DeviceChatCommands } from './deviceChatCommands.ts';
 import type { LanePort } from './portIpc.ts';
 import { createIoMOps, DEFAULT_COMM_SERVER_URL } from './iomOps.ts';
@@ -613,7 +614,7 @@ export async function startLaneInstance({
           hash: entry.hash,
           sourceRole: 'sensor',
           kind: 'reading',
-          summary: `${Number(entry.obj.irradianceMwCm2)} mW/cm2 irradiance`,
+          summary: `${mwCm2(Number(entry.obj.irradianceUwCm2))} mW/cm² irradiance`,
           recordedAt: Number(entry.obj.recordedAt),
           cycleId,
           attested: attestedRecords.has(entry.hash),
@@ -969,36 +970,51 @@ export async function startLaneInstance({
     },
 
     async planPhase({
-      title,
-      targetDoseJm2,
-      durationS,
       planId,
       audience,
-    }: {
-      title: string;
-      targetDoseJm2: number;
-      durationS: number;
+      ...parameters
+    }: TreatmentParameters & {
       planId?: string;
       audience: string[];
     }): Promise<{ planId: string; idHash: string }> {
       if (role !== 'lamp') throw new Error('UVC lab: only the lamp role configures treatment parameters.');
       const id = planId ?? `${lane}:plan:${Date.now()}`;
       const phase: UvcLanePhase = createUvcLanePhase({
+        ...parameters,
         planId: id,
-        title,
-        targetDoseJm2,
-        durationS,
         createdBy: self(),
         createdAt: Date.now(),
       });
       const stored = await storeVersionedObject(phase as never);
       await grant(stored.idHash, audience);
+      // The treatment pointer names the phase the lamp runs on its next cycle.
+      const pointer = await readStreamHead(`${lane}:treatment`);
+      const head = await storeVersionedObject(
+        createUvcLaneStreamHead({ stream: `${lane}:treatment`, head: stored.idHash, count: (pointer?.count ?? 0) + 1 }) as never,
+      );
+      await grant(head.idHash, audience);
       await appendJournalEntry({
         kind: 'phase',
-        summary: `planned sanitation phase ${id} (${title}, target ${targetDoseJm2} J/m2 over ${durationS}s)`,
+        summary: `saved treatment ${id} (${phase.title}: ${describeTreatment(phase)})`,
         audience,
       });
       return { planId: id, idHash: stored.idHash };
+    },
+
+    async readTreatment(): Promise<(Treatment & { planId: string }) | null> {
+      const pointer = await readStreamHead(`${lane}:treatment`);
+      // Pointer and phase versions arrive independently over CHUM.
+      if (!pointer || !(await hasVersionHead(pointer.head as never))) return null;
+      const phase = (await getObjectByIdHash(pointer.head as never)).obj as unknown as UvcLanePhase;
+      return {
+        planId: phase.planId,
+        title: phase.title,
+        wavelengthNm: phase.wavelengthNm,
+        irradianceUwCm2: phase.irradianceUwCm2,
+        targetDoseJm2: phase.targetDoseJm2,
+        lampPowerMw: phase.lampPowerMw,
+        durationS: phase.durationS,
+      };
     },
 
     async startCycle({
@@ -1043,11 +1059,11 @@ export async function startLaneInstance({
 
     async recordReading({
       cycleId,
-      irradianceMwCm2,
+      irradianceUwCm2,
       audience,
     }: {
       cycleId: string;
-      irradianceMwCm2: number;
+      irradianceUwCm2: number;
       audience: string[];
     }): Promise<{ idHash: string; seq: number }> {
       if (role !== 'sensor') throw new Error('UVC lab: only the sensor role records irradiance readings.');
@@ -1058,7 +1074,7 @@ export async function startLaneInstance({
       return appendStreamEntry({
         stream: `${cycleId}:sensor`,
         create: (stream, seq, prev) =>
-          createUvcLaneReading({ stream, seq, irradianceMwCm2, recordedBy: self(), recordedAt: Date.now(), prev }),
+          createUvcLaneReading({ stream, seq, irradianceUwCm2, recordedBy: self(), recordedAt: Date.now(), prev }),
         audience,
       });
     },
@@ -1365,14 +1381,14 @@ export async function startLaneInstance({
     },
 
     async tailReadings({ cycleId, limit = 100 }: { cycleId: string; limit?: number }): Promise<{
-      entries: { seq: number; irradianceMwCm2: number; recordedAt: number }[];
+      entries: { seq: number; irradianceUwCm2: number; recordedAt: number }[];
     }> {
       const bound = Math.max(1, Math.min(10_000, limit ?? 100));
       const raw = await walkStream(`${cycleId}:sensor`, bound);
       return {
         entries: raw.map(({ obj }) => ({
           seq: Number(obj.seq),
-          irradianceMwCm2: Number(obj.irradianceMwCm2),
+          irradianceUwCm2: Number(obj.irradianceUwCm2),
           recordedAt: Number(obj.recordedAt),
         })),
       };
@@ -1413,7 +1429,7 @@ export async function startLaneInstance({
       clean: role === 'lamp'
         ? async audience => {
           const done = await runLampCleaning(plan, audience, simulationClock.sleep);
-          return `Lamp cleaning finished · ${DEMO_CLEANING.durationS} s at ${DEMO_CLEANING.irradianceMwCm2} mW/cm² · `
+          return `Lamp cleaning finished · ${done.treatment.title} · ${describeTreatment(done.treatment)} · `
             + `${done.joulesMilliTotal} mJ in ${done.energyReadings} energy records · ${done.sensorReadings} sensor readings so far`;
         }
         : undefined,
@@ -1428,6 +1444,12 @@ export async function startLaneInstance({
       readCycleEnded: async cycleId => {
         const latest = await readLatest<UvcLaneCycle>('UvcLaneCycle', { cycleId });
         return latest ? latest.obj.endedAt !== 0 : null;
+      },
+      readCycleIrradiance: async cycleId => {
+        const cycle = await readLatest<UvcLaneCycle>('UvcLaneCycle', { cycleId });
+        if (!cycle) return null;
+        const phase = await readLatest<UvcLanePhase>('UvcLanePhase', { planId: cycle.obj.planId });
+        return phase ? phase.obj.irradianceUwCm2 : null;
       },
       setSensorState: plan.setSensorState,
       recordReading: plan.recordReading,
@@ -1449,6 +1471,7 @@ export async function startLaneInstance({
       'postLaneChat',
       'tailLaneChat',
       'planPhase',
+      'readTreatment',
       'startCycle',
       'recordEnergy',
       'recordReading',
@@ -1626,18 +1649,13 @@ export type LanePlan = {
   roleAnchorIdHash(input: { lane: string }): Promise<{ idHash: string }>;
   postLaneChat(input: { thread: string; text: string; audience: string[] }): Promise<{ idHash: string; seq: number }>;
   tailLaneChat(input: { thread: string; limit?: number }): Promise<{ entries: UvcLaneChat[] }>;
-  planPhase(input: {
-    title: string;
-    targetDoseJm2: number;
-    durationS: number;
-    planId?: string;
-    audience: string[];
-  }): Promise<{ planId: string; idHash: string }>;
+  planPhase(input: TreatmentParameters & { planId?: string; audience: string[] }): Promise<{ planId: string; idHash: string }>;
+  readTreatment(): Promise<(Treatment & { planId: string }) | null>;
   startCycle(input: { planId: string; cycleId?: string; audience: string[] }): Promise<{ cycleId: string; idHash: string }>;
   recordEnergy(input: { cycleId: string; joulesMilli: number; audience: string[] }): Promise<{ idHash: string; seq: number }>;
   recordReading(input: {
     cycleId: string;
-    irradianceMwCm2: number;
+    irradianceUwCm2: number;
     audience: string[];
   }): Promise<{ idHash: string; seq: number }>;
   setLightState(input: { on: boolean; reason: string; audience: string[] }): Promise<{ idHash: string }>;
@@ -1689,7 +1707,7 @@ export type LanePlan = {
     entries: { seq: number; joulesMilli: number; recordedAt: number }[];
   }>;
   tailReadings(input: { cycleId: string; limit?: number }): Promise<{
-    entries: { seq: number; irradianceMwCm2: number; recordedAt: number }[];
+    entries: { seq: number; irradianceUwCm2: number; recordedAt: number }[];
   }>;
   createIoMInvite(): Promise<{
     invitationUrl: string;

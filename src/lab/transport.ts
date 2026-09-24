@@ -318,6 +318,7 @@ export async function snapshotRole({
     .filter((attestation): attestation is unknown => attestation !== null && attestation !== undefined);
   const lightState = await client.call('uvcLane', 'readLightState');
   const sensorState = await client.call('uvcLane', 'readSensorState');
+  const treatment = await client.call('uvcLane', 'readTreatment');
   const automaticAttestation = role === 'admin'
     ? await client.call('uvcLane', 'readAutomaticAttestationStatus')
     : null;
@@ -333,6 +334,7 @@ export async function snapshotRole({
     attestations,
     lightState,
     sensorState,
+    treatment,
     automaticAttestation,
   });
 }
