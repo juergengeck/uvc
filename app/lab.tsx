@@ -15,6 +15,7 @@ import { LaneChat } from '../src/lab/LaneChat';
 import { CLEAN_COMMAND, DEVICE_CHAT_COMMANDS } from '../src/lab/deviceChatCommands';
 import { DEMO_CLEANING } from '../src/lab/demoCleaning';
 import { roomCleaningStatus } from '../src/lab/laneViewModel';
+import { labThemeIsDark, nextLabThemeMode, parseLabThemeMode, type LabThemeMode } from '../src/lab/theme';
 
 const ROLES = ['admin', 'doctor', 'lamp', 'sensor'] as const;
 type Role = typeof ROLES[number];
@@ -26,6 +27,27 @@ const DEVICE_SWITCHES = ['on', 'off'] as const;
 const CHECKMARK = require('../src/assets/images/uvc-check-favicon.png');
 const LANE = 'lab';
 const THREAD = `${LANE}:welcome`;
+const LAB_THEME_STORAGE_KEY = 'uvc-lab-theme';
+const appThemeStorageKey = (role: Role) => `uvc-lab-${role}-theme`;
+function initialLabTheme(): LabThemeMode {
+  if (Platform.OS !== 'web') return 'system';
+  try {
+    return parseLabThemeMode(globalThis.localStorage?.getItem(LAB_THEME_STORAGE_KEY) ?? null) ?? 'system';
+  } catch {
+    return 'system';
+  }
+}
+function initialAppThemes(): Partial<Record<Role, boolean>> {
+  if (Platform.OS !== 'web') return {};
+  try {
+    return Object.fromEntries(ROLES.flatMap(role => {
+      const value = globalThis.localStorage?.getItem(appThemeStorageKey(role));
+      return value === 'dark' || value === 'light' ? [[role, value === 'dark']] : [];
+    })) as Partial<Record<Role, boolean>>;
+  } catch {
+    return {};
+  }
+}
 const short = (value?: string | null) => value ? `${value.slice(0, 8)}…${value.slice(-4)}` : 'Not available';
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 type Row = { time: string; role: string; text: string };
@@ -34,8 +56,30 @@ type Plan = { planId: string; title: string };
 
 export default function LabLane() {
   const systemTheme = useColorScheme();
-  const dark = systemTheme === 'dark';
-  const [appDark, setAppDark] = useState<Partial<Record<Role, boolean>>>({});
+  const [themeMode, setThemeMode] = useState<LabThemeMode>(initialLabTheme);
+  const dark = labThemeIsDark(themeMode, systemTheme === 'dark');
+  const [appDark, setAppDark] = useState<Partial<Record<Role, boolean>>>(initialAppThemes);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try { globalThis.localStorage?.setItem(LAB_THEME_STORAGE_KEY, themeMode); } catch { /* Storage can be unavailable. */ }
+  }, [themeMode]);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      for (const role of ROLES) {
+        const override = appDark[role];
+        if (override === undefined) globalThis.localStorage?.removeItem(appThemeStorageKey(role));
+        else globalThis.localStorage?.setItem(appThemeStorageKey(role), override ? 'dark' : 'light');
+      }
+    } catch { /* Storage can be unavailable. */ }
+  }, [appDark]);
+  const changeLaneTheme = () => {
+    setThemeMode(previous => nextLabThemeMode(previous));
+    setAppDark({});
+  };
+  const toggleAppTheme = (role: Role, currentDark: boolean) => {
+    setAppDark(previous => ({...previous, [role]: !currentDark}));
+  };
   const c = Colors[dark ? 'dark' : 'light'];
   const [pages, setPages] = useState<Partial<Record<Role, 'app' | 'settings'>>>({});
   const [stage, setStage] = useState('Starting workers');
@@ -381,6 +425,9 @@ export default function LabLane() {
       {status === 'starting' && <ActivityIndicator color={c.primary} />}
       <Text accessibilityLiveRegion="polite" style={[s.body, s.grow, { color: status === 'failed' || status === 'partial' ? c.error : c.textSecondary }]}>{stage}</Text>
       {button('Activity', () => setShowLog(!showLog))}
+      <Pressable testID="lab-theme-toggle" accessibilityRole="button" accessibilityLabel={`Switch lab to ${nextLabThemeMode(themeMode)} mode`} accessibilityHint="Changes the lab and all four apps" onPress={changeLaneTheme} style={[s.themeButton, {borderColor: c.border, backgroundColor: c.surface}]}>
+        <MaterialCommunityIcons name={nextLabThemeMode(themeMode) === 'system' ? 'monitor' : nextLabThemeMode(themeMode) === 'dark' ? 'weather-night' : 'weather-sunny'} size={20} color={c.textSecondary} />
+      </Pressable>
     </View>
     <ScrollView testID="lab-workspace-scroll" contentContainerStyle={s.workspace}>
     <ScrollView horizontal testID="lab-lane-scroll" contentContainerStyle={s.lane}>
@@ -411,7 +458,7 @@ export default function LabLane() {
             <View style={[s.appHeader, {borderBottomColor: c.border}]}>
               <UvcLogo dark={roleDark} width={64} />
               <Text style={[s.appTitle, s.grow, {color: c.text}]}>{LABELS[role]}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel={`${LABELS[role]} ${roleDark ? 'light' : 'dark'} mode`} onPress={() => setAppDark(previous => ({...previous, [role]: !roleDark}))} style={s.iconButton}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${LABELS[role]} ${roleDark ? 'light' : 'dark'} mode`} onPress={() => toggleAppTheme(role, roleDark)} style={s.iconButton}>
                 <MaterialCommunityIcons name={roleDark ? 'weather-sunny' : 'weather-night'} size={20} color={c.textSecondary} />
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel={`${LABELS[role]} ${settings ? 'back to app' : 'settings'}`} onPress={() => setPages(previous => ({...previous, [role]: settings ? 'app' : 'settings'}))} style={s.iconButton}>
@@ -510,6 +557,9 @@ export default function LabLane() {
             <LaneChat client={seedRef.current?.host.clients[role]} me={snap?.person ?? seedRef.current?.persons[role] ?? ''} peers={chatPeers} dark={roleDark} enabled={ready && (!join || joined)} hidden={settings} />
             {settings && <>
               {heading('Settings')}
+              {heading('Appearance')}
+              {note(`${LABELS[role]} is using ${roleDark ? 'dark' : 'light'} mode.`)}
+              {button(`Use ${roleDark ? 'light' : 'dark'} mode`, () => toggleAppTheme(role, roleDark))}
               {heading('Data')}
               {note('Export this app’s records, connections, and recent journal and messages as an Excel workbook.')}
               {button('Export XLSX', () => { void exportData(role); }, !ready, true)}
@@ -562,6 +612,7 @@ export default function LabLane() {
 const s = StyleSheet.create({
   root: { flex: 1 }, header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
   title: { fontSize: 16, fontWeight: '600' }, grow: { flex: 1, minWidth: 0 },
+  themeButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   workspace: { flexGrow: 1 },
   lane: { padding: 16, gap: 12, alignItems: 'flex-start' },
   column: { width: 360, gap: 12, flexShrink: 0 },

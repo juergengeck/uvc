@@ -102,8 +102,12 @@ The default relay is `wss://api.glue.one/comm`; a `commServer` query parameter m
 select a ws/wss test relay. For a physical phone, use a host address reachable
 from that phone; localhost links refer to the phone itself.
 
-Each app has its own Settings and theme control. Dark mode uses light logo lettering
-with the original green checkmark on a transparent background.
+The upper-right lane theme button cycles light, dark and system appearance and
+updates all four apps. The lane choice is saved in this browser. Each app also
+has its own header control and Settings → Appearance option for a saved individual
+override; changing the lane theme applies the new choice to every app again.
+Dark mode uses light logo lettering with the original green checkmark on a
+transparent background.
 
 Each visit has a fresh storage directory. Startup never deletes other sessions'
 IndexedDB databases, since another tab may still use them. Unmounting terminates
