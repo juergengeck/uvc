@@ -324,7 +324,15 @@ describe('lane worker mesh', () => {
     // Standalone lamp and sensor transitions share one independently
     // reviewable scope, including ON and OFF before an admin review.
     await lamp.call('uvcLane', 'setLightState', { on: true, reason: 'preflight on', audience });
+    await poll('manual lamp-on state reaches sensor', async () => {
+      const state = await sensor.call<{ on: boolean; reason: string } | null>('uvcLane', 'readLightState');
+      return state?.on === true && state.reason === 'preflight on' ? state : null;
+    }, 90_000);
     await lamp.call('uvcLane', 'setLightState', { on: false, reason: 'preflight off', audience });
+    await poll('manual lamp-off state reaches sensor', async () => {
+      const state = await sensor.call<{ on: boolean; reason: string } | null>('uvcLane', 'readLightState');
+      return state?.on === false && state.reason === 'preflight off' ? state : null;
+    }, 90_000);
     const standalone = await poll('standalone device changes visible', async () => {
       const read = await admin.call<{ changes: Array<{ hash: string; kind: string }> }>('uvcLane', 'readChanges', {});
       return read.changes.length === 5 ? read : null;

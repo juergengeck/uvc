@@ -59,6 +59,7 @@
     "@refinio/quicvc-protocol": "file:../one/packages/quicvc-protocol",
     "@refinio/settings.core": "file:../one/packages/settings.core",
     "@refinio/trie.core": "file:../one/packages/trie.core",
+    "@refinio/trust.abac": "file:../one/packages/trust.abac",
     "@refinio/uvc.core": "file:../one/packages/uvc.core",
     "@rneui/base": "^4.0.0-rc.7",
     "@types/path-browserify": "^1.0.3",

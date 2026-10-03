@@ -50,7 +50,7 @@ import {
 } from '@refinio/one.core/lib/util/arraybuffer-to-and-from-hex-string.js';
 import { OperationRegistry } from '@refinio/api/registry';
 import { IpcTransport } from '@refinio/api/transports/IpcTransport.js';
-import { AccessRightsRecipes } from '@refinio/api/helpers/AccessRightsHelper.js';
+import { AccessCertificateRecipe } from '@refinio/trust.abac/recipes';
 import type { Recipe } from '@refinio/one.core/lib/recipes.js';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
@@ -217,12 +217,12 @@ export async function startLaneInstance({
   const listenerUrl = endpoint.url;
   const multiUser = new MultiUser({
     directory,
-    // AccessRightsRecipes registers the pairing audit certificate that
+    // Register the pairing audit certificate owned by trust.abac that
     // OneConnectionPlan.connectWithInvite mints via grantAccessRightsAfterPairing.
     recipes: [
       ...RecipesStable,
       ...RecipesExperimental,
-      ...AccessRightsRecipes,
+      AccessCertificateRecipe,
       ...(UvcLaneRecipes as unknown as Recipe[]),
       ...(UvcLaneCycleRecipes as unknown as Recipe[]),
     ],
