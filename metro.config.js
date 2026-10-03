@@ -72,6 +72,7 @@ const refinioPackages = {
   '@refinio/connection.btle': path.resolve(oneWorkspaceRoot, 'packages/connection.btle'),
   '@refinio/connection.core': path.resolve(oneWorkspaceRoot, 'packages/connection.core'),
   '@refinio/esp32.host': path.resolve(devicesWorkspaceRoot, 'packages/esp32.host'),
+  '@refinio/group.core': path.resolve(oneWorkspaceRoot, 'packages/group.core'),
   '@refinio/meaning.core': path.resolve(oneWorkspaceRoot, 'packages/meaning.core'),
   '@refinio/one.core': path.resolve(oneWorkspaceRoot, 'packages/one.core'),
   '@refinio/one.core-expo': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo'),

@@ -52,6 +52,7 @@
     "@refinio/connection.btle": "file:../one/packages/connection.btle",
     "@refinio/connection.core": "file:../one/packages/connection.core",
     "@refinio/esp32.host": "file:../devices/packages/esp32.host",
+    "@refinio/group.core": "file:../one/packages/group.core",
     "@refinio/meaning.core": "file:../one/packages/meaning.core",
     "@refinio/one.core": "file:../one/packages/one.core",
     "@refinio/one.core-expo": "file:../one/packages/one.core-expo",
