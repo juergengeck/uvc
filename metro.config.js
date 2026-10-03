@@ -5,6 +5,7 @@ const path = require('path');
 
 const projectRoot = __dirname;
 const oneWorkspaceRoot = path.resolve(projectRoot, '../one');
+const devicesWorkspaceRoot = path.resolve(projectRoot, '../devices');
 const expoCompatRoot = path.resolve(projectRoot, 'compat/one-core-expo');
 const config = getDefaultConfig(projectRoot);
 
@@ -70,6 +71,7 @@ const refinioPackages = {
   '@refinio/api': path.resolve(oneWorkspaceRoot, 'packages/refinio.api'),
   '@refinio/connection.btle': path.resolve(oneWorkspaceRoot, 'packages/connection.btle'),
   '@refinio/connection.core': path.resolve(oneWorkspaceRoot, 'packages/connection.core'),
+  '@refinio/esp32.host': path.resolve(devicesWorkspaceRoot, 'packages/esp32.host'),
   '@refinio/meaning.core': path.resolve(oneWorkspaceRoot, 'packages/meaning.core'),
   '@refinio/one.core': path.resolve(oneWorkspaceRoot, 'packages/one.core'),
   '@refinio/one.core-expo': path.resolve(oneWorkspaceRoot, 'packages/one.core-expo'),
@@ -151,8 +153,8 @@ module.exports = {
   ],
   resolver: {
     ...config.resolver,
-    // The @refinio packages are linked from ../one via file: dependencies.
-    // Metro must follow those symlinks and watch the target workspace.
+    // The @refinio packages are linked from ../one and ../devices via file: dependencies.
+    // Metro must follow those symlinks and watch the target workspaces.
     unstable_enablePackageExports: false,
     unstable_enableSymlinks: true,
     extraNodeModules: {

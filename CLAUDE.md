@@ -190,7 +190,7 @@ vendor/                  # Local ONE platform dependencies (tarballs)
 - [src/initialization/parallelInit.ts](src/initialization/parallelInit.ts) - Parallel initialization optimizations
 - [src/models/AppModel.ts](src/models/AppModel.ts) - Root model orchestrator
 - [src/models/network/TransportManager.ts](src/models/network/TransportManager.ts) - Multi-transport coordination
-- [src/models/network/QuicModel.ts](src/models/network/QuicModel.ts) - QUIC/UDP transport
+- [esp32.host/src/net/QuicModel.ts](../devices/packages/esp32.host/src/net/QuicModel.ts) - QUIC/UDP transport (moved from uvc 2026-10-03)
 - [src/models/network/DeviceDiscoveryModel.ts](src/models/network/DeviceDiscoveryModel.ts) - P2P device discovery
 - [src/providers/app/OneProvider.tsx](src/providers/app/OneProvider.tsx) - Main ONE platform provider
 - [src/utils/appJournal.ts](src/utils/appJournal.ts) - Application event journal

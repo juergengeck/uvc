@@ -22,7 +22,7 @@ import type {TrustKeysCertificate} from '@refinio/one.models/lib/recipes/Certifi
 import type {AffirmationCertificate} from '@refinio/one.models/lib/recipes/Certificates/AffirmationCertificate.js';
 import type {IRoleCertificate} from '../../recipes/RoleCertificate';
 import type {VerifiableCredential} from '../../recipes/VerifiableCredential';
-import type {Device} from '../../recipes/device';
+import type {Device} from '@refinio/esp32.host';
 import {
   createUvcPhoneBook,
   createUvcPhoneBookEntry,

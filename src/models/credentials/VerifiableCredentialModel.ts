@@ -15,11 +15,12 @@ import { Person } from '@refinio/one.core/lib/recipes.js';
 import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
 import type ProfileModel from '@refinio/one.models/lib/models/Leute/ProfileModel.js';
 import { DeviceDiscoveryModel } from '../network/DeviceDiscoveryModel';
-import { QuicModel } from '../network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { UdpModel, type UdpSocket, type UdpRemoteInfo } from '../network/UdpModel';
 import Debug from 'debug';
 import { createCryptoHash } from '@refinio/one.core/lib/system/crypto-helpers.js';
 import * as tweetnacl from 'tweetnacl';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 // Initialize debug logger
 const debugLogger = Debug('one:vc:model');
@@ -529,7 +530,7 @@ export class VerifiableCredentialModel extends Model {
       const unifiedServicePort = devicePort;
       
       // Ensure QUIC model is initialized and ready
-      const quicModel = await QuicModel.ensureInitialized();
+      const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
       if (!quicModel.isReady()) {
         console.error('[VerifiableCredentialModel] QuicModel not ready for sending credentials');
         return false;
@@ -1202,7 +1203,7 @@ export class VerifiableCredentialModel extends Model {
       console.log(`[VerifiableCredentialModel] Sending credential removal to ${command.deviceId} at ${deviceAddress}:${devicePort}`);
       
       // Ensure QUIC model is initialized
-      const quicModel = await QuicModel.ensureInitialized();
+      const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
       if (!quicModel.isReady()) {
         console.error('[VerifiableCredentialModel] QuicModel not ready for sending removal');
         return false;

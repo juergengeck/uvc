@@ -1,4 +1,4 @@
-import {base64ToBytes, bytesToBase64, concatBytes} from '../utils/byteEncoding.ts';
+import {base64ToBytes, bytesToBase64, concatBytes} from '@refinio/esp32.host';
 
 export const ESP32_WIFI_BLE = {
   service: '9bdf81ee-8d22-40be-b075-9b5baf9c7880',

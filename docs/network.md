@@ -266,7 +266,7 @@ interface DiscoveryMessage {
 ```
 
 #### **3. UdpServiceTransport**
-**Location**: `src/models/network/transport/UdpServiceTransport.ts`
+**Location**: `../devices/packages/esp32.host/src/net/transport/UdpServiceTransport.ts` (moved from uvc 2026-10-03)
 **Role**: UDP transport implementation with service routing
 
 **Responsibilities**:

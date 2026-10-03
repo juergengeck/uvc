@@ -8,7 +8,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Button, Divider, useTheme } from 'react-native-paper';
-import { QuicModel } from '../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 interface TestLogEntry {
   message: string;
@@ -45,7 +46,7 @@ export const QuicModelTest: React.FC = () => {
       logMessage('Starting QuicModel initialization test...', 'info');
       
       // Get QuicModel instance
-      const quicModel = QuicModel.getInstance();
+      const quicModel = QuicModel.getInstance(esp32QuicOptions());
       logMessage('QuicModel instance obtained', 'success');
       
       // Check if already initialized
@@ -89,7 +90,7 @@ export const QuicModelTest: React.FC = () => {
       logMessage('Testing UDP socket creation...', 'info');
 
       // Get QuicModel instance
-      const quicModel = QuicModel.getInstance();
+      const quicModel = QuicModel.getInstance(esp32QuicOptions());
 
       // Create a socket directly through QuicModel
       const testSocket = await quicModel.createUdpSocket({

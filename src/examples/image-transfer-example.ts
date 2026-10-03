@@ -3,8 +3,9 @@
  * using the QuicModel's large binary data transfer capabilities
  */
 
-import { QuicModel } from '../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import Debug from 'debug';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 const debug = Debug('example:image-transfer');
 
@@ -33,7 +34,7 @@ export async function sendImage(
     debug(`Preparing to send image (${imageData.byteLength} bytes)`);
     
     // Get QuicModel instance
-    const quicModel = QuicModel.getInstance();
+    const quicModel = QuicModel.getInstance(esp32QuicOptions());
     
     // Initialize if needed
     if (!quicModel.isInitialized()) {
@@ -78,7 +79,7 @@ export async function listenForImages(
   callback: (imageData: Uint8Array, metadata: any) => void
 ): Promise<() => void> {
   try {
-    const quicModel = QuicModel.getInstance();
+    const quicModel = QuicModel.getInstance(esp32QuicOptions());
     
     // Initialize if needed
     if (!quicModel.isInitialized()) {
@@ -122,7 +123,7 @@ export async function listenForImages(
 // Example usage:
 /*
 // First, initialize the system
-QuicModel.getInstance().init().then(() => {
+QuicModel.getInstance(esp32QuicOptions()).init().then(() => {
   // Set up listener for incoming images
   listenForImages((imageData, metadata) => {
     console.log(`Received image: ${metadata.name} (${imageData.byteLength} bytes)`);

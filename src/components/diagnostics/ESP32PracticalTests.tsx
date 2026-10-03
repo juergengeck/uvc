@@ -2,11 +2,12 @@ import React, { useState, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Platform } from 'react-native';
 import { Button, Text, Card, Divider, ProgressBar } from 'react-native-paper';
 import { useTheme } from '@src/providers/app/AppTheme';
-import { QuicModel } from '@src/models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { DeviceDiscoveryModel } from '@src/models/network';
-import { ESP32ConnectionManager } from '@src/models/network/esp32/ESP32ConnectionManager';
+import { ESP32ConnectionManager } from '@refinio/esp32.host';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
-import { NetworkServiceType } from '@src/models/network/interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 interface TestResult {
   test: string;
@@ -130,7 +131,7 @@ export default function ESP32PracticalTests() {
           });
           
           // Send release command
-          const quicModel = QuicModel.getInstance();
+          const quicModel = QuicModel.getInstance(esp32QuicOptions());
           const releaseCommand = {
             action: 'remove_ownership',
             deviceId: selectedDevice.id
@@ -168,7 +169,7 @@ export default function ESP32PracticalTests() {
     updateResult(testName, 'running', 'Ensuring device ownership...');
     
     const discoveryModel = DeviceDiscoveryModel.getInstance();
-    const quicModel = await QuicModel.ensureInitialized();
+    const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
     
     try {
       // Ensure we own the device
@@ -231,7 +232,7 @@ export default function ESP32PracticalTests() {
     updateResult(testName, 'running', 'Removing any existing credentials...');
     
     const discoveryModel = DeviceDiscoveryModel.getInstance();
-    const quicModel = await QuicModel.ensureInitialized();
+    const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
     
     try {
       // Ensure device has no credentials
@@ -305,7 +306,7 @@ export default function ESP32PracticalTests() {
     updateResult(testName, 'running', 'Ensuring device ownership...');
     
     const discoveryModel = DeviceDiscoveryModel.getInstance();
-    const quicModel = await QuicModel.ensureInitialized();
+    const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
     
     try {
       // Ensure we own the device

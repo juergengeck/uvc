@@ -7,7 +7,7 @@
 
 import { DeviceDiscoveryModel } from '@src/models/network/DeviceDiscoveryModel';
 import { UdpModel } from '@src/models/network/UdpModel';
-import { QuicModel } from '@src/models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import VerifiableCredentialModel from '@src/models/credentials/VerifiableCredentialModel';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
 import { getInstanceOwnerIdHash } from '@refinio/one.core/lib/instance.js';
@@ -15,6 +15,7 @@ import { ModelService } from '@src/services/ModelService';
 import { toStringId } from '@src/utils/ids';
 import type { ITestSuite, ITestCase } from './types';
 import { registerTestSuite } from './TestRegistry';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 
 
@@ -172,7 +173,7 @@ export class ESP32TestSuite implements ITestSuite {
   }
   
   private async testQuicTransport(): Promise<void> {
-    const quicModel = QuicModel.getInstance();
+    const quicModel = QuicModel.getInstance(esp32QuicOptions());
     
     if (!quicModel.isInitialized()) {
       const success = await quicModel.init();

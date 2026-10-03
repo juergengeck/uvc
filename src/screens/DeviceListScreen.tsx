@@ -15,9 +15,9 @@ import { DeviceItem, Device } from '@src/components/devices/DeviceItem';
 import { DeviceDiscoveryModel } from '@src/models/network';
 import { ModelService } from '@src/services/ModelService';
 import VerifiableCredentialModel from '@src/models/credentials/VerifiableCredentialModel';
-import { DeviceType } from '@src/models/network/deviceTypes';
-import { QuicModel } from '@src/models/network/QuicModel';
-import profiler from '@src/utils/performanceProfiler';
+import { DeviceType } from '@refinio/esp32.host';
+import { QuicModel } from '@refinio/esp32.host';
+import profiler from '@refinio/esp32.host';
 import { useAppModel } from '@src/hooks/useAppModel';
 import { useModelState } from '@src/hooks/useModelState';
 

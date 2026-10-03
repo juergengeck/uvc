@@ -222,7 +222,7 @@ export class UnifiedNetworkManager extends EventEmitter {
     // For ESP32 devices, delegate to ESP32ConnectionManager
     if (device.deviceType === 'ESP32') {
       try {
-        const { ESP32ConnectionManager } = await import('./esp32/ESP32ConnectionManager');
+        const { ESP32ConnectionManager } = await import('@refinio/esp32.host');
         const esp32Manager = ESP32ConnectionManager.getInstance();
         
         const esp32Command = {

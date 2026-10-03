@@ -4,12 +4,13 @@
  * Handles device discovery and peer communication over UDP.
  */
 
-import { IQuicTransport, DeviceIdentityCredential, VCPresentationMessage, NetworkServiceType, QuicTransportOptions, Device, DiscoveryMessage } from '../interfaces';
+import { IQuicTransport, DeviceIdentityCredential, VCPresentationMessage, NetworkServiceType, QuicTransportOptions, Device, DiscoveryMessage } from '@refinio/esp32.host';
 import { UdpModel, UdpRemoteInfo } from '../UdpModel';
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
 import Debug from 'debug';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
+import {esp32QuicOptions} from '../esp32Seams';
 
 // Initialize debug but don't enable it - controlled by message bus
 const debug = Debug('one:discovery:protocol');
@@ -122,8 +123,8 @@ export class DiscoveryProtocol {
       console.log(`[DiscoveryProtocol] Creating fresh transport (retry ${retryCount}/${MAX_RETRIES})...`);
       
       // Create new transport instance (lazy load to avoid platform mismatch)
-      const { UdpServiceTransport } = await import('../transport/UdpServiceTransport');
-      this.transport = new UdpServiceTransport() as IQuicTransport;
+      const { UdpServiceTransport } = await import('@refinio/esp32.host');
+      this.transport = new UdpServiceTransport(esp32QuicOptions()) as IQuicTransport;
       
       // Initialize the transport
       await this.transport.init();
@@ -176,8 +177,8 @@ export class DiscoveryProtocol {
       // Create transport if it was not provided externally
       if (!this.transport && !this.wasTransportProvided) {
         debug('Creating transport instance');
-        const { UdpServiceTransport } = await import('../transport/UdpServiceTransport');
-        this.transport = new UdpServiceTransport() as IQuicTransport;
+        const { UdpServiceTransport } = await import('@refinio/esp32.host');
+        this.transport = new UdpServiceTransport(esp32QuicOptions()) as IQuicTransport;
       }
       
       // Check if transport needs initialization

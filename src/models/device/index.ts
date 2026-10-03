@@ -19,7 +19,7 @@ export {
   ESP32DataPresentation,
   DeviceSettingsGroup,
   ESP32DeviceSettings
-} from '../../recipes/device';
+} from '@refinio/esp32.host';
 
 // Re-export network discovery models and types for backward compatibility
 export {

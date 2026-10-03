@@ -25,7 +25,7 @@ import {
 } from './transport';
 import { DiscoveryIDRecipe } from './DiscoveryID';
 import { VerifiableCredentialRecipe } from './VerifiableCredential';
-import { DeviceRecipe, DeviceSettingsRecipe, DeviceListRecipe } from './device';
+import { DeviceRecipe, DeviceSettingsRecipe, DeviceListRecipe } from '@refinio/esp32.host';
 import { OrganisationRecipe, DepartmentRecipe, RoomRecipe } from './OrganisationalRecipes';
 import {
   DeviceIdentityCredentialRecipe,
@@ -33,7 +33,7 @@ import {
   LEDStatusResponseRecipe,
   DeviceDiscoveryInfoRecipe,
   OwnershipRemovalCommandRecipe
-} from '../types/device-control-recipes';
+} from '@refinio/esp32.host';
 import {
   UvcPhoneBookEntryRecipe,
   UvcPhoneBookRecipe,

@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { useApp } from '../providers/app/AppContext';
-import { QuicModel } from '../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 
 /**
  * Hook to access the QuicModel from the AppContext

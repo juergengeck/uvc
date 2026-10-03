@@ -9,12 +9,13 @@
  * - Network identity management
  */
 
-import { QuicModel } from './network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { UdpModel } from './network/UdpModel';
-import type { UdpSocket, UdpSocketOptions } from './network/UdpModel';
+import type { UdpSocketOptions } from './network/UdpModel';
 import { DeviceDiscoveryModel } from './network/DeviceDiscoveryModel';
-import type { IQuicTransport } from './network/interfaces';
+import type { IQuicTransport, UdpSocket as Esp32UdpSocket } from '@refinio/esp32.host';
 import { btleService } from '@refinio/connection.btle';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 export class NetworkModel {
     private _quicModel!: QuicModel;
@@ -64,11 +65,11 @@ export class NetworkModel {
         
         try {
             // Ensure QuicModel is initialized with discovery port
-            await QuicModel.ensureInitialized({ port: 49497, host: '0.0.0.0' });
+            await QuicModel.ensureInitialized(esp32QuicOptions({ port: 49497, host: '0.0.0.0' }));
             console.log('[NetworkModel] QuicModel initialization attempt completed with port 49497');
             
             // Get singleton instance
-            this._quicModel = QuicModel.getInstance();
+            this._quicModel = QuicModel.getInstance(esp32QuicOptions());
             
             // Verify initialization
             console.log('[NetworkModel] QuicModel ready state:', this._quicModel.isReady());
@@ -77,7 +78,7 @@ export class NetworkModel {
             console.error('[NetworkModel] Error initializing QuicModel:', initError);
             console.warn('[NetworkModel] QuicModel initialization failed, network will have limited functionality');
             // Still assign instance for fallback behavior
-            this._quicModel = QuicModel.getInstance();
+            this._quicModel = QuicModel.getInstance(esp32QuicOptions());
         }
         
         console.log('[NetworkModel] QuicModel initialization process completed');
@@ -200,7 +201,7 @@ export class NetworkModel {
      * Creates a UDP socket through the UdpModel or QuicModel.
      * This convenience method creates a UDP socket through the network layer.
      */
-    public async createUdpSocket(options: UdpSocketOptions = { type: 'udp4' }): Promise<UdpSocket> {
+    public async createUdpSocket(options: UdpSocketOptions = { type: 'udp4' }): Promise<Esp32UdpSocket> {
         if (!this._quicModel) {
             throw new Error('NetworkModel not initialized - QuicModel unavailable');
         }
@@ -222,7 +223,7 @@ export class NetworkModel {
     public get quicModel(): QuicModel {
         if (!this._quicModel) {
             console.warn('[NetworkModel] QuicModel accessed before initialization, getting instance');
-            this._quicModel = QuicModel.getInstance();
+            this._quicModel = QuicModel.getInstance(esp32QuicOptions());
         }
         return this._quicModel;
     }

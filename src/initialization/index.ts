@@ -131,6 +131,7 @@ export function disableFocusedConnectionDebugging() {
 
 // Import global references first
 import '../global/references';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 // Debug helpers removed - load on demand if needed
 
@@ -797,7 +798,7 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
         // This ensures it's ready to handle discovery packets when they arrive
         console.log('[initModel] 📱 Setting up DeviceDiscoveryModel prerequisites...');
         try {
-        const { QuicModel } = await import('../models/network/QuicModel');
+        const { QuicModel } = await import('@refinio/esp32.host');
 
         // Pairing trust is already owned by LeuteModel. The integration runtime
         // only needs its existing instance signing identity for discovery; a
@@ -822,7 +823,7 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
 
         if (identity) {
           // Get QuicModel instance and initialize with discovery port
-          const quicModel = QuicModel.getInstance();
+          const quicModel = QuicModel.getInstance(esp32QuicOptions());
           if (!quicModel.isInitialized()) {
             console.log('[initModel] Initializing QuicModel with discovery port 49497');
             await quicModel.init({ port: 49497, host: '0.0.0.0' });
@@ -844,10 +845,12 @@ export async function initModel(auth?: MultiUser, secret?: string): Promise<AppM
           );
           
           // Create VCManager BEFORE initializing DeviceDiscoveryModel
-          const { VCManager } = await import('../models/network/vc/VCManager');
+          const { VCManager } = await import('@refinio/esp32.host');
+          const { esp32Crypto } = await import('../models/network/esp32Seams');
           const vcConfig = {
             transport: quicModel.getTransport(),
             ownPersonId: personId,
+            crypto: esp32Crypto,
             getIssuerPublicKey: async (issuerPersonId: any) => {
               try {
                 const someoneElse = await leuteModel.getSomeoneElse(issuerPersonId);

@@ -5,9 +5,10 @@
  * QUIC protocol with Verifiable Credentials. It will use the
  * UdpServiceTransport for the underlying packet transmission.
  */
-import type { IQuicTransport, QuicTransportOptions, TransportStats, UdpRemoteInfo } from '../interfaces';
-import { UdpServiceTransport } from './UdpServiceTransport';
+import type { IQuicTransport, QuicTransportOptions, TransportStats, UdpRemoteInfo } from '@refinio/esp32.host';
+import { UdpServiceTransport } from '@refinio/esp32.host';
 import Debug from 'debug';
+import {esp32QuicOptions} from '../esp32Seams';
 
 const debug = Debug('one:quic:vc-transport');
 
@@ -16,7 +17,7 @@ export class QuicvcTransport implements IQuicTransport {
     private underlyingTransport: UdpServiceTransport;
 
     constructor() {
-        this.underlyingTransport = new UdpServiceTransport();
+        this.underlyingTransport = new UdpServiceTransport(esp32QuicOptions());
     }
     
     public on(event: "ready" | "close" | "error" | "message", listener: (...args: any[]) => void): this {

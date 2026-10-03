@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AppState as RNAppState, AppStateStatus } from 'react-native';
-import { QuicModel } from '../../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { ModelService } from '../../services/ModelService';
 
 type AppContextState = {

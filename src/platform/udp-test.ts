@@ -7,10 +7,11 @@
  */
 
 import { UdpModel } from '../models/network/UdpModel';
-import { NetworkServiceType } from '../models/network/interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import { checkDirectBufferSupport } from '../models/network/DirectBuffer';
 import Debug from 'debug';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 // Configuration
 const TEST_PORT = 49497;
@@ -33,7 +34,7 @@ async function runUdpTest(): Promise<void> {
   
   try {
     // Get QuicModel singleton instance
-    const quicModel = QuicModel.getInstance();
+    const quicModel = QuicModel.getInstance(esp32QuicOptions());
     log('Initializing QuicModel...');
     await quicModel.init();
     log('QuicModel initialized successfully');

@@ -37,7 +37,7 @@
 ## Files Modified
 
 ### App Side (React Native)
-- `/src/models/network/vc/VCManager.ts` - Converted to QUICVC protocol
+- `/src/models/network/vc/VCManager.ts` (now `../devices/packages/esp32.host/src/net/vc/VCManager.ts`) - Converted to QUICVC protocol
 - Removed service type 7 handling
 - Added QUICVC packet construction
 

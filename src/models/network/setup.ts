@@ -6,11 +6,12 @@
  */
 
 import { UdpModel } from './UdpModel';
-import { QuicModel } from './QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { DeviceDiscoveryModel } from './DeviceDiscoveryModel';
 
 // Import the authoritative service type definitions
-import { NetworkServiceType } from './interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
+import {esp32QuicOptions} from './esp32Seams';
 
 // Re-export for backward compatibility (deprecated - use NetworkServiceType directly)
 export const SERVICE_TYPE_DISCOVERY = NetworkServiceType.DISCOVERY_SERVICE;
@@ -104,7 +105,7 @@ export async function initializeNetwork(config?: NetworkConfig): Promise<{
 }> {
   // Get model instances
   const udp = UdpModel.getInstance();
-  const quic = QuicModel.getInstance();
+  const quic = QuicModel.getInstance(esp32QuicOptions());
   const discovery = DeviceDiscoveryModel.getInstance();
   
   // Initialize UDP model first
@@ -133,7 +134,7 @@ export async function initializeNetwork(config?: NetworkConfig): Promise<{
  */
 export async function shutdownNetwork(): Promise<void> {
   const discovery = DeviceDiscoveryModel.getInstance();
-  const quic = QuicModel.getInstance();
+  const quic = QuicModel.getInstance(esp32QuicOptions());
   const udp = UdpModel.getInstance();
   
   // Shutdown in reverse order
@@ -151,7 +152,7 @@ export async function checkNetworkHealth(): Promise<{
   discovery: boolean;
 }> {
   const udp = UdpModel.getInstance();
-  const quic = QuicModel.getInstance();
+  const quic = QuicModel.getInstance(esp32QuicOptions());
   const discovery = DeviceDiscoveryModel.getInstance();
   
   // Try to check if discovery is working by calling getDevices()
@@ -178,7 +179,7 @@ export async function initializeQuicTransport(options?: {
   port?: number;
   host?: string;
 }): Promise<QuicModel> {
-  const quic = QuicModel.getInstance();
+  const quic = QuicModel.getInstance(esp32QuicOptions());
   
   if (!quic.isInitialized()) {
     await quic.init({

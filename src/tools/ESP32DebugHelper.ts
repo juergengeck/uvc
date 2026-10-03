@@ -7,7 +7,7 @@
 
 import { UdpModel, UdpSocket, UdpRemoteInfo } from '../models/network/UdpModel';
 import { DiscoveryProtocol, DiscoveryConfig } from '../models/network/discovery/DiscoveryProtocol';
-import { NetworkServiceType } from '../models/network/interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
 import Debug from 'debug';
 

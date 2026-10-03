@@ -9,7 +9,7 @@
 import { createSocket } from './udp';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
 import { UdpModel } from '../models/network/UdpModel';
-import { NetworkServiceType } from '../models/network/interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import Debug from 'debug';
 
 const PORT = 49497;

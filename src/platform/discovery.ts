@@ -10,7 +10,7 @@ import { EventEmitter } from 'events';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
 import { Platform } from 'react-native';
 import { UdpModel } from '../models/network/UdpModel';
-import { NetworkServiceType } from '../models/network/interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import Debug from 'debug';
 
 // Primary discovery port that ESP32 devices use

@@ -5,7 +5,8 @@
  * It initializes the QuicModel and attempts to create a UDP socket.
  */
 
-import { QuicModel } from '../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 /**
  * Test the QuicModel initialization and UDP socket creation
@@ -15,7 +16,7 @@ export async function testQuicModel(): Promise<string> {
     console.log('Starting QuicModel test...');
     
     // Initialize the QuicModel
-    const quicModel = await QuicModel.ensureInitialized();
+    const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
     console.log('QuicModel initialized successfully');
     
     // Check if the model is ready

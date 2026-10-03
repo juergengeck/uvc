@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Text, Button, Card, List, Divider, Surface, Chip } from 'react-native-paper';
-import { QuicVCConnectionManager } from '@src/models/network/QuicVCConnectionManager';
-import { VCManager } from '@src/models/network/vc/VCManager';
+import { QuicVCConnectionManager } from '@refinio/esp32.host';
+import { VCManager } from '@refinio/esp32.host';
 import { useAppModel } from '@src/hooks/useAppModel';
 import { requireStringId } from '@src/utils/ids';
-import type { VerifiedVCInfo } from '@src/models/network/vc/VCManager';
+import type { VerifiedVCInfo } from '@refinio/esp32.host';
 
 export function TestQuicVCScreen() {
     const { appModel } = useAppModel();
@@ -54,8 +54,8 @@ export function TestQuicVCScreen() {
                 return;
             }
             
-            // Create QUICVC manager
-            const manager = QuicVCConnectionManager.getInstance(requireStringId(personId));
+            // Create QUICVC manager (crypto comes from the initialized VCManager)
+            const manager = QuicVCConnectionManager.getInstance(requireStringId(personId), vcManager.getCrypto());
             
             // Initialize with VCManager
             await manager.initialize(vcManager);

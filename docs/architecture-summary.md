@@ -421,7 +421,7 @@ export class AppModel extends StateMachine<AppModelState, AppModelEvent> {
 
 ### 5.3 QuicModel (QUIC/UDP Transport)
 
-**Location**: `src/models/network/QuicModel.ts`
+**Location**: `../devices/packages/esp32.host/src/net/QuicModel.ts` (moved from uvc 2026-10-03)
 
 **Responsibilities**:
 - Manage UDP sockets for QUIC protocol
@@ -976,7 +976,7 @@ npm run postinstall          # Run postinstall (patch-package, fix scripts)
 |------|---------|
 | `src/models/AppModel.ts` | Root model orchestrator |
 | `src/models/network/TransportManager.ts` | Multi-transport coordinator |
-| `src/models/network/QuicModel.ts` | QUIC/UDP transport |
+| `../devices/packages/esp32.host/src/net/QuicModel.ts` | QUIC/UDP transport |
 | `src/models/network/DeviceDiscoveryModel.ts` | P2P discovery (125KB) |
 | `src/models/device/DeviceModel.ts` | Device registry |
 | `src/models/ai/LLMManager.ts` | LLM lifecycle |

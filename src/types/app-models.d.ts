@@ -13,7 +13,7 @@ import type JournalModel from '@refinio/one.models/lib/models/JournalModel.js';
 import type QuestionnaireModel from '@refinio/one.models/lib/models/QuestionnaireModel.js';
 import type { StateMachine } from '@refinio/one.models/lib/misc/StateMachine.js';
 import type { DeviceDiscoveryModel } from '@src/models/network/DeviceDiscoveryModel';
-import type { QuicModel } from '@src/models/network/QuicModel';
+import type { QuicModel } from '@refinio/esp32.host';
 import type {DeviceControlModel} from '@src/models/device/DeviceControlModel';
 
 /**

@@ -16,7 +16,7 @@ import { useInstance } from '@src/providers/app';
 import { getObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import type { Organisation, Department, Room, Device } from '@OneObjectInterfaces';
 import type { SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
-import { ESP32ConnectionManager } from '@src/models/network/esp32/ESP32ConnectionManager';
+import { ESP32ConnectionManager } from '@refinio/esp32.host';
 
 interface HierarchicalItem {
   id: SHA256Hash | string; // This will be the hash or device ID

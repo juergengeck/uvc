@@ -40,7 +40,7 @@ The `ExpoQuicTransport` class in `one.core/lib/system/expo/quic-transport.js` no
 
 ### QuicModel
 
-The `QuicModel` class in `src/models/network/QuicModel.ts`:
+The `QuicModel` class in `../devices/packages/esp32.host/src/net/QuicModel.ts` (moved from uvc 2026-10-03):
 - Imports and registers the platform-specific implementation
 - Sets up proper event handlers
 - Provides a clean API for QUIC transport functionality

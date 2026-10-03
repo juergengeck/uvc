@@ -6,11 +6,11 @@
  */
 
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
-import type { Device } from './interfaces';
+import type { Device } from '@refinio/esp32.host';
 import type { DeviceDiscoveryModel } from './DeviceDiscoveryModel';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { Person } from '@refinio/one.core/lib/recipes.js';
-import { DeviceType } from './deviceTypes';
+import { DeviceType } from '@refinio/esp32.host';
 import Debug from 'debug';
 
 const debug = Debug('one:device:poller');

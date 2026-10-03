@@ -10,6 +10,7 @@ import { navigateToUDPDiagnostic } from '../../navigation/add-udp-diagnostic';
 import { useRouter } from 'expo-router';
 import { routes } from '../../config/routes';
 import { useFocusEffect } from 'expo-router';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 /**
  * DeviceSettings component for managing device discovery and connected devices
@@ -129,7 +130,7 @@ export function DeviceSettings() {
         const { QuicModel } = require('@src/models/network');
         if (QuicModel) {
           // Always use the singleton instance
-          quicModel = QuicModel.getInstance();
+          quicModel = QuicModel.getInstance(esp32QuicOptions());
         }
       } catch (error) {
         console.warn('[DeviceSettings] Failed to get QuicModel:', error);
@@ -438,7 +439,7 @@ export function DeviceSettings() {
           let quicModel = null;
           
           // Always use the singleton instance
-          quicModel = QuicModel.getInstance();
+          quicModel = QuicModel.getInstance(esp32QuicOptions());
           logMessage('✅ Using QuicModel singleton instance');
           
           // Initialize QuicModel

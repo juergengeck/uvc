@@ -6,7 +6,7 @@
  */
 
 import { UdpModel, UdpSocket, UdpSocketOptions, UdpRemoteInfo, DirectUdpSocket } from './UdpModel';
-import { QuicModel, QuicTransportOptions } from './QuicModel';
+import { QuicModel, QuicTransportOptions } from '@refinio/esp32.host';
 import { DeviceDiscoveryModel, DeviceDiscoveryConfig, Device, DeviceCapabilities } from './DeviceDiscoveryModel';
 // NetworkPlugin removed - using ConnectionsModel directly
 // CommServerManager and ProtocolFlowManager removed - using ConnectionsModel directly
@@ -17,6 +17,7 @@ import { DirectBuffer, DirectBufferPool, getDirectBufferPool as _getDirectBuffer
 import { UdpSocketEventType } from './UdpTypes';
 import { TransportManager } from './TransportManager';
 import CommServerManager from './transports/CommServerManager';
+import {esp32QuicOptions} from './esp32Seams';
 
 // Export UdpModel and its types
 export { UdpModel, UdpSocket, UdpSocketOptions, UdpRemoteInfo, DirectUdpSocket };
@@ -54,7 +55,7 @@ export const getUdpModel = (): UdpModel => {
 };
 
 export const getQuicModel = (): QuicModel => {
-  return QuicModel.getInstance();
+  return QuicModel.getInstance(esp32QuicOptions());
 };
 
 export const getDeviceDiscoveryModel = (config?: Partial<DeviceDiscoveryConfig>): DeviceDiscoveryModel => {
@@ -71,7 +72,7 @@ export const ensureUdpInitialized = async (): Promise<UdpModel> => {
 };
 
 export const ensureQuicInitialized = async (options?: QuicTransportOptions): Promise<QuicModel> => {
-  return await QuicModel.ensureInitialized(options);
+  return await QuicModel.ensureInitialized(esp32QuicOptions(options));
 };
 
 export const ensureDeviceDiscoveryInitialized = async (config?: Partial<DeviceDiscoveryConfig>): Promise<DeviceDiscoveryModel> => {

@@ -12,8 +12,8 @@ import { getObjectByHash } from '@refinio/one.core/lib/storage-unversioned-objec
 import type { SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
 import type { License } from '@refinio/one.models/lib/recipes/Certificates/License.js';
 
-import type { IQuicTransport, Device, DiscoveryDevice } from '../interfaces';
-import { NetworkServiceType } from '../interfaces';
+import type { IQuicTransport, Device, DiscoveryDevice } from '@refinio/esp32.host';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import type { UdpRemoteInfo } from '../UdpModel';
 
 import { Attestation, createAttestation, isAttestation } from '@src/recipes/Attestations/Attestation';

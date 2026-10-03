@@ -53,8 +53,8 @@ import {
 } from '@refinio/uvc.core';
 
 import type {DeviceDiscoveryModel} from '../network/DeviceDiscoveryModel';
-import type {DiscoveryDevice} from '../network/interfaces';
-import type {ESP32Response} from '../network/esp32/ESP32ConnectionManager';
+import type {DiscoveryDevice} from '@refinio/esp32.host';
+import type {ESP32Response} from '@refinio/esp32.host';
 
 export type UvcControlTargetKind = 'groov' | 'esp32';
 

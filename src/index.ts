@@ -14,8 +14,21 @@ export * from './settings';
 // Export services
 export * from './services';
 
-// Export recipes
-export * from './recipes/device';
+// Export recipes (device recipes moved to @refinio/esp32.host; same names)
+export {
+  Device,
+  DeviceDataFormat,
+  DeviceList,
+  DeviceListRecipe,
+  DeviceQuicConfig,
+  DeviceRecipe,
+  DeviceRegistrationResult,
+  DeviceSettings,
+  DeviceSettingsGroup,
+  DeviceSettingsRecipe,
+  ESP32DataPresentation,
+  ESP32DeviceSettings,
+} from '@refinio/esp32.host';
 
 // Import model extensions
 import './models/extensions';

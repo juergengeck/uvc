@@ -16,7 +16,7 @@ import type { SHA256IdHash, SHA256Hash } from '@refinio/one.core/lib/util/type-c
 import { ensureIdHash } from '@refinio/one.core/lib/util/type-checks';
 import type { Person, CLOB } from '@refinio/one.core/lib/recipes.js';
 import type TransportManager from '@refinio/one.models/lib/models/TransportManager.js';
-import type QuicModel from '../network/QuicModel';
+import type {QuicModel} from '@refinio/esp32.host';
 import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
 import { storeVersionedObject, getObjectByIdHash } from '@refinio/one.core/lib/storage-versioned-objects.js';
 import { calculateIdHashOfObj, calculateHashOfObj } from '@refinio/one.core/lib/util/object.js';

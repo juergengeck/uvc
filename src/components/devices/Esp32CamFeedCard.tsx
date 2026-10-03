@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, HelperText, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
-import type { DeviceSettings } from '@src/recipes/device';
+import type { DeviceSettings } from '@refinio/esp32.host';
 import { ModelService } from '@src/services/ModelService';
 import {
   appendCacheBust,

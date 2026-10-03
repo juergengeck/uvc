@@ -1,4 +1,4 @@
-import type { DeviceSettings } from '@src/recipes/device';
+import type { DeviceSettings } from '@refinio/esp32.host';
 
 export const ESP32_CAM_STREAM_URL_KEY = 'esp32Cam.streamUrl';
 export const ESP32_CAM_SNAPSHOT_URL_KEY = 'esp32Cam.snapshotUrl';

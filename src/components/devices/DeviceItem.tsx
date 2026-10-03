@@ -4,7 +4,7 @@ import { List, Switch, IconButton, Surface, Button, ActivityIndicator } from 're
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useTheme } from '@src/providers/app/AppTheme';
 import { LEDControl } from './LEDControl';
-import { DeviceType, getDeviceTypeIcon } from '@src/models/network/deviceTypes';
+import { DeviceType, getDeviceTypeIcon } from '@refinio/esp32.host';
 
 export interface Device {
   id: string;

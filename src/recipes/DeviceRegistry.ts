@@ -7,7 +7,7 @@
 
 import type { UnversionedObjectResult, OneUnversionedObjectInterfaces } from '@OneObjectInterfaces';
 import type { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
-import type { Device } from './device';
+import type { Device } from '@refinio/esp32.host';
 
 export interface DeviceRegistry extends OneUnversionedObjectInterfaces {
   readonly $type$: 'DeviceRegistry';

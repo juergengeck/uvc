@@ -4,16 +4,17 @@
  */
 
 import { UdpModel } from '../models/network/UdpModel';
-import { NetworkServiceType } from '../models/network/interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import { checkDirectBufferSupport } from '../models/network/DirectBuffer';
 import Debug from 'debug';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
-import { QuicModel } from '../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { DeviceDiscoveryModel } from '../models/network/DeviceDiscoveryModel';
 import { UdpRemoteInfo } from '../models/network';
 import { ESP32DiscoveryListener } from './discovery';
 // Use local UDP implementation instead of one.core
 import type { UdpSocket } from '../models/network/UdpModel';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 // Configuration
 const TEST_PORT = 49499;
@@ -201,7 +202,7 @@ async function testQuicModel(): Promise<boolean> {
   try {
     // Get QuicModel singleton instance and ensure it's initialized
     console.log('🔍 Initializing QuicModel...');
-    const quicModel = await QuicModel.ensureInitialized();
+    const quicModel = await QuicModel.ensureInitialized(esp32QuicOptions());
     console.log('🔍 QuicModel initialized');
     
     // Set up message handler

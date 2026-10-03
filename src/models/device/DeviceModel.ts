@@ -10,7 +10,7 @@ import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
 import { SHA256IdHash, SHA256Hash } from '@refinio/one.core/lib/util/type-checks.js';
 import { Person } from '@refinio/one.core/lib/recipes.js';
 import { DeviceDiscoveryModel } from '../network/DeviceDiscoveryModel';
-import { QuicModel } from '../network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import Debug from 'debug';
 import { createCryptoHash } from '@refinio/one.core/lib/system/crypto-helpers.js';
 import type LeuteModel from '@refinio/one.models/lib/models/Leute/LeuteModel.js';
@@ -18,10 +18,11 @@ import { calculateIdHashOfObj, calculateHashOfObj } from '@refinio/one.core/lib/
 import { getObject, storeUnversionedObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import { getObjectByIdHash, storeVersionedObject } from '@refinio/one.core/lib/storage-versioned-objects.js';
 // Import device types from recipes
-import { Device, DeviceSettings, DeviceRegistrationResult, DeviceList } from '../../recipes/device';
+import { Device, DeviceSettings, DeviceRegistrationResult, DeviceList } from '@refinio/esp32.host';
 import type { VerifiableCredential } from '../../recipes/VerifiableCredential';
 import { addRecipeToRuntime, hasRecipe } from '@refinio/one.core/lib/object-recipes.js';
 import type {Signature} from '@refinio/one.models/lib/recipes/SignatureRecipes.js';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 // Initialize debug logger
 const debugLogger = Debug('one:device:model');
@@ -978,7 +979,7 @@ export class DeviceModel extends Model {
   ): Promise<boolean> {
     try {
       // Ensure QUIC model is initialized
-      const quicModel = QuicModel.getInstance();
+      const quicModel = QuicModel.getInstance(esp32QuicOptions());
       if (!quicModel.isInitialized()) {
         await quicModel.init();
       }

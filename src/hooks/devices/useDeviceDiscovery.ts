@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DeviceDiscoveryModel } from '@src/models/network';
-import { QuicModel } from '@src/models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
 import { useDeviceSettings } from '@src/hooks/useDeviceSettings';
 import { getInstanceOwnerIdHash } from '@refinio/one.core/lib/instance.js';
 import { SHA256IdHash } from '@refinio/one.core/lib/util/type-checks';
 import { Person } from '@refinio/one.core/lib/recipes.js';
 import { Device } from '@src/components/devices/DeviceItem';
 import { Buffer } from '@refinio/one.core/lib/system/expo/index.js';
-import { DeviceType } from '@src/models/network/deviceTypes';
-import { ESP32ConnectionManager } from '@src/models/network/esp32/ESP32ConnectionManager';
+import { DeviceType } from '@refinio/esp32.host';
+import { ESP32ConnectionManager } from '@refinio/esp32.host';
 import { ModelService } from '@src/services/ModelService';
-import profiler from '@src/utils/performanceProfiler';
+import profiler from '@refinio/esp32.host';
 import { debugLog } from '@src/utils/debugLogger';
 
 const DEVICE_TIMEOUT_MS = 60000; // 60 seconds

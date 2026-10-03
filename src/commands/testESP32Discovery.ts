@@ -5,7 +5,8 @@
  */
 
 import { DeviceDiscoveryModel } from '../models/network/DeviceDiscoveryModel';
-import { QuicModel } from '../models/network/QuicModel';
+import { QuicModel } from '@refinio/esp32.host';
+import {esp32QuicOptions} from '@src/models/network/esp32Seams';
 
 /**
  * Test ESP32 discovery using the actual QuicVC system
@@ -15,7 +16,7 @@ export async function testESP32Discovery(): Promise<void> {
   
   try {
     // Get the actual discovery models
-    const quicModel = QuicModel.getInstance();
+    const quicModel = QuicModel.getInstance(esp32QuicOptions());
     const discoveryModel = DeviceDiscoveryModel.getInstance();
     
     console.log('🔍 Checking QuicModel status...');
@@ -121,7 +122,7 @@ export async function safeESP32NetworkScan(): Promise<void> {
   
   try {
     const discoveryModel = DeviceDiscoveryModel.getInstance();
-    const quicModel = QuicModel.getInstance();
+    const quicModel = QuicModel.getInstance(esp32QuicOptions());
     
     console.log('📋 System Status Check:');
     console.log(`   QuicModel ready: ${quicModel.isReady()}`);

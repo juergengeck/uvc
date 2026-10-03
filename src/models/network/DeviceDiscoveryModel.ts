@@ -18,13 +18,13 @@ import NetInfo from '@react-native-community/netinfo';
 import { debugLog } from '@src/utils/debugLogger';
 import { OEvent } from '@refinio/one.models/lib/misc/OEvent.js';
 import type ChannelManager from '@refinio/one.models/lib/models/ChannelManager.js';
-import { QuicModel } from './QuicModel';
-import { QuicVCConnectionManager } from './QuicVCConnectionManager';
+import { QuicModel } from '@refinio/esp32.host';
+import { QuicVCConnectionManager } from '@refinio/esp32.host';
 import type { UdpRemoteInfo } from '@src/platform/react-native/UDPModule';
 import { SHA256Hash, SHA256IdHash } from '@refinio/one.core/lib/util/type-checks.js';
 import { HashGroup, Person } from '@refinio/one.core/lib/recipes.js';
 import { getInstanceOwnerIdHash } from '@refinio/one.core/lib/instance.js';
-import { NetworkServiceType } from './interfaces';
+import { NetworkServiceType } from '@refinio/esp32.host';
 import type { 
   DiscoveryDevice, 
   DiscoveryMessage, 
@@ -35,12 +35,12 @@ import type {
   DeviceCredential,
   VerifiedVCInfo,
   Credential
-} from './interfaces';
-import { ESP32ConnectionManager } from './esp32/ESP32ConnectionManager';
+} from '@refinio/esp32.host';
+import { ESP32ConnectionManager } from '@refinio/esp32.host';
 import { OwnedDeviceMonitor } from './OwnedDeviceMonitor';
 import type {InstanceSettingsStorage} from '@refinio/settings.core';
 import { DeviceModel } from '../device/DeviceModel';
-import { VCManager } from './vc/VCManager';
+import { VCManager } from '@refinio/esp32.host';
 import { RefactoredBTLEService } from '@src/services/RefactoredBTLEService';
 import { deviceOperationsQueue } from '@src/utils/deferredQueue';
 import { ModelService } from '@src/services/ModelService';
@@ -55,6 +55,7 @@ import {
   calculateIPv4BroadcastAddress,
   encodeDiscoveryPacket,
 } from './discovery/DiscoveryPacket';
+import {esp32Crypto, esp32QuicOptions} from './esp32Seams';
 
 const debug = createDebug('lama:device-discovery');
 
@@ -489,7 +490,7 @@ export class DeviceDiscoveryModel {
       if (!this._transport) {
         if (!this._quicModel) {
           console.log('[DeviceDiscoveryModel] Getting QuicModel instance');
-          this._quicModel = QuicModel.getInstance(); 
+          this._quicModel = QuicModel.getInstance(esp32QuicOptions()); 
         }
         
         // Check if QuicModel is already initialized before attempting to initialize it
@@ -532,7 +533,7 @@ export class DeviceDiscoveryModel {
         try {
           console.log('[DeviceDiscoveryModel] Initializing QUICVC Connection Manager with personId:', this._personId.toString());
 
-          const quicVCManager = QuicVCConnectionManager.getInstance(this._personId);
+          const quicVCManager = QuicVCConnectionManager.getInstance(this._personId, esp32Crypto);
 
           // Initialize with VCManager when available
           if (this._vcManager && this._transport) {
@@ -1137,7 +1138,7 @@ export class DeviceDiscoveryModel {
       // Ensure QuicModel is initialized before setting up discovery
       if (!this._quicModel) {
         console.log('[DeviceDiscoveryModel] Getting QuicModel instance for discovery');
-        this._quicModel = QuicModel.getInstance();
+        this._quicModel = QuicModel.getInstance(esp32QuicOptions());
       }
       
       console.log('[DeviceDiscoveryModel] QuicModel initialized status:', this._quicModel.isInitialized());
@@ -1453,7 +1454,9 @@ export class DeviceDiscoveryModel {
       this._esp32ConnectionManager = ESP32ConnectionManager.getInstance(
         this._transport,
         this._vcManager,
-        this._personId
+        this._personId,
+        this,
+        DeviceModel.getInstance()
       );
       
       // Set up ESP32 service handler
@@ -1663,6 +1666,7 @@ export class DeviceDiscoveryModel {
       const vcConfig = {
         transport: this._transport,
         ownPersonId: this._personId,
+        crypto: esp32Crypto,
         getIssuerPublicKey: async (issuerPersonId: SHA256IdHash<Person>) => {
           try {
             const someoneElse = await leuteModel.getSomeoneElse(issuerPersonId);

@@ -166,7 +166,7 @@ For Phase 1:
 ## Current Implementation (TypeScript/React Native)
 
 ### QuicVCConnectionManager
-Located at `src/models/network/QuicVCConnectionManager.ts`, this implementation provides:
+Located at `../devices/packages/esp32.host/src/net/QuicVCConnectionManager.ts` (moved from uvc 2026-10-03), this implementation provides:
 
 #### Connection Management
 ```typescript
@@ -523,8 +523,7 @@ esp_err_t quicvc_parse_packet(quicvc_connection_t *conn,
 
 ### React Native App Integration
 ```typescript
-import { QuicVCConnectionManager } from '@src/models/network/QuicVCConnectionManager';
-import { VCManager } from '@src/models/network/vc/VCManager';
+import { QuicVCConnectionManager, VCManager } from '@refinio/esp32.host';
 
 // Initialize QUICVC
 const quicVC = QuicVCConnectionManager.getInstance(ownPersonId);
