@@ -292,7 +292,8 @@ describe('lane worker mesh', () => {
 
     const sensorFeed: FeedRow[] = [];
     const stopSensorFeed = admin.onFeed(row => {
-      if (row.type === 'UvcLaneSensorState' || row.type === 'UvcLaneSensorChange') sensorFeed.push(row);
+      if (row.type === 'UvcLaneSensorState' || row.type === 'UvcLaneSensorChange'
+        || (row.type === 'UvcLaneStreamBranch' && row.obj.stream === `${LANE}:sensor-changes`)) sensorFeed.push(row);
     });
     try {
       await sensor.call('uvcLane', 'setSensorState', { on: true, reason: 'preflight on', audience });
@@ -313,7 +314,7 @@ describe('lane worker mesh', () => {
       await sensor.call('uvcLane', 'setSensorState', { on: true, reason: 'measurement ready', audience });
       await poll('sensor activation feed reaches admin', async () => (
         sensorFeed.some(row => row.type === 'UvcLaneSensorState' && row.kind === 'sensor')
-          && sensorFeed.some(row => row.type === 'UvcLaneSensorChange' && row.kind === 'sensor-change')
+          && sensorFeed.some(row => row.type === 'UvcLaneStreamBranch' && row.kind === 'stream-branch')
           ? sensorFeed
           : null
       ), 90_000);

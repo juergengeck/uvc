@@ -40,6 +40,7 @@ export interface LampCleaningOps {
   readTreatment(): Promise<(Treatment & { planId: string }) | null>;
   planPhase(input: TreatmentParameters & { audience: string[] }): Promise<{ planId: string }>;
   startCycle(input: { planId: string; audience: string[] }): Promise<{ cycleId: string }>;
+  readLightState(): Promise<{ on: boolean } | null>;
   setLightState(input: { on: boolean; reason: string; audience: string[] }): Promise<unknown>;
   recordEnergy(input: { cycleId: string; joulesMilli: number; audience: string[] }): Promise<unknown>;
   closeCycle(input: { cycleId: string; reason: string; audience: string[] }): Promise<{
@@ -52,7 +53,8 @@ export interface LampCleaningOps {
 /**
  * Runs one cycle of the lamp's active treatment; a lamp without a saved
  * treatment first records its factory treatment so every cycle references a
- * stored plan. Returns the treatment and the closing summary.
+ * stored plan. Switching the lamp off interrupts metering and leaves the cycle
+ * open. Returns the treatment and the closing summary only after a full run.
  */
 export async function runLampCleaning(
   ops: LampCleaningOps,
@@ -67,10 +69,15 @@ export async function runLampCleaning(
   try {
     for (let second = 0; second < durationS; second += 1) {
       await sleep(TICK_MS);
+      if (!(await ops.readLightState())?.on) {
+        throw new Error(`UVC lab: ${title} interrupted because the lamp was switched off.`);
+      }
       await ops.recordEnergy({ cycleId, joulesMilli: lampPowerMw, audience });
     }
   } finally {
-    await ops.setLightState({ on: false, reason: `${title} finished`, audience });
+    if ((await ops.readLightState())?.on) {
+      await ops.setLightState({ on: false, reason: `${title} finished`, audience });
+    }
   }
   const closed = await ops.closeCycle({ cycleId, reason: `${title} completed`, audience });
   const { planId: _planId, ...ran } = active;
@@ -80,6 +87,7 @@ export async function runLampCleaning(
 export interface SensorFollowerOps {
   lane: string;
   readLightState(): Promise<{ on: boolean } | null>;
+  readSensorState(): Promise<{ on: boolean } | null>;
   readCycleEnded(cycleId: string): Promise<boolean | null>;
   /** Irradiance of the cycle's treatment in µW/cm², or null until the plan arrives. */
   readCycleIrradiance(cycleId: string): Promise<number | null>;
@@ -90,12 +98,14 @@ export interface SensorFollowerOps {
 /**
  * The sensor measures the lamp: while the lamp is on and a cycle is open it
  * switches itself on and records one reading per second for that cycle.
+ * Manual sensor off pauses that cycle; switching the sensor on resumes it.
  * Observed versions only trigger a re-check; the decision always reads the
  * latest stored versions, since CHUM may deliver versions out of order.
  */
 export function createSensorFollower(ops: SensorFollowerOps, audience: () => string[] | null, sleep: Sleep) {
   const cycles: string[] = [];
   let measuring: { cycleId: string; stop: boolean; done: Promise<void> } | null = null;
+  let pausedCycle: string | null = null;
   type Target = { cycleId: string; irradianceUwCm2: number };
   let pending = Promise.resolve();
   let stopped = false;
@@ -107,6 +117,8 @@ export function createSensorFollower(ops: SensorFollowerOps, audience: () => str
       if ((await ops.readCycleEnded(cycleId)) !== false) continue;
       // The cycle's plan may arrive after the cycle; its arrival re-checks.
       const irradianceUwCm2 = await ops.readCycleIrradiance(cycleId);
+      // A manual sensor off pauses this cycle until the sensor is switched on.
+      if (pausedCycle === cycleId && !(await ops.readSensorState())?.on) return null;
       return irradianceUwCm2 === null ? null : { cycleId, irradianceUwCm2 };
     }
     return null;
@@ -118,26 +130,41 @@ export function createSensorFollower(ops: SensorFollowerOps, audience: () => str
       while (!run.stop) {
         await sleep(TICK_MS);
         if (run.stop) break;
+        if (!(await ops.readSensorState())?.on) {
+          pausedCycle = cycleId;
+          break;
+        }
+        if (!(await ops.readLightState())?.on || (await ops.readCycleEnded(cycleId)) !== false) break;
         await ops.recordReading({ cycleId, irradianceUwCm2, audience: recipients });
       }
     } finally {
-      await ops.setSensorState({ on: false, reason: `Lamp off for cycle ${cycleId}`, audience: recipients });
+      run.stop = true;
+      if ((await ops.readSensorState())?.on) {
+        await ops.setSensorState({ on: false, reason: `Lamp off for cycle ${cycleId}`, audience: recipients });
+      }
     }
   }
 
   async function reconcile(): Promise<void> {
     const recipients = audience();
     if (!recipients || stopped) return;
+    if (measuring && !measuring.stop && !(await ops.readSensorState())?.on) {
+      pausedCycle = measuring.cycleId;
+      measuring.stop = true;
+    }
     const next = await target();
-    if (measuring && measuring.cycleId !== next?.cycleId) {
+    if (measuring && (measuring.stop || measuring.cycleId !== next?.cycleId)) {
       measuring.stop = true;
       await measuring.done;
       measuring = null;
     }
     if (!measuring && next && !stopped) {
       const run = { cycleId: next.cycleId, stop: false, done: Promise.resolve() };
-      run.done = measure(next, recipients, run).catch(error => console.error('UVC lab: sensor measurement failed.', error));
       measuring = run;
+      pausedCycle = null;
+      run.done = measure(next, recipients, run)
+        .catch(error => console.error('UVC lab: sensor measurement failed.', error))
+        .finally(() => { if (measuring === run) measuring = null; });
     }
   }
 
@@ -151,7 +178,9 @@ export function createSensorFollower(ops: SensorFollowerOps, audience: () => str
     observe(type: string, obj: Record<string, unknown>): Promise<void> {
       if (type === 'UvcLaneCycle' && typeof obj.cycleId === 'string') {
         if (!cycles.includes(obj.cycleId)) cycles.push(obj.cycleId);
-      } else if (type !== 'UvcLanePhase' && !(type === 'UvcLaneLightState' && obj.stateId === `${ops.lane}:light`)) {
+      } else if (type !== 'UvcLanePhase'
+        && !(type === 'UvcLaneLightState' && obj.stateId === `${ops.lane}:light`)
+        && !(type === 'UvcLaneSensorState' && obj.stateId === `${ops.lane}:sensor`)) {
         return pending;
       }
       return queue();

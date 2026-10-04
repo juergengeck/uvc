@@ -1,4 +1,4 @@
-import { buildUvcIoMInviteUrl, decodeUvcIoMInvite, normalizeUvcLabUrl } from '../iomInvite.ts';
+import { assertUvcLabRoleEmail, buildUvcIoMInviteUrl, decodeUvcIoMInvite, normalizeUvcLabUrl, readUvcLabInviteIdentity } from '../iomInvite.ts';
 
 const VERSION = 7;
 const PERSON = 'a'.repeat(64);
@@ -13,6 +13,44 @@ const built = (): string =>
     .invitationUrl;
 
 describe('lane IoM invitation codec', () => {
+  const roles = ['admin', 'doctor', 'lamp', 'sensor'];
+
+  it.each(roles)('binds an invited %s role to its canonical lab identity', role => {
+    const app = new URL(APP_BASE);
+    app.searchParams.set('role', role);
+    const { invitationUrl } = buildUvcIoMInviteUrl({ appBaseUrl: app.href, email: `${role}@lab.local`, person: PERSON, token: TOKEN, url: COMM_SERVER, publicKey: PUBLIC_KEY, pairingProtocolVersion: VERSION });
+    expect(readUvcLabInviteIdentity(invitationUrl)).toEqual({ email: `${role}@lab.local`, person: PERSON });
+    expect(new URL(invitationUrl).searchParams.has('role')).toBe(false);
+    expect(assertUvcLabRoleEmail(role, `${role}@lab.local`)).toBe(role);
+    for (const otherRole of roles.filter(other => other !== role)) {
+      const tampered = new URL(invitationUrl);
+      tampered.searchParams.set('role', otherRole);
+      expect(readUvcLabInviteIdentity(tampered.href)).toEqual({ email: `${role}@lab.local`, person: PERSON });
+    }
+  });
+
+  it('rejects arbitrary emails even when the URL names a valid role', () => {
+    expect(() => assertUvcLabRoleEmail('doctor', 'patient@example.test')).toThrow('not the invited identity');
+    expect(() => assertUvcLabRoleEmail('doctor', 'Doctor@lab.local')).toThrow('not the invited identity');
+    expect(() => assertUvcLabRoleEmail('administrator', 'administrator@lab.local')).toThrow('unknown lane role');
+  });
+
+  it('strips role metadata from a base URL', () => {
+    const { invitationUrl } = buildUvcIoMInviteUrl({ appBaseUrl: 'https://uvc.example.test/lab?role=lamp&fr=admin', email: 'doctor@lab.local', person: PERSON, token: TOKEN, url: COMM_SERVER, publicKey: PUBLIC_KEY, pairingProtocolVersion: VERSION });
+    expect(new URL(invitationUrl).searchParams.has('role')).toBe(false);
+    expect(new URL(invitationUrl).searchParams.has('fr')).toBe(false);
+  });
+
+  it('validates invited Person consistency before worker boot', () => {
+    const url = new URL(built());
+    url.searchParams.set('role', 'admin');
+    url.searchParams.set('fdi', 'b'.repeat(64));
+    expect(() => readUvcLabInviteIdentity(url.href)).toThrow('person conflict');
+    url.searchParams.set('fdi', PERSON);
+    url.hash = encodeURIComponent('null');
+    expect(() => readUvcLabInviteIdentity(url.href)).toThrow('bad payload');
+  });
+
   it('round-trips a minted invitation', () => {
     const { invitationUrl } = buildUvcIoMInviteUrl({
       appBaseUrl: APP_BASE,
@@ -98,4 +136,5 @@ describe('lane IoM invitation codec', () => {
    const expoUrl = `${canonical.origin}${canonical.pathname}${canonical.hash}${canonical.search}`;
    expect(normalizeUvcLabUrl(expoUrl).href).toBe(canonical.href);
    expect(decodeUvcIoMInvite(expoUrl, VERSION)).toEqual(decodeUvcIoMInvite(canonical.href, VERSION));
+   expect(readUvcLabInviteIdentity(expoUrl)).toEqual({ email: EMAIL, person: PERSON });
  });

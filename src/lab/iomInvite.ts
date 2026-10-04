@@ -19,6 +19,8 @@
  * strict version check stays testable in jest.
  */
 
+import { roleName, type UvcLabRole } from './uvcLabRecipes.ts';
+
 export interface UvcIoMInvite {
   token: string;
   /** Commserver both devices dial for discovery and pairing. */
@@ -42,6 +44,53 @@ const INVITE_PARTNER_PATH = /\/(?:invites\/)?invitepartner(?:\/|$)/;
 
 function reject(reason: string): never {
   throw new Error(`UVC lab: not a lane IoM invitation (${reason}).`);
+}
+
+/** Worker bootstrap checks its configured identity. This is not role authority. */
+export function assertUvcLabRoleEmail(role: unknown, email: unknown): UvcLabRole {
+  const assignedRole = roleName(role);
+  if (email !== `${assignedRole}@lab.local`) {
+    throw new Error(`UVC lab: role ${assignedRole} belongs to ${assignedRole}@lab.local, not the invited identity.`);
+  }
+  return assignedRole;
+}
+
+const ROLE_METADATA_KEYS = ['role', 'fr', 'fer', 'fir', 'frp', 'expectedRemoteRole', 'inviterRole', 'rolePolicy'];
+
+function invitationFragment(url: URL): Record<string, unknown> {
+  if (!url.hash || url.hash.length <= 1) return reject('missing payload');
+  let fragment: unknown;
+  try {
+    fragment = JSON.parse(decodeURIComponent(url.hash.slice(1)));
+  } catch {
+    return reject('undecodable payload');
+  }
+  if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment)) return reject('bad payload');
+  return fragment as Record<string, unknown>;
+}
+
+function invitationPerson(url: URL, fragment: Record<string, unknown>): string {
+  const queryPerson = url.searchParams.get('fdi') ?? undefined;
+  const fragmentPerson = fragment.deviceEnrollmentPersonId;
+  if (queryPerson !== undefined && fragmentPerson !== undefined && queryPerson !== fragmentPerson) {
+    return reject('person conflict');
+  }
+  const person = queryPerson ?? fragmentPerson;
+  if (typeof person !== 'string' || !HEX_64.test(person)) return reject('bad person');
+  return person;
+}
+
+/** Identity needed before creating a joined worker. The pairing operation
+ * subsequently validates the complete handshake and its protocol version. */
+export function readUvcLabInviteIdentity(invitationUrl: string): { email: string; person: string } {
+  const url = normalizeUvcLabUrl(invitationUrl);
+  const email = url.searchParams.get('fe');
+  if (!email || !email.includes('@')) return reject('bad email');
+  const fragment = invitationFragment(url);
+  if (fragment.mode !== 'IoM' || fragment.identityRelation !== 'same-person' || fragment.pairingMode !== 'primed') {
+    return reject('wrong mode');
+  }
+  return { email, person: invitationPerson(url, fragment) };
 }
 
 function validateCommServerUrl(commServerUrl: string): void {
@@ -90,6 +139,7 @@ export function buildUvcIoMInviteUrl(input: {
   } catch {
     return reject('bad app URL');
   }
+  for (const key of ROLE_METADATA_KEYS) inviteUrl.searchParams.delete(key);
   inviteUrl.searchParams.set('invited', 'true');
   inviteUrl.searchParams.set('connectionMode', 'primed');
   inviteUrl.searchParams.set('fe', email);
@@ -123,13 +173,7 @@ export function decodeUvcIoMInvite(invitationUrl: string, pairingProtocolVersion
   }
   if (INVITE_PARTNER_PATH.test(url.pathname.toLowerCase())) return reject('wrong mode');
   const pathMode = INVITE_DEVICE_PATH.test(url.pathname.toLowerCase()) ? 'IoM' : undefined;
-  if (!url.hash || url.hash.length <= 1) return reject('missing payload');
-  let fragment: Record<string, unknown>;
-  try {
-    fragment = JSON.parse(decodeURIComponent(url.hash.slice(1))) as Record<string, unknown>;
-  } catch {
-    return reject('undecodable payload');
-  }
+  const fragment = invitationFragment(url);
   const embeddedMode = fragment.mode === 'IoM' ? 'IoM' : undefined;
   if (fragment.mode !== undefined && !embeddedMode) return reject('wrong mode');
   if (pathMode && embeddedMode && pathMode !== embeddedMode) return reject('mode conflict');
@@ -143,13 +187,7 @@ export function decodeUvcIoMInvite(invitationUrl: string, pairingProtocolVersion
   if (fragment.identityRelation !== 'same-person') return reject('wrong mode');
   const email = url.searchParams.get('fe') ?? undefined;
   if (!email || !email.includes('@')) return reject('bad email');
-  const queryPerson = url.searchParams.get('fdi') ?? undefined;
-  const fragmentPerson = fragment.deviceEnrollmentPersonId;
-  if (queryPerson !== undefined && fragmentPerson !== undefined && queryPerson !== fragmentPerson) {
-    return reject('person conflict');
-  }
-  const person = queryPerson ?? fragmentPerson;
-  if (typeof person !== 'string' || !HEX_64.test(person)) return reject('bad person');
+  const person = invitationPerson(url, fragment);
   return {
     token: fragment.token,
     url: fragment.url,

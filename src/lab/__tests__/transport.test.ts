@@ -108,6 +108,39 @@ describe('lane transport', () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
+  it('checks an invited Person before configuring or anchoring its role', async () => {
+    const person = 'a'.repeat(64);
+    const calls: string[] = [];
+    const stop = jest.fn();
+    const host = {
+      clients: { doctor: stubClient({
+        'uvcLane.configureLane': () => { calls.push('configure'); return { ready: true }; },
+        'uvcLane.ensureRoleAnchor': () => { calls.push('anchor'); return { person }; },
+      }) },
+      persons: { doctor: person },
+      stop,
+    };
+    (startLaneHost as jest.Mock).mockResolvedValueOnce(host);
+    const seed = await bootLane({ lane: 'test', roles: ['doctor'], adminPerson: 'admin-person', expectedPersons: { doctor: person }, spawn: jest.fn() });
+    expect(seed.persons.doctor).toBe(person);
+    expect(calls).toEqual(['configure', 'anchor']);
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { expected: 'a'.repeat(64), actual: 'b'.repeat(64), error: 'signed in as a different person' },
+    { expected: undefined, actual: 'a'.repeat(64), error: 'invitation must name' },
+    { expected: 'invalid-person', actual: 'a'.repeat(64), error: 'invitation must name' },
+    { expected: 'a'.repeat(64), actual: undefined, error: 'worker did not report' },
+  ])('stops an unbound invited worker before any role writes: $error', async ({ expected, actual, error }) => {
+    const call = jest.fn();
+    const stop = jest.fn();
+    (startLaneHost as jest.Mock).mockResolvedValueOnce({ clients: { doctor: { call } }, persons: { doctor: actual }, stop });
+    await expect(bootLane({ lane: 'test', roles: ['doctor'], adminPerson: 'admin-person', expectedPersons: { doctor: expected } as Record<string, string>, spawn: jest.fn() })).rejects.toThrow(error);
+    expect(call).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it('pairs inviter and joiner, then waits for both exact peer instances to be live', async () => {
     const seen: Record<string, unknown>[] = [];
     const inviter = stubClient({
@@ -215,7 +248,7 @@ describe('lane transport', () => {
       'uvcLane.readCycle': params => {
         if (params?.cycleId === 'c1') {
           return {
-            cycle: { planId: 'p1', endedAt: 9 },
+            cycle: { planId: 'p1', startedAt: 7, endedAt: 9 },
             energyReadings: 2,
             sensorReadings: 1,
             signature: { signer: 'a', signerRole: 'admin', verified: true },
@@ -249,7 +282,7 @@ describe('lane transport', () => {
       chatTail: [{ seq: 0, sender: 'q', text: 'hi', sentAt: 1 }],
       journalTail: [{ idHash: 'h', seq: 0, kind: 'cycle', summary: 'started', recordedAt: 2, signatures: [], verified: false }],
       cycles: [
-        { cycleId: 'c1', planId: 'p1', ended: true, energyReadings: 2, sensorReadings: 1, signedBy: 'a', signerRole: 'admin' },
+        { cycleId: 'c1', planId: 'p1', ended: true, startedAt: 7, endedAt: 9, energyReadings: 2, sensorReadings: 1, signedBy: 'a', signerRole: 'admin' },
       ],
       deviceChanges: [{ idHash: 'change-id', hash: 'change-hash', sourceRole: 'sensor', kind: 'reading', summary: 'reading', recordedAt: 3, cycleId: 'c1', attested: true }],
       attestations: [{ scope: 'c1', cycleId: 'c1', idHash: 'att-id', hash: 'att-hash', signer: 'a', signerRole: 'admin', signedAt: 4, records: ['change-hash'], verified: true }],
@@ -295,6 +328,12 @@ describe('lane transport', () => {
         'uvcLane.postLaneChat': () => ({ idHash: 'h', seq: 0 }),
         'uvcLane.tailLaneChat': () => ({ entries: [{ seq: 0, text: 'lane test live' }] }),
         'uvcLane.createIoMInvite': () => { calls.push(`mint-${role}`); return {}; },
+        'uvcLane.assignRole': params => {
+          expect(role).toBe('admin');
+          expect(params).toEqual({ lane: 'test', targetPerson: `${params?.roleName}-person`, roleName: params?.roleName, audience: ['admin-person', 'user-person'] });
+          calls.push(`publish-${params?.roleName}`);
+          return {};
+        },
       });
     const seed = {
       host: { stop: async () => undefined },
@@ -314,13 +353,15 @@ describe('lane transport', () => {
     // mesh continues into chat instead of stopping or minting invitations.
     expect(mesh.log).toEqual([
       expect.stringMatching(/pair admin <-> user failed/),
+      'published role admin',
+      'published role user',
       'welcome chat delivered on test:welcome',
     ]);
     expect(mesh.failures).toEqual([mesh.log[0]]);
     expect(mesh.invites).toEqual({});
-    expect(stages).toEqual(['Pairing admin <-> user', mesh.log[0], 'Sending welcome chat on test:welcome', mesh.log[1]]);
+    expect(stages).toEqual(['Pairing admin <-> user', mesh.log[0], 'Publishing lab role assignments', mesh.log[1], mesh.log[2], 'Sending welcome chat on test:welcome', mesh.log[3]]);
     expect(mesh.persons).toEqual({ admin: 'admin-person', user: 'user-person' });
-    expect(calls).toEqual(['accept-by-user']);
+    expect(calls).toEqual(['accept-by-user', 'publish-admin', 'publish-user']);
   });
 
   it('supports a one-role lane without pairing, delivery claims, or invitation minting', async () => {

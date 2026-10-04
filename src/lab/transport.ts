@@ -87,6 +87,7 @@ export async function bootLane({
   spawn,
   onStage,
   adminPerson,
+  expectedPersons,
 }: {
   lane: string;
   roles: string[];
@@ -94,6 +95,8 @@ export async function bootLane({
   onStage?: LaneStageListener;
   /** Required when booting a secondary-device lane without an admin worker. */
   adminPerson?: string;
+  /** Invited identities must match before any lane configuration or writes. */
+  expectedPersons?: Record<string, string>;
 }): Promise<LaneSeed> {
   onStage?.(`Booting ${roles.length} lane worker${roles.length === 1 ? '' : 's'}`);
   const host = await startLaneHost({
@@ -105,6 +108,19 @@ export async function bootLane({
   });
   const clients = host.clients as unknown as Record<string, LaneClient>;
   try {
+    if (expectedPersons !== undefined) {
+      for (const role of roles) {
+        const expected = expectedPersons[role];
+        if (typeof expected !== 'string' || !/^[0-9a-f]{64}$/.test(expected)) {
+          throw new Error(`Lane ${role}: invitation must name the expected Person identity.`);
+        }
+        const actual = host.persons[role];
+        if (typeof actual !== 'string' || !/^[0-9a-f]{64}$/.test(actual)) {
+          throw new Error(`Lane ${role}: worker did not report a Person identity.`);
+        }
+        ensureExpectedIdentity({ role, actual, expected });
+      }
+    }
     onStage?.('Lane workers ready; anchoring roles');
     const pinnedAdmin = adminPerson ?? host.persons.admin;
     if (typeof pinnedAdmin !== 'string' || pinnedAdmin === '') {
@@ -292,7 +308,7 @@ export async function snapshotRole({
   const cycles: unknown[] = [];
   for (const cycleId of cycleIds ?? []) {
     const read = await client.call<{
-      cycle: { planId: string; endedAt: number } | null;
+      cycle: { planId: string; startedAt: number; endedAt: number } | null;
       energyReadings: number;
       sensorReadings: number;
       signature: { signer: string; signerRole: string; verified: boolean } | null;
@@ -302,6 +318,8 @@ export async function snapshotRole({
       cycleId,
       planId: read.cycle.planId,
       ended: read.cycle.endedAt > 0,
+      startedAt: read.cycle.startedAt,
+      endedAt: read.cycle.endedAt,
       energyReadings: read.energyReadings,
       sensorReadings: read.sensorReadings,
       signedBy: read.signature?.verified === true ? read.signature.signer : null,
@@ -387,6 +405,19 @@ export async function seedLaneMesh({
         record(`paired ${a} <-> ${b}`);
       } catch (error) {
         record(`pair ${a} <-> ${b} failed: ${(error as Error)?.message ?? error}`, true);
+      }
+    }
+  }
+  if (roles.length > 1 && roles.includes('admin')) {
+    onStage?.('Publishing lab role assignments');
+    for (const role of roles) {
+      try {
+        await seed.clients.admin.call('uvcLane', 'assignRole', {
+          lane, targetPerson: persons[role], roleName: role, audience,
+        });
+        record(`published role ${role}`);
+      } catch (error) {
+        record(`publish role ${role} failed: ${(error as Error)?.message ?? error}`, true);
       }
     }
   }

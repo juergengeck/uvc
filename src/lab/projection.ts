@@ -35,7 +35,7 @@ export interface JournalTailEntry {
   recordedAt: number;
   signatures: string[];
   verified: boolean;
-  /** Attestation scope for verified attestation entries; a later one supersedes it. */
+  /** Verified attestation scope, also carried by signed signals for cycle grouping. */
   scope?: string;
 }
 
@@ -66,6 +66,10 @@ export interface CycleStateView {
   cycleId: string;
   planId: string;
   ended: boolean;
+  /** Cleaning start; 0 when unknown. Journal rows inside [startedAt, endedAt] belong to the cleaning. */
+  startedAt: number;
+  /** Cleaning end; 0 while the cycle is still open. */
+  endedAt: number;
   energyReadings: number;
   sensorReadings: number;
   signedBy: string | null;
@@ -172,6 +176,8 @@ export function projectCycles(raw: unknown[]): CycleStateView[] {
       cycleId,
       planId: text(item.planId) ?? '',
       ended: boolean(item.ended),
+      startedAt: number(item.startedAt) ?? 0,
+      endedAt: number(item.endedAt) ?? 0,
       energyReadings: number(item.energyReadings) ?? 0,
       sensorReadings: number(item.sensorReadings) ?? 0,
       signedBy: text(item.signedBy),

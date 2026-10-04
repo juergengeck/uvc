@@ -91,13 +91,14 @@ active. Each app's XLSX export includes its own contact-chat history.
 
 Scan the IoM QR below the desired app. Invitations are minted once the workers
 are ready; use **New QR invite** below that app to renew an invitation. Invitations
-expire after ten minutes, and open `/lab?role=…&invited=true…` with the
-pairing payload in the fragment. The second browser boots just that role and
-requires **Join device** to accept the invitation. The worker validates the
-canonical protocol and exact owner identity. Keep the originating browser open.
-To publish team records from the joining device, first use **Publish role assignments**
-on the original Admin. The joining worker reads that replicated role list to
-select the actual team audience, and refuses incomplete assignments.
+expire after ten minutes, and open `/lab?invited=true…` with the pairing
+payload in the fragment. Invites contain no role. The second browser asks to
+**Join device**, then opens the one role app after verifying the Clinic-issued
+role certificate for that identity. The worker validates the canonical protocol
+and exact owner identity. Keep the originating browser open.
+Clinic publishes role assignments and signed certificates during setup. The
+joining worker reads the replicated role list to select the actual team audience
+and refuses incomplete assignments.
 The default relay is `wss://api.glue.one/comm`; a `commServer` query parameter may
 select a ws/wss test relay. For a physical phone, use a host address reachable
 from that phone; localhost links refer to the phone itself.

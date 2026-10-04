@@ -92,13 +92,13 @@ describe('lane snapshot projection', () => {
       chatTail: [],
       journalTail: [],
       cycles: [
-        { cycleId: 'c1', planId: 'p1', ended: true, energyReadings: 2, sensorReadings: 2, signedBy: 'p', signerRole: 'admin' },
+        { cycleId: 'c1', planId: 'p1', ended: true, startedAt: 5, endedAt: 9, energyReadings: 2, sensorReadings: 2, signedBy: 'p', signerRole: 'admin' },
         { planId: 'p1' },
         null,
       ],
     });
     expect(snapshot.cycles).toEqual([
-      { cycleId: 'c1', planId: 'p1', ended: true, energyReadings: 2, sensorReadings: 2, signedBy: 'p', signerRole: 'admin' },
+      { cycleId: 'c1', planId: 'p1', ended: true, startedAt: 5, endedAt: 9, energyReadings: 2, sensorReadings: 2, signedBy: 'p', signerRole: 'admin' },
     ]);
   });
 

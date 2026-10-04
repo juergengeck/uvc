@@ -38,6 +38,8 @@ export const UVC_LANE_CYCLE_TYPES = [
   'UvcLaneChangeAttestation',
   'UvcLaneJournal',
   'UvcLaneStreamHead',
+  'UvcLaneStream',
+  'UvcLaneStreamBranch',
 ] as const;
 
 interface RecipeRule {
@@ -69,6 +71,10 @@ const objectRef = (itemprop: string, allowedTypes: string[], optional = false) =
   ...(optional ? { optional: true } : {}),
   itemtype: { type: 'referenceToObj', allowedTypes: new Set(allowedTypes) },
 });
+const streamEntryTypes = ['UvcLaneLightChange', 'UvcLaneSensorChange', 'UvcLaneEnergy', 'UvcLaneReading', 'UvcLaneJournal'];
+const writerRule = { ...idText('writer'), optional: true };
+const previousRule = objectRef('previousVersion', streamEntryTypes, true);
+
 const objectRefArray = (itemprop: string, allowedTypes: string[]) => ({
   itemprop,
   itemtype: { type: 'array', item: { type: 'referenceToObj', allowedTypes: new Set(allowedTypes) } },
@@ -118,6 +124,8 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
       person('updatedBy'),
       integer('recordedAt'),
       text('prev'),
+      writerRule,
+      previousRule,
     ],
   },
   {
@@ -136,6 +144,8 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
       person('updatedBy'),
       integer('recordedAt'),
       text('prev'),
+      writerRule,
+      previousRule,
     ],
   },
   {
@@ -148,6 +158,8 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
       person('recordedBy'),
       integer('recordedAt'),
       text('prev'),
+      writerRule,
+      previousRule,
     ],
   },
   {
@@ -160,6 +172,8 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
       person('recordedBy'),
       integer('recordedAt'),
       text('prev'),
+      writerRule,
+      previousRule,
     ],
   },
   {
@@ -198,6 +212,8 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
       objectRef('attestation', ['UvcLaneChangeAttestation'], true),
       // The one lamp or sensor signal this entry reports as signed by `attestation`.
       objectRef('record', ['UvcLaneLightChange', 'UvcLaneSensorChange'], true),
+      writerRule,
+      previousRule,
     ],
   },
   {
@@ -205,7 +221,42 @@ export const UvcLaneCycleRecipes: LaneRecipe[] = [
     name: 'UvcLaneStreamHead',
     rule: [idText('stream'), text('head'), integer('count')],
   },
+  {
+    $type$: 'Recipe', name: 'UvcLaneStream', rule: [idText('stream')],
+  },
+  {
+    $type$: 'Recipe', name: 'UvcLaneStreamBranch',
+    rule: [
+      idText('stream'), idText('writer'),
+      { itemprop: 'streamRoot', itemtype: { type: 'referenceToId', allowedTypes: new Set(['UvcLaneStream']) } },
+      objectRef('head', streamEntryTypes), integer('count'),
+      person('publisher'),
+      { itemprop: 'audience', itemtype: { type: 'array', item: { type: 'referenceToId', allowedTypes: new Set(['Person']) } } },
+      objectRef('signingKey', ['Keys']), text('signature'),
+    ],
+  },
 ];
+
+/** Index branches through a typed reference to their logical stream root. */
+export const UvcLaneCycleReverseMaps = new Map([['UvcLaneStreamBranch', new Set(['streamRoot', 'publisher'])]]);
+
+export interface UvcLaneStream {
+  $type$: 'UvcLaneStream';
+  stream: string;
+}
+
+export interface UvcLaneStreamBranch {
+  $type$: 'UvcLaneStreamBranch';
+  stream: string;
+  writer: string;
+  streamRoot: string;
+  head: string;
+  count: number;
+  publisher: string;
+  audience: string[];
+  signingKey: string;
+  signature: string;
+}
 
 export interface UvcLanePhase {
   $type$: 'UvcLanePhase';
@@ -265,6 +316,8 @@ export interface UvcLaneSensorChange extends UvcLaneStreamEntry {
 }
 
 export interface UvcLaneStreamEntry {
+  writer?: string;
+  previousVersion?: string;
   stream: string;
   seq: number;
   recordedAt: number;
@@ -310,6 +363,8 @@ export interface UvcLaneChangeAttestation {
 }
 
 export interface UvcLaneJournal {
+  writer?: string;
+  previousVersion?: string;
   $type$: 'UvcLaneJournal';
   stream: string;
   seq: number;
@@ -636,4 +691,35 @@ export function createUvcLaneStreamHead(input: { stream: string; head: string; c
     head: input.head,
     count: timestamp(input.count, 'count'),
   };
+}
+
+
+export function createUvcLaneStream(stream: string): UvcLaneStream {
+  return { $type$: 'UvcLaneStream', stream: laneName(stream, 'stream') };
+}
+
+export function createUvcLaneStreamBranch(input: Omit<UvcLaneStreamBranch, '$type$'>): UvcLaneStreamBranch {
+  for (const field of ['writer', 'streamRoot', 'head', 'publisher', 'signingKey'] as const) {
+    if (!HASH.test(input[field])) fail(`${field} must be a SHA-256 hash.`);
+  }
+  if (!/^[0-9a-f]{128}$/.test(input.signature)) fail('signature must be a 64-byte Ed25519 signature.');
+  for (const recipient of input.audience) personHash(recipient, 'audience');
+  return { $type$: 'UvcLaneStreamBranch', stream: laneName(input.stream, 'stream'),
+    writer: input.writer, streamRoot: input.streamRoot, head: input.head, count: timestamp(input.count, 'count'),
+    publisher: input.publisher, audience: [...new Set(input.audience)].sort(), signingKey: input.signingKey, signature: input.signature };
+}
+
+declare module '@OneObjectInterfaces' {
+  interface OneVersionedObjectInterfaces {
+    UvcLaneStream: UvcLaneStream;
+    UvcLaneStreamBranch: UvcLaneStreamBranch;
+  }
+}
+
+
+/** A device may relay its Person's explicit, signed publication decision. */
+export function streamBranchDisclosurePayload(input: Omit<UvcLaneStreamBranch, '$type$' | 'signature'>): string {
+  return JSON.stringify({ stream: input.stream, writer: input.writer, streamRoot: input.streamRoot,
+    head: input.head, count: input.count, publisher: input.publisher,
+    audience: [...new Set(input.audience)].sort(), signingKey: input.signingKey });
 }

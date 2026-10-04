@@ -34,6 +34,8 @@ describe('UVC lane cycle recipes', () => {
       'UvcLaneChangeAttestation',
       'UvcLaneJournal',
       'UvcLaneStreamHead',
+      'UvcLaneStream',
+      'UvcLaneStreamBranch',
     ]);
     const byName = new Map(UvcLaneCycleRecipes.map(recipe => [recipe.name, recipe]));
     const isId = (name: string): string[] =>
@@ -41,15 +43,17 @@ describe('UVC lane cycle recipes', () => {
     expect(isId('UvcLanePhase')).toEqual(['planId']);
     expect(isId('UvcLaneCycle')).toEqual(['cycleId']);
     expect(isId('UvcLaneLightState')).toEqual(['stateId']);
-    expect(isId('UvcLaneLightChange')).toEqual(['stream', 'seq']);
+    expect(isId('UvcLaneLightChange')).toEqual(['stream', 'seq', 'writer']);
     expect(isId('UvcLaneSensorState')).toEqual(['stateId']);
-    expect(isId('UvcLaneSensorChange')).toEqual(['stream', 'seq']);
-    expect(isId('UvcLaneEnergy')).toEqual(['stream', 'seq']);
-    expect(isId('UvcLaneReading')).toEqual(['stream', 'seq']);
+    expect(isId('UvcLaneSensorChange')).toEqual(['stream', 'seq', 'writer']);
+    expect(isId('UvcLaneEnergy')).toEqual(['stream', 'seq', 'writer']);
+    expect(isId('UvcLaneReading')).toEqual(['stream', 'seq', 'writer']);
     expect(isId('UvcLaneCycleSignature')).toEqual(['cycleId']);
     expect(isId('UvcLaneChangeAttestation')).toEqual(['scope']);
-    expect(isId('UvcLaneJournal')).toEqual(['stream', 'seq']);
+    expect(isId('UvcLaneJournal')).toEqual(['stream', 'seq', 'writer']);
     expect(isId('UvcLaneStreamHead')).toEqual(['stream']);
+    expect(isId('UvcLaneStream')).toEqual(['stream']);
+    expect(isId('UvcLaneStreamBranch')).toEqual(['stream', 'writer']);
   });
 
   it('creates phase, cycle, and light state records', () => {

@@ -35,6 +35,7 @@ import {
   hasVersionHead,
   isMissingVersionHeadError,
 } from '@refinio/one.core/lib/storage-versioned-objects.js';
+import { getOnlyLatestReferencingObjsHashAndId } from '@refinio/one.core/lib/reverse-map-query.js';
 import { getObject } from '@refinio/one.core/lib/storage-unversioned-objects.js';
 import { calculateIdHashOfObj } from '@refinio/one.core/lib/util/object.js';
 import { createAccess } from '@refinio/one.core/lib/access.js';
@@ -61,10 +62,12 @@ import {
   createUvcLaneRole,
   createUvcLaneThread,
   UVC_LAB_ROLES,
+  roleName,
 } from './uvcLabRecipes.ts';
 import type { UvcLaneChat, UvcLaneRoleAnchor } from './uvcLabRecipes.ts';
 import {
   UvcLaneCycleRecipes,
+  UvcLaneCycleReverseMaps,
   changeAttestationPayload,
   createUvcLaneChangeAttestation,
   createUvcLaneCycle,
@@ -77,6 +80,9 @@ import {
   createUvcLaneSensorChange,
   createUvcLaneSensorState,
   createUvcLaneStreamHead,
+  createUvcLaneStream,
+  createUvcLaneStreamBranch,
+  streamBranchDisclosurePayload,
 } from './uvcLaneCycleRecipes.ts';
 import type {
   UvcLaneChangeAttestation,
@@ -84,6 +90,7 @@ import type {
   UvcLaneLightState,
   UvcLanePhase,
   UvcLaneSensorState,
+  UvcLaneStreamBranch,
 } from './uvcLaneCycleRecipes.ts';
 import { createLaneIpcMain, postFeed } from './portIpc.ts';
 import { createDeviceChatCommands } from './deviceChatCommands.ts';
@@ -91,8 +98,10 @@ import { createSensorFollower, createSimulationClock, runLampCleaning } from './
 import { describeTreatment, mwCm2, type Treatment, type TreatmentParameters } from './treatment.ts';
 import type { DeviceChatCommands } from './deviceChatCommands.ts';
 import type { LanePort } from './portIpc.ts';
+import { assertUvcLabRoleEmail } from './iomInvite.ts';
 import { createIoMOps, DEFAULT_COMM_SERVER_URL } from './iomOps.ts';
 import { createChatPlan } from './chatPlan.ts';
+import { UvcLabRoleCertificateRecipe, createUvcLabRoleCertificate, roleCertificatePayload, type UvcLabRoleCertificate } from './roleCertificate.ts';
 
 export const laneUrl = (role: string): string => `lab://${role}`;
 
@@ -168,6 +177,7 @@ interface AcceptMessage {
 
 const KIND_OF_TYPE: Record<string, string> = {
   UvcLaneRole: 'role',
+  UvcLabRoleCertificate: 'role-certificate',
   UvcLaneChat: 'chat',
   UvcLaneThread: 'thread',
   UvcLanePhase: 'phase',
@@ -182,6 +192,8 @@ const KIND_OF_TYPE: Record<string, string> = {
   UvcLaneChangeAttestation: 'attestation',
   UvcLaneJournal: 'journal',
   UvcLaneStreamHead: 'stream-head',
+  UvcLaneStream: 'stream',
+  UvcLaneStreamBranch: 'stream-branch',
 };
 
 const FEED_TYPES = Object.keys(KIND_OF_TYPE);
@@ -190,8 +202,10 @@ function feedId(type: string, obj: Record<string, unknown>): string {
   if (type === 'UvcLaneChat') return `${String(obj.thread)}:${String(obj.seq)}`;
   if (type === 'UvcLaneEnergy' || type === 'UvcLaneReading' || type === 'UvcLaneJournal'
     || type === 'UvcLaneLightChange' || type === 'UvcLaneSensorChange') {
-    return `${String(obj.stream)}:${String(obj.seq)}`;
+    return `${String(obj.stream)}:${String(obj.writer ?? '')}:${String(obj.seq)}`;
   }
+  if (type === 'UvcLaneStreamBranch') return `${String(obj.stream)}:${String(obj.writer)}`;
+  if (type === 'UvcLaneStream') return String(obj.stream);
   if (type === 'UvcLaneRole') return `${String(obj.lane)}:${String(obj.role)}`;
   if (type === 'UvcLaneThread' || type === 'UvcLaneStreamHead') return String(obj.thread ?? obj.stream);
   if (type === 'UvcLaneCycle' || type === 'UvcLaneCycleSignature') return String(obj.cycleId);
@@ -214,6 +228,7 @@ export async function startLaneInstance({
   commServerUrl,
   appBaseUrl,
 }: LaneInstanceOptions): Promise<{ shutdown(): Promise<void> }> {
+  if (lane === 'lab') assertUvcLabRoleEmail(role, email);
   const listenerUrl = endpoint.url;
   const multiUser = new MultiUser({
     directory,
@@ -223,13 +238,14 @@ export async function startLaneInstance({
       ...RecipesStable,
       ...RecipesExperimental,
       AccessCertificateRecipe,
+      UvcLabRoleCertificateRecipe,
       ...(UvcLaneRecipes as unknown as Recipe[]),
       ...(UvcLaneCycleRecipes as unknown as Recipe[]),
     ],
     // Framework reverse-map tables are keyed by its closed type-name unions;
     // the merge is key-wise disjoint in practice, so the boundary cast below
     // documents that instead of pretending membership.
-    reverseMaps: merge(ReverseMapsStable, ReverseMapsExperimental) as never,
+    reverseMaps: merge(ReverseMapsStable, ReverseMapsExperimental, UvcLaneCycleReverseMaps) as never,
     reverseMapsForIdObjects: merge(ReverseMapsForIdObjectsStable, ReverseMapsForIdObjectsExperimental) as never,
   });
   // MultiUser's third argument is the logical instance name, not the storage
@@ -376,7 +392,7 @@ export async function startLaneInstance({
     }
   }
 
-  async function walkStreamStatus(stream: string, bound: number): Promise<{
+  async function walkLegacyStreamStatus(stream: string, bound: number): Promise<{
     entries: { idHash: string; hash: string; obj: Record<string, unknown> }[];
     complete: boolean;
   }> {
@@ -400,25 +416,78 @@ export async function startLaneInstance({
     };
   }
 
+  async function streamRootId(stream: string): Promise<string> {
+    return calculateIdHashOfObj({ $type$: 'UvcLaneStream', stream } as never);
+  }
+
+  async function walkStreamStatus(stream: string, bound: number): Promise<{
+    entries: { idHash: string; hash: string; obj: Record<string, unknown> }[];
+    complete: boolean;
+  }> {
+    const legacy = await walkLegacyStreamStatus(stream, bound);
+    const entries = [...legacy.entries];
+    const branches = await getOnlyLatestReferencingObjsHashAndId(await streamRootId(stream) as never, 'UvcLaneStreamBranch');
+    let complete = legacy.complete;
+    for (const branchRef of branches) {
+      const branch = (await getObject(branchRef.hash)) as unknown as UvcLaneStreamBranch;
+      let cursor = branch.head;
+      let count = 0;
+      while (cursor && count < bound) {
+        // Branches carry their immutable evidence graph through typed object
+        // references. A concurrent writer owns another branch, never this head.
+        const obj = await getObject(cursor as never) as unknown as Record<string, unknown>;
+        entries.push({ idHash: await calculateIdHashOfObj(obj as never), hash: cursor, obj });
+        cursor = typeof obj.previousVersion === 'string' ? obj.previousVersion : '';
+        count += 1;
+      }
+      complete = complete && cursor === '' && count === branch.count;
+    }
+    entries.sort((a, b) => Number(a.obj.recordedAt) - Number(b.obj.recordedAt)
+      || String(a.obj.writer ?? '').localeCompare(String(b.obj.writer ?? ''))
+      || Number(a.obj.seq) - Number(b.obj.seq));
+    return { entries: entries.slice(-bound), complete };
+  }
+
   async function walkStream(stream: string, bound: number): Promise<{ idHash: string; hash: string; obj: Record<string, unknown> }[]> {
     return (await walkStreamStatus(stream, bound)).entries;
   }
 
-  async function appendStreamEntry<T>(input: {
+  // Serialize writes within a device. Separate device branches remove the
+  // distributed read/count/write race without requiring synchronized clocks.
+  const streamWrites = new Map<string, Promise<unknown>>();
+  async function appendStreamEntry<T extends object>(input: {
     stream: string;
     create: (stream: string, seq: number, prev: string) => T;
     audience: string[];
   }): Promise<{ idHash: string; seq: number }> {
-    const head = await readStreamHead(input.stream);
-    const seq = head ? head.count : 0;
-    const obj = input.create(input.stream, seq, head ? head.head : '');
-    const stored = await storeVersionedObject(obj as never);
-    const streamHead = await storeVersionedObject(
-      createUvcLaneStreamHead({ stream: input.stream, head: stored.idHash, count: seq + 1 }) as never,
-    );
-    await grant(stored.idHash, input.audience);
-    await grant(streamHead.idHash, input.audience);
-    return { idHash: stored.idHash, seq };
+    const previous = streamWrites.get(input.stream) ?? Promise.resolve();
+    const write = previous.catch(() => undefined).then(async () => {
+      const writer = getInstanceIdHash();
+      if (!writer) throw new Error('UVC lab: stream writer has no Instance identity.');
+      const streamRoot = await streamRootId(input.stream);
+      await storeVersionedObject(createUvcLaneStream(input.stream));
+      const branchId = await calculateIdHashOfObj({ $type$: 'UvcLaneStreamBranch', stream: input.stream, writer } as never);
+      const current = await hasVersionHead(branchId as never)
+        ? (await getObjectByIdHash(branchId as never)).obj as unknown as UvcLaneStreamBranch : null;
+      const seq = current?.count ?? 0;
+      const previousObj = current ? await getObject(current.head as never) : null;
+      const prev = previousObj ? await calculateIdHashOfObj(previousObj as never) : '';
+      const obj = { ...input.create(input.stream, seq, prev), writer,
+        ...(current ? { previousVersion: current.head } : {}) };
+      const stored = await storeVersionedObject(obj as never);
+      await grant(branchId, [...new Set([...input.audience, self()])]);
+      const publisher = self();
+      const signingKey = String(await getDefaultKeys(publisher as SHA256IdHash<Person>));
+      const disclosure = { stream: input.stream, writer, streamRoot, head: stored.hash, count: seq + 1,
+        publisher, audience: [...new Set(input.audience)].sort(), signingKey };
+      const cryptoApi = await createCryptoApiFromDefaultKeys(publisher as SHA256IdHash<Person>);
+      const signature = uint8arrayToHexString(cryptoApi.sign(new TextEncoder().encode(streamBranchDisclosurePayload(disclosure))));
+      await storeVersionedObject(createUvcLaneStreamBranch({ ...disclosure, signature }));
+      return { idHash: stored.idHash, seq };
+    });
+    streamWrites.set(input.stream, write);
+    try { return await write; }
+    finally { if (streamWrites.get(input.stream) === write) streamWrites.delete(input.stream); }
   }
 
   async function appendJournalEntry({
@@ -480,14 +549,14 @@ export async function startLaneInstance({
   }: Pick<UvcLaneChangeAttestation, 'cycleId' | 'lampRecords' | 'sensorRecords'>): string => {
     const lampKind = cycleId === '' ? 'lamp change' : 'energy record';
     const sensorKind = cycleId === '' ? 'sensor change' : 'sensor reading';
-    return `Admin attested to ${lampRecords.length} ${lampKind}${lampRecords.length === 1 ? '' : 's'} and ${sensorRecords.length} ${sensorKind}${sensorRecords.length === 1 ? '' : 's'}`;
+    return `Clinic attested to ${lampRecords.length} ${lampKind}${lampRecords.length === 1 ? '' : 's'} and ${sensorRecords.length} ${sensorKind}${sensorRecords.length === 1 ? '' : 's'}`;
   };
 
   /** "Lamp on" / "Sensor off", read from the signed change record itself. */
-  async function signedSignal(recordHash: string): Promise<string | null> {
-    const record = await getObject(recordHash as never) as unknown as { $type$: string; on?: unknown };
-    if (record.$type$ === 'UvcLaneLightChange') return `Lamp ${record.on === 1 ? 'on' : 'off'}`;
-    if (record.$type$ === 'UvcLaneSensorChange') return `Sensor ${record.on === 1 ? 'on' : 'off'}`;
+  async function signedSignal(recordHash: string): Promise<{ summary: string; recordedAt: number } | null> {
+    const record = await getObject(recordHash as never) as unknown as { $type$: string; on?: unknown; recordedAt: number };
+    if (record.$type$ === 'UvcLaneLightChange') return { summary: `Lamp ${record.on === 1 ? 'on' : 'off'}`, recordedAt: record.recordedAt };
+    if (record.$type$ === 'UvcLaneSensorChange') return { summary: `Sensor ${record.on === 1 ? 'on' : 'off'}`, recordedAt: record.recordedAt };
     return null;
   }
 
@@ -796,7 +865,7 @@ export async function startLaneInstance({
     const stream = typeof obj.stream === 'string' ? obj.stream : '';
     if (type === 'UvcLaneEnergy' && stream.endsWith(':energy')) return stream.slice(0, -':energy'.length);
     if (type === 'UvcLaneReading' && stream.endsWith(':sensor')) return stream.slice(0, -':sensor'.length);
-    if (type !== 'UvcLaneStreamHead') return null;
+    if (type !== 'UvcLaneStreamHead' && type !== 'UvcLaneStreamBranch') return null;
     if (stream === `${lane}:light-changes` || stream === `${lane}:sensor-changes`) {
       return AUTOMATIC_STANDALONE_SCOPE;
     }
@@ -827,13 +896,23 @@ export async function startLaneInstance({
       return { person: self(), role, instanceId: getInstanceIdHash() ?? '' };
     },
 
-    configureLane({ lane: configuredLane, adminPerson }: { lane: string; adminPerson: string }): { ready: true } {
+    async configureLane({ lane: configuredLane, adminPerson }: { lane: string; adminPerson: string }): Promise<{ ready: true }> {
       if (configuredLane !== lane) throw new Error(`UVC lab: cannot configure worker for lane ${configuredLane}.`);
       if (!/^[0-9a-f]{64}$/.test(adminPerson)) throw new Error('UVC lab: configured admin must be a Person id hash.');
       if (expectedAdminPerson !== null && expectedAdminPerson !== adminPerson) {
         throw new Error('UVC lab: lane administrator is already pinned to another identity.');
       }
       expectedAdminPerson = adminPerson;
+      // Register the role registry roots before their versions arrive. Imported
+      // Clinic assignments do not import Clinic's IdAccess grants, so without
+      // our own self grant they cannot reach another device of this Person.
+      // IdAccess follows subsequent versions through the normal CHUM path.
+      for (const laneRole of UVC_LAB_ROLES) {
+        await grant(await roleAnchorIdHash(lane, laneRole), [self()]);
+      }
+      for (const [type, stateId] of [['UvcLaneLightState', `${lane}:light`], ['UvcLaneSensorState', `${lane}:sensor`]]) {
+        await grant(await calculateIdHashOfObj({ $type$: type, stateId } as never), [self()]);
+      }
       return { ready: true };
     },
 
@@ -880,6 +959,23 @@ export async function startLaneInstance({
       audience: string[];
     }): Promise<{ idHash: string; role: string; person: string }> {
       if (role !== 'admin') throw new Error('UVC lab: only the admin role can assign roles.');
+      if (expectedAdminPerson !== self()) throw new Error('UVC lab: only the pinned Clinic may issue role certificates.');
+      const signer = self();
+      const signingKey = String(await getDefaultKeys(signer as SHA256IdHash<Person>));
+      const certificateInput = {
+        lane: laneName,
+        person: targetPerson as SHA256IdHash<Person>,
+        role: roleName(rName),
+        issuer: signer as SHA256IdHash<Person>,
+        issuedAt: Date.now(),
+        signingKey,
+      };
+      const cryptoApi = await createCryptoApiFromDefaultKeys(signer as SHA256IdHash<Person>);
+      const signature = uint8arrayToHexString(cryptoApi.sign(new TextEncoder().encode(roleCertificatePayload(certificateInput))));
+      const certificate = createUvcLabRoleCertificate({ ...certificateInput, signature });
+      const certificateId = await calculateIdHashOfObj({ $type$: 'UvcLabRoleCertificate', lane: laneName, person: targetPerson } as never);
+      await grant(certificateId, audience);
+      await storeVersionedObject(certificate as never);
       const anchor = createUvcLaneRole({
         lane: laneName,
         role: rName,
@@ -894,6 +990,27 @@ export async function startLaneInstance({
         audience,
       });
       return { idHash: stored.idHash, role: rName, person: targetPerson };
+    },
+
+    async readCertifiedRole(): Promise<{ role: string | null }> {
+      const certificate = await readLatest<UvcLabRoleCertificate>('UvcLabRoleCertificate', { lane, person: self() });
+      if (!certificate) return { role: null };
+      const record = certificate.obj;
+      if (record.person !== self() || record.lane !== lane || record.issuer !== expectedAdminPerson) {
+        throw new Error('UVC lab: role certificate is not from the pinned Clinic for this identity.');
+      }
+      roleName(record.role);
+      const keys = await getObject(record.signingKey as never) as unknown as { $type$?: string; owner?: string };
+      if (keys.$type$ !== 'Keys' || keys.owner !== record.issuer) throw new Error('UVC lab: role certificate signing key does not belong to Clinic.');
+      const publicKeys = await getPublicKeys(record.signingKey as never);
+      const trustedKeys = await leuteModel.trust.getTrustedKeysForPerson(record.issuer);
+      if (!trustedKeys.some(key => key.length === publicKeys.publicSignKey.length
+        && key.every((byte, index) => byte === publicKeys.publicSignKey[index]))) return { role: null };
+      if (!signatureVerify(new TextEncoder().encode(roleCertificatePayload(record)),
+        hexToUint8ArrayWithCheck(record.signature), publicKeys.publicSignKey)) {
+        throw new Error('UVC lab: invalid Clinic role certificate signature.');
+      }
+      return { role: record.role };
     },
 
     async listRoles({
@@ -1242,8 +1359,8 @@ export async function startLaneInstance({
       attestation: LaneChangeAttestation | null;
     }> {
       const latest = await readLatest<UvcLaneCycle>('UvcLaneCycle', { cycleId });
-      const energy = await readStreamHead(`${cycleId}:energy`);
-      const reading = await readStreamHead(`${cycleId}:sensor`);
+      const energy = await walkStream(`${cycleId}:energy`, 10_000);
+      const reading = await walkStream(`${cycleId}:sensor`, 10_000);
       const changeScope = await collectChangeScope(cycleId);
       const attestation = changeScope.attestation;
       const currentHashes = changeScope.changes.map(change => change.hash).sort();
@@ -1254,10 +1371,10 @@ export async function startLaneInstance({
         && currentHashes.every((hash, index) => hash === attestedHashes[index]);
       return {
         cycle: latest ? latest.obj : null,
-        energyReadings: energy ? energy.count : 0,
-        energyHead: energy ? energy.head : null,
-        sensorReadings: reading ? reading.count : 0,
-        sensorHead: reading ? reading.head : null,
+        energyReadings: energy.length,
+        energyHead: energy.at(-1)?.idHash ?? null,
+        sensorReadings: reading.length,
+        sensorHead: reading.at(-1)?.idHash ?? null,
         signature: currentAttestation && attestation
           ? {
               signer: attestation.signer,
@@ -1343,8 +1460,9 @@ export async function startLaneInstance({
               idHash,
               seq: Number(obj.seq),
               kind: 'signal',
-              summary: signal ?? 'Signal entry not covered by a verified admin signature.',
-              recordedAt: verifiedAttestation?.signedAt ?? Number(obj.recordedAt),
+              summary: signal?.summary ?? 'Signal entry not covered by a verified Clinic signature.',
+              recordedAt: signal?.recordedAt ?? Number(obj.recordedAt),
+              ...(verifiedAttestation === null ? {} : { scope: verifiedAttestation.scope }),
               signatures: signal !== null && attestationHash !== null ? [attestationHash] : [],
               verified: signal !== null,
             };
@@ -1441,6 +1559,7 @@ export async function startLaneInstance({
     ? createSensorFollower({
       lane,
       readLightState: plan.readLightState,
+      readSensorState: plan.readSensorState,
       readCycleEnded: async cycleId => {
         const latest = await readLatest<UvcLaneCycle>('UvcLaneCycle', { cycleId });
         return latest ? latest.obj.endedAt !== 0 : null;
@@ -1467,6 +1586,7 @@ export async function startLaneInstance({
       'ensureRoleAnchor',
       'roleAnchorIdHash',
       'assignRole',
+      'readCertifiedRole',
       'listRoles',
       'postLaneChat',
       'tailLaneChat',
@@ -1597,10 +1717,34 @@ export async function startLaneInstance({
   // dispatched after the version head is selected. The bytes-available event
   // fires while CHUM is still materializing the version graph, so rows
   // derived from it are not yet readable via getObjectByIdHash.
+  async function publishOwnBranch(idHash: string, branch: UvcLaneStreamBranch): Promise<void> {
+    if (branch.publisher !== self()) return;
+    const keys = await getObject(branch.signingKey as never) as unknown as { owner: string };
+    if (keys.owner !== self()) throw new Error('UVC lab: stream disclosure key belongs to another Person.');
+    const publicKeys = await getPublicKeys(branch.signingKey as never);
+    const trustedKeys = await leuteModel.trust.getTrustedKeysForPerson(self() as SHA256IdHash<Person>);
+    if (!trustedKeys.some(key => key.length === publicKeys.publicSignKey.length
+      && key.every((byte, index) => byte === publicKeys.publicSignKey[index]))) return;
+    if (!signatureVerify(new TextEncoder().encode(streamBranchDisclosurePayload(branch)),
+      hexToUint8ArrayWithCheck(branch.signature), publicKeys.publicSignKey)) {
+      throw new Error('UVC lab: invalid stream disclosure signature.');
+    }
+    // Only this Person's authenticated producer may disclose to its named
+    // audience. Receiving another role's data never gives us that authority.
+    await grant(idHash, [...new Set([...branch.audience, self()])]);
+  }
+  const disclosureError = (error: unknown) => port.postMessage({ kind: 'domain-disclosure-failed', role, error: String(error) });
   const stopFeed = onVersionedObj.addListener(result => {
     const obj = result.obj as Record<string, unknown>;
     const type = obj.$type$ as string;
     if (!FEED_TYPES.includes(type)) return;
+    // CHUM imports data, not the sender's access authority. An accepted domain
+    // root belongs in this Person's own-device graph just like its chat channels.
+    // Publish only to self; never re-create the producer's recipient grants.
+    void grant(result.idHash, [self()]).catch(disclosureError);
+    if (type === 'UvcLaneStreamBranch') {
+      void publishOwnBranch(result.idHash, obj as unknown as UvcLaneStreamBranch).catch(disclosureError);
+    }
     observeAutomaticAttestation(type, obj);
     void sensorFollower?.observe(type, obj);
     postFeed(port, {
@@ -1613,6 +1757,19 @@ export async function startLaneInstance({
     });
   });
 
+  const stopTrust = leuteModel.trust.onTrustedKeysChanged.listen(change => {
+    port.postMessage({ kind: 'trust-changed' });
+    if (change.personId !== self()) return;
+    // Resolve deferred disclosures through the durable producer reference graph,
+    // including decisions received in an earlier session before their keys.
+    void (async () => {
+      const owned = await getOnlyLatestReferencingObjsHashAndId(self() as never, 'UvcLaneStreamBranch');
+      for (const branchRef of owned) {
+        const branch = await getObject(branchRef.hash);
+        await publishOwnBranch(branchRef.idHash, branch);
+      }
+    })().catch(disclosureError);
+  });
   const notifyConnections = () => port.postMessage({ kind: 'connections-changed' });
   const stopConnections = connections.onConnectionsChange.listen(notifyConnections);
   const stopIoMConnections = iomConnections.onConnectionsChange.listen(notifyConnections);
@@ -1622,6 +1779,7 @@ export async function startLaneInstance({
   return {
     async shutdown() {
       stopFeed();
+      stopTrust();
       simulationClock.stop();
       await sensorFollower?.stop();
       await deviceCommands?.idle();
@@ -1642,7 +1800,7 @@ export async function startLaneInstance({
 
 export type LanePlan = {
   whoAmI(): { person: string; role: string; instanceId: string };
-  configureLane(input: { lane: string; adminPerson: string }): { ready: true };
+  configureLane(input: { lane: string; adminPerson: string }): Promise<{ ready: true }>;
   enableAutomaticAttestation(input: { audience: string[] }): AutomaticAttestationStatus;
   readAutomaticAttestationStatus(): AutomaticAttestationStatus;
   ensureRoleAnchor(input: { lane: string }): Promise<{ idHash: string; person: string }>;

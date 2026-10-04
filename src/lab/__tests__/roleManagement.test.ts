@@ -129,6 +129,7 @@ describe('role management in UVC lane', () => {
 
   it('allows admin to issue and assign a role to a participant', async () => {
     const { admin } = clients();
+    await admin.call('uvcLane', 'configureLane', { lane: LANE, adminPerson: host?.persons.admin });
     const audience = [host?.persons.admin ?? '', host?.persons.user ?? ''];
     const result = await admin.call<{ idHash: string; role: string; person: string }>('uvcLane', 'assignRole', {
       lane: LANE,
