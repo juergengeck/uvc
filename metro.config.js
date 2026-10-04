@@ -123,7 +123,9 @@ function resolveLinkedSourceFile(modulePath, platform) {
 
 function asLinkedSourceFile(modulePath, platform) {
   const filePath = resolveLinkedSourceFile(modulePath, platform);
-  return filePath ? {type: 'sourceFile', filePath} : null;
+  // Custom sourceFile results bypass Metro's normal symlink resolution. Its
+  // file map watches the workspace target, so return that canonical path.
+  return filePath ? {type: 'sourceFile', filePath: fs.realpathSync(filePath)} : null;
 }
 
 function resolveRefinioPackageSubpath(moduleName) {
@@ -158,6 +160,11 @@ module.exports = {
     // Metro must follow those symlinks and watch the target workspaces.
     unstable_enablePackageExports: false,
     unstable_enableSymlinks: true,
+    // Linked workspace modules also consume dependencies installed by the app.
+    // Their own node_modules may link to a store outside Metro's watched roots.
+    nodeModulesPaths: [
+      ...new Set([...(config.resolver.nodeModulesPaths || []), path.join(projectRoot, 'node_modules')]),
+    ],
     extraNodeModules: {
       buffer: require.resolve('buffer'),
       ...refinioPackages,

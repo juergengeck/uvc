@@ -22,11 +22,21 @@ cd "$SCRIPT_DIR"
 npm run build:lane-worker
 # A cached worker must never be paired with an app using a newer worker API.
 export EXPO_PUBLIC_LANE_WORKER_VERSION="$(shasum -a 256 public/lane.worker.js | cut -d ' ' -f 1)"
-npx expo export --platform web
+npx expo export --platform web --clear
 [[ -s dist/index.html && -s dist/lane.worker.js ]] || {
   echo "App HTML or lab worker is missing from the export." >&2
   exit 1
 }
+
+# Expo inlines this variable into cached transforms. Reject an unversioned or
+# stale app before publication, even when the worker itself was rebuilt.
+python3 - "$EXPO_PUBLIC_LANE_WORKER_VERSION" <<'PYVERIFY'
+from pathlib import Path
+import sys
+revision = sys.argv[1]
+if not any(revision in script.read_text() for script in Path('dist/_expo').rglob('*.js')):
+    sys.exit('Export does not pin the current lab worker; refusing to publish.')
+PYVERIFY
 
 # This directory contains only generated deployment files.
 rm -rf "$DEPLOY_DIR"
